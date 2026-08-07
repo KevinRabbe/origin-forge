@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .runs import reconcile_interrupted
 from .service import OriginForgeStore
 
 STATE_DIR = ".origin-forge"
@@ -34,7 +35,14 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--name", help="project name (default: directory name)")
 
     sub.add_parser("status", help="show durable runtime status")
-    sub.add_parser("recover", help="inspect interrupted RUNNING records")
+    recover_parser = sub.add_parser(
+        "recover", help="inspect or reconcile interrupted RUNNING records"
+    )
+    recover_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="mark interrupted runs as INTERRUPTED and running tasks/flows as BLOCKED",
+    )
 
     return parser
 
@@ -58,8 +66,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "recover":
-        findings = [finding.__dict__ for finding in store.recovery_findings()]
-        print(json.dumps({"findings": findings}, indent=2, sort_keys=True))
+        raw_findings = (
+            reconcile_interrupted(store) if args.apply else store.recovery_findings()
+        )
+        findings = [finding.__dict__ for finding in raw_findings]
+        print(
+            json.dumps(
+                {"applied": bool(args.apply), "findings": findings},
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        if args.apply:
+            return 0
         return 1 if findings else 0
 
     raise AssertionError(f"unhandled command {args.command}")
