@@ -111,6 +111,8 @@ class PodmanBackendTests(unittest.TestCase):
         ) as run:
             self.assertTrue(self.backend.available())
         self.assertEqual(self.backend._resolved_image_id, "sha256:resolved")
+        self.assertEqual(self.backend.provenance["resolved_image_id"], "sha256:resolved")
+        self.assertEqual(self.backend.provenance["configured_image"], "example/test:local")
         self.assertIn("image", run.call_args.args[0])
         self.assertIn("inspect", run.call_args.args[0])
 
