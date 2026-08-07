@@ -13,7 +13,12 @@ def _row_dict(row) -> dict[str, Any]:
 
 
 class OriginForgeLineage:
-    """Causal history and artifact lineage service."""
+    """Causal history and artifact lineage service.
+
+    This service sits beside OriginForgeRuntime so persistence details remain
+    hidden while provenance-specific invariants stay isolated from scheduling
+    and lifecycle logic.
+    """
 
     def __init__(self, runtime: OriginForgeRuntime):
         self.runtime = runtime
@@ -132,6 +137,14 @@ class OriginForgeLineage:
                 raise KeyError(change_id)
             return _row_dict(row)
 
+    @staticmethod
+    def _sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return f"sha256:{digest.hexdigest()}"
+
     def _artifact_location(self, path_or_uri: str) -> tuple[str, str | None]:
         if "://" in path_or_uri:
             return path_or_uri, None
@@ -147,13 +160,7 @@ class OriginForgeLineage:
             raise RuntimeInvariantError(
                 "local artifact paths must stay inside the project root"
             ) from exc
-        content_hash = None
-        if resolved.is_file():
-            digest = hashlib.sha256()
-            with resolved.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    digest.update(chunk)
-            content_hash = f"sha256:{digest.hexdigest()}"
+        content_hash = self._sha256(resolved) if resolved.is_file() else None
         return relative.as_posix(), content_hash
 
     def create_artifact(
@@ -202,6 +209,34 @@ class OriginForgeLineage:
                 raise KeyError(artifact_id)
             return _row_dict(row)
 
+    def local_artifact_path(self, artifact_id: str) -> Path:
+        artifact = self.get_artifact(artifact_id)
+        location = artifact["path_or_uri"]
+        if "://" in location:
+            raise RuntimeInvariantError("artifact is not a local file")
+        resolved = (self.project_root / location).resolve()
+        try:
+            resolved.relative_to(self.project_root)
+        except ValueError as exc:
+            raise RuntimeInvariantError("stored artifact path escaped project root") from exc
+        if not resolved.is_file():
+            raise RuntimeInvariantError(f"artifact file is missing: {location}")
+        expected = artifact["content_hash"]
+        if expected is not None:
+            actual = self._sha256(resolved)
+            if actual != expected:
+                raise RuntimeInvariantError(
+                    f"artifact integrity mismatch for {artifact_id}: {actual} != {expected}"
+                )
+        return resolved
+
+    def read_artifact_text(self, artifact_id: str) -> str:
+        path = self.local_artifact_path(artifact_id)
+        try:
+            return path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeInvariantError("artifact is not UTF-8 text") from exc
+
     def list_artifacts(self) -> list[dict[str, Any]]:
         with self.store.session() as conn:
             return [
@@ -229,9 +264,7 @@ class OriginForgeLineage:
             status=status,
         )
 
-    def list_artifact_verifications(
-        self, artifact_id: str
-    ) -> list[dict[str, Any]]:
+    def list_artifact_verifications(self, artifact_id: str) -> list[dict[str, Any]]:
         self.get_artifact(artifact_id)
         with self.store.session() as conn:
             return [

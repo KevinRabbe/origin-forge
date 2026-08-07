@@ -41,9 +41,9 @@ Versioned product
 
 ## Current status
 
-Origin Forge is in **Phase 2 — Bounded Local Worker**.
+Origin Forge is in **Phase 3 — Isolated Apply and Audit**.
 
-Phase 1 established the durable Goal / Flow / Task / Run control plane, recovery, verification, and causal lineage. Phase 2 is connecting that state to a replaceable local coding model through read-only repository snapshots and structured patch proposals. The model can propose changes, but it still cannot apply patches, execute shell commands, or declare Tasks successful.
+Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 allows those proposals to be materialized only inside durable disposable Git worktrees, where a separate deterministic Auditor verifies the actual changes. The main working tree remains untouched, and there is still no arbitrary shell execution or automatic merge.
 
 ## Documentation
 
@@ -51,6 +51,7 @@ Phase 1 established the durable Goal / Flow / Task / Run control plane, recovery
 - [Phase 0 Implementation Specification](docs/phase-0-spec.md)
 - [Phase 1 Runtime Notes](docs/phase-1-notes.md)
 - [Phase 2 Worker Notes](docs/phase-2-notes.md)
+- [Phase 3 Isolation Notes](docs/phase-3-notes.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)

@@ -160,17 +160,42 @@ CREATE INDEX IF NOT EXISTS idx_goals_project ON goals(project_id);
 CREATE INDEX IF NOT EXISTS idx_flows_goal ON flows(goal_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_flow ON tasks(flow_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-CREATE INDEX IF NOT EXISTS idx_events_aggregate
-ON state_events(aggregate_type, aggregate_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_events_aggregate ON state_events(aggregate_type, aggregate_id, created_at);
 """
 
 MIGRATION_002 = r"""
 ALTER TABLE goals ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0);
 """
 
+MIGRATION_003 = r"""
+CREATE TABLE workspaces (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    branch_name TEXT NOT NULL UNIQUE,
+    path TEXT NOT NULL UNIQUE,
+    base_commit TEXT NOT NULL,
+    status TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_workspaces_task ON workspaces(task_id);
+CREATE INDEX idx_workspaces_status ON workspaces(status);
+"""
+
+MIGRATION_004 = r"""
+CREATE UNIQUE INDEX idx_workspaces_one_active_per_task
+ON workspaces(task_id)
+WHERE status != 'ABANDONED';
+"""
+
 MIGRATIONS = (
     Migration(1, MIGRATION_001),
     Migration(2, MIGRATION_002),
+    Migration(3, MIGRATION_003),
+    Migration(4, MIGRATION_004),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version

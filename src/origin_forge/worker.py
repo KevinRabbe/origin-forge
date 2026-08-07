@@ -86,24 +86,35 @@ class LocalPatchWorker:
         )
         return path, artifact_id
 
-    def _persist_response(self, run_id: str, response: ModelResponse) -> tuple[Path, str]:
+    def _persist_response(
+        self, run_id: str, response: ModelResponse, *, parent_artifact_id: str
+    ) -> tuple[Path, str]:
         path = self._run_dir(run_id) / "model-response.txt"
         self._write_text(path, response.text)
         artifact_id = self.lineage.create_artifact(
             artifact_type="MODEL_RESPONSE",
             path_or_uri=str(path),
+            parent_artifact_id=parent_artifact_id,
             created_by_run_id=run_id,
             model_id=response.model_id,
             status="CAPTURED",
         )
         return path, artifact_id
 
-    def _persist_proposal(self, run_id: str, proposal: PatchProposal, model_id: str) -> tuple[Path, str]:
+    def _persist_proposal(
+        self,
+        run_id: str,
+        proposal: PatchProposal,
+        model_id: str,
+        *,
+        parent_artifact_id: str,
+    ) -> tuple[Path, str]:
         path = self._run_dir(run_id) / "patch-proposal.json"
         self._write_json(path, proposal.to_dict())
         artifact_id = self.lineage.create_artifact(
             artifact_type="PATCH_PROPOSAL",
             path_or_uri=str(path),
+            parent_artifact_id=parent_artifact_id,
             created_by_run_id=run_id,
             model_id=model_id,
             status="PROPOSED",
@@ -137,11 +148,16 @@ class LocalPatchWorker:
                 response_schema=PATCH_PROPOSAL_SCHEMA,
             )
             response = self.model.generate(request)
-            _, response_artifact_id = self._persist_response(run_id, response)
+            _, response_artifact_id = self._persist_response(
+                run_id, response, parent_artifact_id=context_artifact_id
+            )
             proposal = parse_patch_proposal(response.text)
             validate_patch_preconditions(proposal, self.repository)
             _, proposal_artifact_id = self._persist_proposal(
-                run_id, proposal, response.model_id
+                run_id,
+                proposal,
+                response.model_id,
+                parent_artifact_id=response_artifact_id,
             )
             self.runtime.finish_run(run_id, RunStatus.SUCCEEDED)
             return WorkerResult(

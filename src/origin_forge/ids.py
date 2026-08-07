@@ -15,6 +15,7 @@ class IdKind(StrEnum):
     VERIFICATION = "VERIFY"
     RUN = "RUN"
     EVENT = "EVENT"
+    WORKSPACE = "WSPACE"
 
 
 def new_id(kind: IdKind) -> str:
