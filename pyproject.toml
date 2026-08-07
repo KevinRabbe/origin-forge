@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "origin-forge"
+version = "0.1.0.dev0"
+description = "Local autonomous production infrastructure built around durable verified state."
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+origin-forge = "origin_forge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
