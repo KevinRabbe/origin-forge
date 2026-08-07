@@ -11,9 +11,9 @@ from origin_forge.apply import IsolatedPatchApplier
 from origin_forge.audit import WorkspaceAuditor
 from origin_forge.lineage import OriginForgeLineage
 from origin_forge.model import ModelRequest, ModelResponse
-from origin_forge.patches import parse_patch_proposal
+from origin_forge.patches import PatchValidationError, parse_patch_proposal
 from origin_forge.repository import RepositoryReader
-from origin_forge.runtime import OriginForgeRuntime
+from origin_forge.runtime import OriginForgeRuntime, RuntimeInvariantError
 from origin_forge.state import TaskStatus, WorkspaceStatus
 from origin_forge.worker import LocalPatchWorker
 from origin_forge.workspaces import GitWorkspaceManager
@@ -103,7 +103,7 @@ class WorkspaceIntegrationTests(unittest.TestCase):
         workspace_id = self.workspaces.create(self.task)
         workspace_path = self.workspaces.path(workspace_id)
 
-        result = IsolatedPatchApplier(self.runtime, self.workspaces).apply(
+        result = IsolatedPatchApplier(self.runtime, self.workspaces)._apply(
             workspace_id, proposal
         )
         self.assertIn("hello.py", result.diff_text)
@@ -116,7 +116,7 @@ class WorkspaceIntegrationTests(unittest.TestCase):
         )
         self.assertTrue((workspace_path / "helper.py").exists())
 
-        audit = WorkspaceAuditor(self.runtime, self.workspaces).audit(
+        audit = WorkspaceAuditor(self.runtime, self.workspaces)._audit(
             workspace_id, proposal
         )
         self.assertTrue(audit.passed, audit.findings)
@@ -125,12 +125,12 @@ class WorkspaceIntegrationTests(unittest.TestCase):
             WorkspaceStatus.VERIFIED.value,
         )
 
-    def test_failed_apply_rolls_back_isolated_worktree(self) -> None:
+    def test_stale_precondition_rejects_before_mutation(self) -> None:
         proposal = self._proposal("sha256:" + "0" * 64)
         workspace_id = self.workspaces.create(self.task)
         workspace_path = self.workspaces.path(workspace_id)
-        with self.assertRaises(Exception):
-            IsolatedPatchApplier(self.runtime, self.workspaces).apply(
+        with self.assertRaises(PatchValidationError):
+            IsolatedPatchApplier(self.runtime, self.workspaces)._apply(
                 workspace_id, proposal
             )
         self.assertEqual(
@@ -139,12 +139,16 @@ class WorkspaceIntegrationTests(unittest.TestCase):
         )
         self.assertFalse((workspace_path / "helper.py").exists())
         self.assertEqual(git(workspace_path, "status", "--porcelain"), "")
+        self.assertEqual(
+            self.workspaces.get(workspace_id)["status"],
+            WorkspaceStatus.CREATED.value,
+        )
 
     def test_workspace_requires_running_task(self) -> None:
         goal = self.runtime.create_goal("second")
         flow = self.runtime.create_flow(goal)
         queued = self.runtime.create_task(flow, "not ready")
-        with self.assertRaises(Exception):
+        with self.assertRaises(RuntimeInvariantError):
             self.workspaces.create(queued)
 
     def test_failed_apply_removes_ignored_files_and_marks_workspace_failed(self) -> None:
@@ -172,7 +176,7 @@ class WorkspaceIntegrationTests(unittest.TestCase):
         applier = IsolatedPatchApplier(self.runtime, self.workspaces)
         with patch.object(applier.lineage, "create_change", side_effect=RuntimeError("forced")):
             with self.assertRaises(RuntimeError):
-                applier.apply(workspace_id, proposal)
+                applier._apply(workspace_id, proposal)
         self.assertFalse((workspace_path / "ignored.tmp").exists())
         self.assertEqual(git(workspace_path, "status", "--porcelain"), "")
         self.assertEqual(
@@ -185,10 +189,10 @@ class WorkspaceIntegrationTests(unittest.TestCase):
         proposal = self._proposal(expected)
         workspace_id = self.workspaces.create(self.task)
         workspace_path = self.workspaces.path(workspace_id)
-        IsolatedPatchApplier(self.runtime, self.workspaces).apply(workspace_id, proposal)
+        IsolatedPatchApplier(self.runtime, self.workspaces)._apply(workspace_id, proposal)
         (workspace_path / "unexpected.txt").write_text("tamper\n", encoding="utf-8")
 
-        audit = WorkspaceAuditor(self.runtime, self.workspaces).audit(workspace_id, proposal)
+        audit = WorkspaceAuditor(self.runtime, self.workspaces)._audit(workspace_id, proposal)
         self.assertFalse(audit.passed)
         self.assertTrue(any("changed paths differ" in finding for finding in audit.findings))
         self.assertEqual(
@@ -198,7 +202,7 @@ class WorkspaceIntegrationTests(unittest.TestCase):
 
     def test_only_one_active_workspace_per_task(self) -> None:
         first = self.workspaces.create(self.task)
-        with self.assertRaises(Exception):
+        with self.assertRaises(RuntimeInvariantError):
             self.workspaces.create(self.task)
         self.workspaces.abandon(first)
         second = self.workspaces.create(self.task)
@@ -248,7 +252,7 @@ class WorkspaceIntegrationTests(unittest.TestCase):
         proposal_path = lineage.local_artifact_path(worker_result.proposal_artifact_id)
         proposal_path.write_text("{}\n", encoding="utf-8")
         workspace_id = self.workspaces.create(self.task)
-        with self.assertRaises(Exception):
+        with self.assertRaises(RuntimeInvariantError):
             IsolatedPatchApplier(self.runtime, self.workspaces).apply_artifact(
                 workspace_id, worker_result.proposal_artifact_id
             )
