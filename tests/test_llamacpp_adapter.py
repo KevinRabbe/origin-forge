@@ -131,5 +131,90 @@ class WorkerCliTests(unittest.TestCase):
             tempdir.cleanup()
 
 
+class _RedirectHandler(BaseHTTPRequestHandler):
+    target_hits = 0
+
+    def do_POST(self):
+        if self.path == "/target":
+            type(self).target_hits += 1
+            self.send_response(500)
+            self.end_headers()
+            return
+        self.send_response(307)
+        self.send_header("Location", "/target")
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+class LlamaCppTransportSafetyTests(unittest.TestCase):
+    def test_redirects_are_not_followed(self) -> None:
+        from origin_forge.adapters.llamacpp import LlamaCppError
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _RedirectHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            adapter = LlamaCppAdapter(
+                base_url=f"http://127.0.0.1:{server.server_port}",
+                model="test-model",
+                timeout_seconds=2,
+            )
+            with self.assertRaises(LlamaCppError):
+                adapter.generate(
+                    ModelRequest(
+                        run_id="RUN-test",
+                        task_id="TASK-test",
+                        instructions="bounded",
+                        context={},
+                        response_schema={"type": "object"},
+                    )
+                )
+            self.assertEqual(_RedirectHandler.target_hits, 0)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_response_size_limit_is_enforced(self) -> None:
+        from origin_forge.adapters.llamacpp import LlamaCppError
+
+        class LargeHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = b"x" * 256
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), LargeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            adapter = LlamaCppAdapter(
+                base_url=f"http://127.0.0.1:{server.server_port}",
+                max_response_bytes=64,
+                timeout_seconds=2,
+            )
+            with self.assertRaises(LlamaCppError):
+                adapter.generate(
+                    ModelRequest(
+                        run_id="RUN-test",
+                        task_id="TASK-test",
+                        instructions="bounded",
+                        context={},
+                        response_schema={"type": "object"},
+                    )
+                )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+
 if __name__ == "__main__":
     unittest.main()
