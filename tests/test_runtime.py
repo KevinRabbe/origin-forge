@@ -28,7 +28,7 @@ class RuntimeFacadeTests(unittest.TestCase):
         config_path = self.root / ".origin-forge" / "config.toml"
         self.assertTrue(config_path.exists())
         config = load_config(self.root)
-        self.assertEqual(config.version, 1)
+        self.assertEqual(config.version, 2)
         self.assertEqual(config.policy_profile, "local-default")
         self.assertEqual(config.max_strategy_retries, 2)
         self.assertEqual(config.max_verification_failures, 3)

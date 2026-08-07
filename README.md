@@ -41,9 +41,11 @@ Versioned product
 
 ## Current status
 
-Origin Forge is in **Phase 3 — Isolated Apply and Audit**.
+Origin Forge is in **Phase 4 — Sandboxed Verification**.
 
-Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 allows those proposals to be materialized only inside durable disposable Git worktrees, where a separate deterministic Auditor verifies the actual changes. The main working tree remains untouched, and there is still no arbitrary shell execution or automatic merge.
+Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 now separates `AUDITED` from `VERIFIED` and defines the sandbox contract required before build/test commands may execute AI-modified project code.
+
+The current Phase-4 slice intentionally includes **no native-host command runner**. A Workspace can only become `VERIFIED` through a sandbox backend that satisfies Origin Forge's isolation policy.
 
 ## Documentation
 
@@ -52,6 +54,7 @@ Phase 1 established the durable control plane and causal lineage. Phase 2 connec
 - [Phase 1 Runtime Notes](docs/phase-1-notes.md)
 - [Phase 2 Worker Notes](docs/phase-2-notes.md)
 - [Phase 3 Isolation Notes](docs/phase-3-notes.md)
+- [Phase 4 Sandbox Notes](docs/phase-4-notes.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
@@ -66,6 +69,7 @@ The implementation currently uses or targets:
 - SQLite for durable state
 - Git for versioning and isolated work
 - llama.cpp-compatible local inference
+- replaceable sandbox backends for executing AI-modified code
 - ripgrep + Tree-sitter + LSP for code intelligence
 - Pixelorama for 2D production
 - Blockbench for 3D production
