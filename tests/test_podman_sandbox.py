@@ -76,11 +76,12 @@ class PodmanBackendTests(unittest.TestCase):
             copy = Path(temp)
             with patch("origin_forge.podman_sandbox.shutil.which", return_value="/usr/bin/podman"):
                 command = self.backend._build_command(
-                    self._job(), copy, "sha256:abc123"
+                    self._job(), copy, "sha256:abc123", copy / "container.cid"
                 )
         joined = " ".join(command)
         self.assertIn("--pull=never", command)
         self.assertIn("--read-only", command)
+        self.assertTrue(any(arg.startswith("--cidfile=") for arg in command))
         self.assertIn("--cap-drop=all", command)
         self.assertIn("--security-opt=no-new-privileges", command)
         self.assertIn("--network=none", command)
@@ -96,7 +97,10 @@ class PodmanBackendTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             with patch("origin_forge.podman_sandbox.shutil.which", return_value="podman"):
                 command = self.backend._build_command(
-                    self._job(network=True), Path(temp), "sha256:id"
+                    self._job(network=True),
+                    Path(temp),
+                    "sha256:id",
+                    Path(temp) / "container.cid",
                 )
         self.assertNotIn("--network=none", command)
 
@@ -133,8 +137,9 @@ class PodmanBackendTests(unittest.TestCase):
 
         with patch.object(self.backend, "_probe_image_id", return_value="sha256:resolved"), patch(
             "origin_forge.podman_sandbox.run_bounded_process", side_effect=fake_run
-        ):
+        ), patch.object(self.backend, "_cleanup_container") as cleanup:
             result = self.backend.run(self._job())
+        cleanup.assert_called_once()
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(
             (self.workspace / "hello.txt").read_text(encoding="utf-8"), "original\n"
@@ -142,6 +147,21 @@ class PodmanBackendTests(unittest.TestCase):
         copied = observed["copy"]
         assert isinstance(copied, Path)
         self.assertFalse(copied.exists())
+
+    def test_cleanup_uses_cidfile_force_ignore(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            cidfile = Path(temp) / "container.cid"
+            with patch("origin_forge.podman_sandbox.shutil.which", return_value="podman"), patch(
+                "origin_forge.podman_sandbox.subprocess.run"
+            ) as run:
+                self.backend._cleanup_container(cidfile)
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[:2], ["podman", "rm"])
+        self.assertIn("--force", argv)
+        self.assertIn("--ignore", argv)
+        self.assertIn("--time", argv)
+        self.assertIn("0", argv)
+        self.assertIn(f"--cidfile={cidfile}", argv)
 
 
 if __name__ == "__main__":
