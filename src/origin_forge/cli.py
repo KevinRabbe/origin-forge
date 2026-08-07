@@ -6,9 +6,13 @@ import sys
 from enum import StrEnum
 from pathlib import Path
 
+from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
+from .patches import PatchValidationError
+from .repository import RepositoryAccessError
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .service import StaleRevision, VerificationRequired
 from .state import FlowStatus, GoalStatus, InvalidTransition, RunStatus, TaskStatus
+from .worker import LocalPatchWorker
 
 
 def _enum_value(enum_type: type[StrEnum], value: str):
@@ -131,25 +135,35 @@ def build_parser() -> argparse.ArgumentParser:
     run_show = run.add_parser("show")
     run_show.add_argument("run_id")
 
-    verify = sub.add_parser(
-        "verify", help="record and inspect verification"
-    ).add_subparsers(dest="verify_command", required=True)
+    verify = sub.add_parser("verify", help="record and inspect verification").add_subparsers(
+        dest="verify_command", required=True
+    )
     verify_record = verify.add_parser("record")
-    verify_record.add_argument(
-        "target_type", choices=["GOAL", "FLOW", "TASK", "RUN"]
-    )
+    verify_record.add_argument("target_type", choices=["GOAL", "FLOW", "TASK", "RUN"])
     verify_record.add_argument("target_id")
-    verify_record.add_argument(
-        "status", choices=["PASS", "FAIL", "INCONCLUSIVE", "SKIPPED", "BLOCKED"]
-    )
+    verify_record.add_argument("status", choices=["PASS", "FAIL", "INCONCLUSIVE", "SKIPPED", "BLOCKED"])
     verify_record.add_argument("--type", dest="verification_type", required=True)
     verify_record.add_argument("--verifier", required=True)
     verify_record.add_argument("--run-id")
     verify_list = verify.add_parser("list")
-    verify_list.add_argument(
-        "target_type", choices=["GOAL", "FLOW", "TASK", "RUN"]
-    )
+    verify_list.add_argument("target_type", choices=["GOAL", "FLOW", "TASK", "RUN"])
     verify_list.add_argument("target_id")
+
+    worker = sub.add_parser("worker", help="run bounded local model workers").add_subparsers(
+        dest="worker_command", required=True
+    )
+    worker_propose = worker.add_parser(
+        "propose", help="ask a local llama.cpp model for a non-applied patch proposal"
+    )
+    worker_propose.add_argument("task_id")
+    worker_propose.add_argument("--file", action="append", required=True, dest="files")
+    worker_propose.add_argument("--base-url", default="http://127.0.0.1:8080")
+    worker_propose.add_argument("--model", default="local-model")
+    worker_propose.add_argument("--api-key", default="no-key")
+    worker_propose.add_argument("--timeout", type=float, default=300.0)
+    worker_propose.add_argument("--max-tokens", type=int, default=4096)
+    worker_propose.add_argument("--temperature", type=float, default=0.2)
+    worker_propose.add_argument("--allow-remote", action="store_true")
 
     return parser
 
@@ -166,9 +180,7 @@ def _main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "recover":
         raw = runtime.recover() if args.apply else runtime.recovery_findings()
-        _print(
-            {"applied": bool(args.apply), "findings": [item.__dict__ for item in raw]}
-        )
+        _print({"applied": bool(args.apply), "findings": [item.__dict__ for item in raw]})
         return 0 if args.apply or not raw else 1
 
     if args.command == "goal":
@@ -188,9 +200,7 @@ def _main(argv: list[str] | None = None) -> int:
             _print(runtime.get_goal(args.goal_id))
             return 0
         if args.goal_command == "transition":
-            runtime.transition_goal(
-                args.goal_id, args.status, expected_revision=args.revision
-            )
+            runtime.transition_goal(args.goal_id, args.status, expected_revision=args.revision)
             _print(runtime.get_goal(args.goal_id))
             return 0
 
@@ -206,9 +216,7 @@ def _main(argv: list[str] | None = None) -> int:
             _print(runtime.get_flow(args.flow_id))
             return 0
         if args.flow_command == "transition":
-            runtime.transition_flow(
-                args.flow_id, args.status, expected_revision=args.revision
-            )
+            runtime.transition_flow(args.flow_id, args.status, expected_revision=args.revision)
             _print(runtime.get_flow(args.flow_id))
             return 0
 
@@ -232,9 +240,7 @@ def _main(argv: list[str] | None = None) -> int:
             _print(runtime.get_task(args.task_id))
             return 0
         if args.task_command == "transition":
-            runtime.transition_task(
-                args.task_id, args.status, expected_revision=args.revision
-            )
+            runtime.transition_task(args.task_id, args.status, expected_revision=args.revision)
             _print(runtime.get_task(args.task_id))
             return 0
 
@@ -251,9 +257,7 @@ def _main(argv: list[str] | None = None) -> int:
             _print(runtime.list_runs(args.task))
             return 0
         if args.run_command == "finish":
-            runtime.finish_run(
-                args.run_id, args.status, failure_reason=args.failure_reason
-            )
+            runtime.finish_run(args.run_id, args.status, failure_reason=args.failure_reason)
             _print(runtime.get_run(args.run_id))
             return 0
         if args.run_command == "show":
@@ -276,6 +280,31 @@ def _main(argv: list[str] | None = None) -> int:
             _print(runtime.list_verifications(args.target_type, args.target_id))
             return 0
 
+    if args.command == "worker" and args.worker_command == "propose":
+        adapter = LlamaCppAdapter(
+            base_url=args.base_url,
+            model=args.model,
+            api_key=args.api_key,
+            timeout_seconds=args.timeout,
+            max_tokens=args.max_tokens,
+            temperature=args.temperature,
+            allow_remote=args.allow_remote,
+        )
+        result = LocalPatchWorker(runtime, adapter).execute(
+            args.task_id, selected_paths=args.files, model_profile=args.model
+        )
+        _print(
+            {
+                "run_id": result.run_id,
+                "context_artifact_id": result.context_artifact_id,
+                "response_artifact_id": result.response_artifact_id,
+                "proposal_artifact_id": result.proposal_artifact_id,
+                "proposal": result.proposal.to_dict(),
+                "applied": False,
+            }
+        )
+        return 0
+
     raise AssertionError("unhandled command")
 
 
@@ -289,17 +318,17 @@ def main(argv: list[str] | None = None) -> int:
         _print({"error": "INVALID_STATE", "message": str(exc)}, stream=sys.stderr)
         return 4
     except RuntimeInvariantError as exc:
-        _print(
-            {"error": "INVARIANT_VIOLATION", "message": str(exc)},
-            stream=sys.stderr,
-        )
+        _print({"error": "INVARIANT_VIOLATION", "message": str(exc)}, stream=sys.stderr)
         return 5
     except VerificationRequired as exc:
-        _print(
-            {"error": "VERIFICATION_REQUIRED", "message": str(exc)},
-            stream=sys.stderr,
-        )
+        _print({"error": "VERIFICATION_REQUIRED", "message": str(exc)}, stream=sys.stderr)
         return 6
+    except (PatchValidationError, RepositoryAccessError) as exc:
+        _print({"error": "PROPOSAL_REJECTED", "message": str(exc)}, stream=sys.stderr)
+        return 8
+    except LlamaCppError as exc:
+        _print({"error": "MODEL_ERROR", "message": str(exc)}, stream=sys.stderr)
+        return 9
     except ValueError as exc:
         _print({"error": "INVALID_INPUT", "message": str(exc)}, stream=sys.stderr)
         return 7
