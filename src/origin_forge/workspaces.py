@@ -221,6 +221,11 @@ class GitWorkspaceManager:
                 WorkspaceStatus.ABANDONED,
             },
             WorkspaceStatus.APPLIED: {
+                WorkspaceStatus.AUDITED,
+                WorkspaceStatus.FAILED,
+                WorkspaceStatus.ABANDONED,
+            },
+            WorkspaceStatus.AUDITED: {
                 WorkspaceStatus.VERIFIED,
                 WorkspaceStatus.FAILED,
                 WorkspaceStatus.ABANDONED,
