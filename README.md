@@ -43,15 +43,17 @@ Versioned product
 
 Origin Forge is in **Phase 0 — Specification and Foundations**.
 
-No production agent implementation should be added until the core object model, state transitions, permissions, project layout, provenance model, and execution lifecycle are defined.
+The current baseline defines the core architecture, state model, security boundaries, implementation contracts, and staged roadmap. The first executable implementation will be the durable runtime; LLM integration intentionally comes later.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
+- [Phase 0 Implementation Specification](docs/phase-0-spec.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
 - [Roadmap](docs/roadmap.md)
+- [Research Influences](docs/research-influences.md)
 
 ## Initial technology direction
 
