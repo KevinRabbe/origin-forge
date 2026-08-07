@@ -37,6 +37,7 @@ class RunStatus(StrEnum):
 class WorkspaceStatus(StrEnum):
     CREATED = "CREATED"
     APPLIED = "APPLIED"
+    AUDITED = "AUDITED"
     VERIFIED = "VERIFIED"
     FAILED = "FAILED"
     ABANDONED = "ABANDONED"
