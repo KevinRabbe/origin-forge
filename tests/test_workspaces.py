@@ -122,7 +122,7 @@ class WorkspaceIntegrationTests(unittest.TestCase):
         self.assertTrue(audit.passed, audit.findings)
         self.assertEqual(
             self.workspaces.get(workspace_id)["status"],
-            WorkspaceStatus.VERIFIED.value,
+            WorkspaceStatus.AUDITED.value,
         )
 
     def test_stale_precondition_rejects_before_mutation(self) -> None:
