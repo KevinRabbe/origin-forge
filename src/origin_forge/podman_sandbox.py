@@ -147,6 +147,16 @@ class PodmanSandboxBackend:
             return None
         return image_id
 
+    @property
+    def provenance(self) -> dict[str, object]:
+        return {
+            "configured_image": self.settings.image,
+            "resolved_image_id": self._resolved_image_id,
+            "memory": self.settings.memory,
+            "cpus": self.settings.cpus,
+            "pids_limit": self.settings.pids_limit,
+        }
+
     def available(self) -> bool:
         self._resolved_image_id = self._probe_image_id()
         return self._resolved_image_id is not None
