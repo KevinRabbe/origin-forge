@@ -97,6 +97,7 @@ class SandboxedWorkspaceVerifier:
             status="PASS" if passed else "FAIL",
             evidence={
                 "backend_id": self.backend.backend_id,
+                "backend_provenance": dict(self.backend.provenance),
                 "argv": list(command.argv),
                 "result": asdict(result),
             },
@@ -154,6 +155,9 @@ class SandboxedWorkspaceVerifier:
             WorkspaceStatus.VERIFIED,
             expected_revision=int(current["revision"]),
             event_type="WORKSPACE_SANDBOX_VERIFICATION_PASSED",
-            metadata={"backend_id": self.backend.backend_id},
+            metadata={
+                "backend_id": self.backend.backend_id,
+                "backend_provenance": dict(self.backend.provenance),
+            },
         )
         return WorkspaceVerificationResult(workspace_id, True, tuple(results))
