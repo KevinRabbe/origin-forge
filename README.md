@@ -41,11 +41,13 @@ Versioned product
 
 ## Current status
 
-Origin Forge is in **Phase 4 — Sandboxed Verification**.
+Origin Forge is in **Phase 5 — Podman Sandbox Backend**.
 
-Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 now separates `AUDITED` from `VERIFIED` and defines the sandbox contract required before build/test commands may execute AI-modified project code.
+Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implements the first real backend behind that contract using Podman.
 
-The current Phase-4 slice intentionally includes **no native-host command runner**. A Workspace can only become `VERIFIED` through a sandbox backend that satisfies Origin Forge's isolation policy.
+The Podman backend resolves an explicitly configured local image to its local image ID, uses no automatic pulls, defaults network access off, applies resource and privilege restrictions, and runs only project-approved structured commands against a disposable copy of the audited Workspace. The audited Git worktree itself is not mounted into the container.
+
+There is still **no arbitrary shell command surface and no automatic merge**. `sandbox verify` can execute only the required commands already declared in project configuration.
 
 ## Documentation
 
@@ -55,6 +57,7 @@ The current Phase-4 slice intentionally includes **no native-host command runner
 - [Phase 2 Worker Notes](docs/phase-2-notes.md)
 - [Phase 3 Isolation Notes](docs/phase-3-notes.md)
 - [Phase 4 Sandbox Notes](docs/phase-4-notes.md)
+- [Phase 5 Podman Sandbox Notes](docs/phase-5-notes.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
@@ -69,7 +72,8 @@ The implementation currently uses or targets:
 - SQLite for durable state
 - Git for versioning and isolated work
 - llama.cpp-compatible local inference
-- replaceable sandbox backends for executing AI-modified code
+- Podman as the first real sandbox backend for executing AI-modified code
+- replaceable sandbox backends behind a common verification contract
 - ripgrep + Tree-sitter + LSP for code intelligence
 - Pixelorama for 2D production
 - Blockbench for 3D production
