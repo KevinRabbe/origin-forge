@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import asdict
 from enum import StrEnum
 from pathlib import Path
 
@@ -304,6 +305,7 @@ def _main(argv: list[str] | None = None) -> int:
                     "available": available,
                     "network_allowed": config.sandbox_network,
                     "image": config.sandbox_image,
+                    "provenance": dict(backend.provenance),
                     "guarantees": {
                         "filesystem_isolated": backend.guarantees.filesystem_isolated,
                         "process_isolated": backend.guarantees.process_isolated,
@@ -325,7 +327,9 @@ def _main(argv: list[str] | None = None) -> int:
                             "command_name": item.command_name,
                             "verification_id": item.verification_id,
                             "passed": item.passed,
-                            "sandbox_result": item.sandbox_result,
+                            "sandbox_result": asdict(item.sandbox_result)
+                            if item.sandbox_result is not None
+                            else None,
                         }
                         for item in result.results
                     ],
