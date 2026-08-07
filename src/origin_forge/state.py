@@ -34,6 +34,14 @@ class RunStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
+class WorkspaceStatus(StrEnum):
+    CREATED = "CREATED"
+    APPLIED = "APPLIED"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+    ABANDONED = "ABANDONED"
+
+
 class TaskStatus(StrEnum):
     QUEUED = "QUEUED"
     READY = "READY"
@@ -107,12 +115,7 @@ TASK_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
         }
     ),
     TaskStatus.WAITING: frozenset(
-        {
-            TaskStatus.READY,
-            TaskStatus.RUNNING,
-            TaskStatus.BLOCKED,
-            TaskStatus.CANCELLED,
-        }
+        {TaskStatus.READY, TaskStatus.RUNNING, TaskStatus.BLOCKED, TaskStatus.CANCELLED}
     ),
     TaskStatus.BLOCKED: frozenset(
         {
@@ -124,12 +127,7 @@ TASK_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
         }
     ),
     TaskStatus.FAILED: frozenset(
-        {
-            TaskStatus.READY,
-            TaskStatus.RUNNING,
-            TaskStatus.QUARANTINED,
-            TaskStatus.CANCELLED,
-        }
+        {TaskStatus.READY, TaskStatus.RUNNING, TaskStatus.QUARANTINED, TaskStatus.CANCELLED}
     ),
     TaskStatus.QUARANTINED: frozenset(
         {TaskStatus.READY, TaskStatus.RUNNING, TaskStatus.CANCELLED}
