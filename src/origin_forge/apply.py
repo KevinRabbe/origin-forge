@@ -22,7 +22,7 @@ class ApplyResult:
 
 
 class IsolatedPatchApplier:
-    """Deterministically applies a validated proposal only inside a tracked worktree."""
+    """Deterministically applies a persisted proposal only inside a tracked worktree."""
 
     def __init__(self, runtime: OriginForgeRuntime, workspaces: GitWorkspaceManager | None = None):
         self.runtime = runtime
@@ -45,11 +45,11 @@ class IsolatedPatchApplier:
             proposal_artifact_id,
             expected_task_id=workspace["task_id"],
         )
-        return self.apply(
+        return self._apply(
             workspace_id, proposal, source_artifact_id=proposal_artifact_id
         )
 
-    def apply(
+    def _apply(
         self,
         workspace_id: str,
         proposal: PatchProposal,
