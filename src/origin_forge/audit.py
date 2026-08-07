@@ -34,9 +34,9 @@ class WorkspaceAuditor:
             proposal_artifact_id,
             expected_task_id=workspace["task_id"],
         )
-        return self.audit(workspace_id, proposal)
+        return self._audit(workspace_id, proposal)
 
-    def audit(self, workspace_id: str, proposal: PatchProposal) -> AuditResult:
+    def _audit(self, workspace_id: str, proposal: PatchProposal) -> AuditResult:
         row = self.workspaces.get(workspace_id)
         findings: list[str] = []
         if row["status"] != WorkspaceStatus.APPLIED.value:
