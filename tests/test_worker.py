@@ -161,5 +161,51 @@ class PhaseTwoWorkerTests(unittest.TestCase):
         self.assertIsNone(self.runtime.get_task(self.task)["assigned_run_id"])
 
 
+class RepositorySymlinkTests(unittest.TestCase):
+    def test_symlink_alias_to_origin_forge_state_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / ".origin-forge"
+            state.mkdir()
+            (state / "secret.txt").write_text("secret", encoding="utf-8")
+            alias = root / "normal-looking"
+            try:
+                alias.symlink_to(state, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable")
+            reader = RepositoryReader(root)
+            with self.assertRaises(RepositoryAccessError):
+                reader.read_text("normal-looking/secret.txt")
+
+    def test_create_precondition_rejects_parent_symlink_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, tempfile.TemporaryDirectory() as outside:
+            root = Path(temp)
+            alias = root / "external"
+            try:
+                alias.symlink_to(Path(outside), target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable")
+            proposal = parse_patch_proposal(
+                json.dumps(
+                    {
+                        "summary": "escape",
+                        "changes": [
+                            {
+                                "operation": "CREATE",
+                                "path": "external/new.py",
+                                "expected_hash": None,
+                                "content": "x = 1\n",
+                            }
+                        ],
+                        "notes": [],
+                    }
+                )
+            )
+            from origin_forge.patches import validate_patch_preconditions
+
+            with self.assertRaises(RepositoryAccessError):
+                validate_patch_preconditions(proposal, RepositoryReader(root))
+
+
 if __name__ == "__main__":
     unittest.main()
