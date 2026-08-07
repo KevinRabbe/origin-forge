@@ -7,8 +7,12 @@ from enum import StrEnum
 from pathlib import Path
 
 from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
+from .config import load_config
 from .patches import PatchValidationError
 from .repository import RepositoryAccessError
+from .sandbox import SandboxPolicyError, SandboxUnavailable
+from .sandbox_factory import create_sandbox_backend
+from .sandbox_verification import SandboxedWorkspaceVerifier
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .service import StaleRevision, VerificationRequired
 from .state import FlowStatus, GoalStatus, InvalidTransition, RunStatus, TaskStatus
@@ -165,6 +169,15 @@ def build_parser() -> argparse.ArgumentParser:
     worker_propose.add_argument("--temperature", type=float, default=0.2)
     worker_propose.add_argument("--allow-remote", action="store_true")
 
+    sandbox = sub.add_parser("sandbox", help="inspect and run configured sandbox verification").add_subparsers(
+        dest="sandbox_command", required=True
+    )
+    sandbox.add_parser("status", help="show configured sandbox backend status")
+    sandbox_verify = sandbox.add_parser(
+        "verify", help="run required approved verification commands for an AUDITED workspace"
+    )
+    sandbox_verify.add_argument("workspace_id")
+
     return parser
 
 
@@ -280,6 +293,46 @@ def _main(argv: list[str] | None = None) -> int:
             _print(runtime.list_verifications(args.target_type, args.target_id))
             return 0
 
+    if args.command == "sandbox":
+        config = load_config(runtime.project_root)
+        backend = create_sandbox_backend(runtime, config)
+        if args.sandbox_command == "status":
+            available = backend.available()
+            _print(
+                {
+                    "backend": backend.backend_id,
+                    "available": available,
+                    "network_allowed": config.sandbox_network,
+                    "image": config.sandbox_image,
+                    "guarantees": {
+                        "filesystem_isolated": backend.guarantees.filesystem_isolated,
+                        "process_isolated": backend.guarantees.process_isolated,
+                        "host_secrets_isolated": backend.guarantees.host_secrets_isolated,
+                        "network_controlled": backend.guarantees.network_controlled,
+                    },
+                }
+            )
+            return 0 if available else 1
+        if args.sandbox_command == "verify":
+            result = SandboxedWorkspaceVerifier(runtime, backend).verify(args.workspace_id)
+            _print(
+                {
+                    "workspace_id": result.workspace_id,
+                    "passed": result.passed,
+                    "results": [
+                        {
+                            "category": item.category,
+                            "command_name": item.command_name,
+                            "verification_id": item.verification_id,
+                            "passed": item.passed,
+                            "sandbox_result": item.sandbox_result,
+                        }
+                        for item in result.results
+                    ],
+                }
+            )
+            return 0 if result.passed else 1
+
     if args.command == "worker" and args.worker_command == "propose":
         adapter = LlamaCppAdapter(
             base_url=args.base_url,
@@ -329,6 +382,12 @@ def main(argv: list[str] | None = None) -> int:
     except LlamaCppError as exc:
         _print({"error": "MODEL_ERROR", "message": str(exc)}, stream=sys.stderr)
         return 9
+    except SandboxUnavailable as exc:
+        _print({"error": "SANDBOX_UNAVAILABLE", "message": str(exc)}, stream=sys.stderr)
+        return 10
+    except SandboxPolicyError as exc:
+        _print({"error": "SANDBOX_POLICY", "message": str(exc)}, stream=sys.stderr)
+        return 11
     except ValueError as exc:
         _print({"error": "INVALID_INPUT", "message": str(exc)}, stream=sys.stderr)
         return 7
