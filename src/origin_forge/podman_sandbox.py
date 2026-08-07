@@ -163,13 +163,16 @@ class PodmanSandboxBackend:
 
         shutil.copytree(source, destination, symlinks=True, ignore=ignore)
 
-    def _build_command(self, job: SandboxJob, workspace_copy: Path, image_id: str) -> list[str]:
+    def _build_command(
+        self, job: SandboxJob, workspace_copy: Path, image_id: str, cidfile: Path
+    ) -> list[str]:
         executable = shutil.which(self.settings.executable) or self.settings.executable
         command = [
             executable,
             "run",
             "--rm",
             "--pull=never",
+            f"--cidfile={cidfile}",
             "--read-only",
             "--cap-drop=all",
             "--security-opt=no-new-privileges",
@@ -189,6 +192,30 @@ class PodmanSandboxBackend:
         command.extend(["--entrypoint", job.argv[0], image_id, *job.argv[1:]])
         return command
 
+    def _cleanup_container(self, cidfile: Path) -> None:
+        executable = shutil.which(self.settings.executable)
+        if executable is None:
+            return
+        try:
+            subprocess.run(
+                [
+                    executable,
+                    "rm",
+                    "--force",
+                    "--time",
+                    "0",
+                    "--ignore",
+                    f"--cidfile={cidfile}",
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=self.settings.probe_timeout_seconds,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
     def run(self, job: SandboxJob) -> SandboxResult:
         image_id = self._resolved_image_id or self._probe_image_id()
         if image_id is None:
@@ -201,14 +228,16 @@ class PodmanSandboxBackend:
 
         job_root = self.state_dir / "sandbox-jobs" / str(uuid4())
         workspace_copy = job_root / "workspace"
+        cidfile = job_root / "container.cid"
         job_root.mkdir(parents=True, exist_ok=False)
         try:
             self._copy_workspace(source, workspace_copy)
-            command = self._build_command(job, workspace_copy, image_id)
+            command = self._build_command(job, workspace_copy, image_id, cidfile)
             return run_bounded_process(
                 command,
                 timeout_seconds=job.timeout_seconds,
                 max_output_bytes=job.max_output_bytes,
             )
         finally:
+            self._cleanup_container(cidfile)
             shutil.rmtree(job_root, ignore_errors=True)
