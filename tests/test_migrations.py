@@ -34,8 +34,14 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 2)
+            self.assertEqual(SCHEMA_VERSION, 4)
             self.assertIn("revision", goal_columns)
+            with store.session() as upgraded:
+                workspace_columns = {
+                    row["name"] for row in upgraded.execute("PRAGMA table_info(workspaces)")
+                }
+            self.assertIn("revision", workspace_columns)
+            self.assertIn("base_commit", workspace_columns)
 
 
 if __name__ == "__main__":
