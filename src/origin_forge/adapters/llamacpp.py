@@ -13,6 +13,11 @@ class LlamaCppError(RuntimeError):
     pass
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 @dataclass(frozen=True)
 class LlamaCppSettings:
     base_url: str = "http://127.0.0.1:8080"
@@ -23,6 +28,7 @@ class LlamaCppSettings:
     temperature: float = 0.2
     allow_remote: bool = False
     model_hash: str | None = None
+    max_response_bytes: int = 4 * 1024 * 1024
 
 
 class LlamaCppAdapter:
@@ -41,6 +47,7 @@ class LlamaCppAdapter:
         temperature: float = 0.2,
         allow_remote: bool = False,
         model_hash: str | None = None,
+        max_response_bytes: int = 4 * 1024 * 1024,
     ):
         self.settings = LlamaCppSettings(
             base_url=base_url.rstrip("/"),
@@ -51,6 +58,7 @@ class LlamaCppAdapter:
             temperature=temperature,
             allow_remote=allow_remote,
             model_hash=model_hash,
+            max_response_bytes=max_response_bytes,
         )
         self._validate_settings()
 
@@ -72,6 +80,8 @@ class LlamaCppAdapter:
             raise ValueError("max_tokens must be positive")
         if not 0 <= self.settings.temperature <= 2:
             raise ValueError("temperature must be between 0 and 2")
+        if self.settings.max_response_bytes <= 0:
+            raise ValueError("max_response_bytes must be positive")
 
     def _payload(self, request: ModelRequest) -> dict:
         return {
@@ -104,10 +114,15 @@ class LlamaCppAdapter:
             },
         )
         try:
-            with urllib.request.urlopen(
+            opener = urllib.request.build_opener(_NoRedirectHandler())
+            with opener.open(
                 http_request, timeout=self.settings.timeout_seconds
             ) as response:
-                raw = response.read()
+                raw = response.read(self.settings.max_response_bytes + 1)
+                if len(raw) > self.settings.max_response_bytes:
+                    raise LlamaCppError(
+                        f"llama.cpp response exceeds {self.settings.max_response_bytes} bytes"
+                    )
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise LlamaCppError(
