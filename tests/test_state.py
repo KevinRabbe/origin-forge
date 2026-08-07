@@ -119,7 +119,9 @@ class OriginForgeStateTests(unittest.TestCase):
         first = self.store.recovery_findings()
         second = self.store.recovery_findings()
         self.assertEqual(first, second)
-        self.assertEqual({finding.aggregate_type for finding in first}, {"FLOW", "TASK"})
+        self.assertEqual(
+            {finding.aggregate_type for finding in first}, {"FLOW", "TASK"}
+        )
 
     def test_run_lifecycle_and_attempt_count(self) -> None:
         _, task = self._flow_and_task()
@@ -175,6 +177,54 @@ class OriginForgeStateTests(unittest.TestCase):
         )
         self.assertEqual(
             get_run(self.store, run_id)["status"], RunStatus.INTERRUPTED.value
+        )
+
+    def test_recovery_leaves_terminal_run_unchanged(self) -> None:
+        flow, task = self._flow_and_task()
+        self.store.transition_flow(flow, FlowStatus.RUNNING, expected_revision=0)
+        revision = self.store.transition_task(
+            task, TaskStatus.READY, expected_revision=0
+        )
+        self.store.transition_task(
+            task, TaskStatus.RUNNING, expected_revision=revision
+        )
+        run_id = create_run(self.store, task, role="EXECUTOR")
+        finish_run(self.store, run_id, RunStatus.SUCCEEDED)
+
+        findings = reconcile_interrupted(self.store)
+        self.assertEqual(
+            {finding.aggregate_type for finding in findings}, {"FLOW", "TASK"}
+        )
+        self.assertEqual(
+            get_run(self.store, run_id)["status"], RunStatus.SUCCEEDED.value
+        )
+        self.assertEqual(
+            self.store.get_task(task)["status"], TaskStatus.BLOCKED.value
+        )
+
+    def test_recovery_handles_running_run_with_already_blocked_task(self) -> None:
+        flow, task = self._flow_and_task()
+        self.store.transition_flow(flow, FlowStatus.RUNNING, expected_revision=0)
+        revision = self.store.transition_task(
+            task, TaskStatus.READY, expected_revision=0
+        )
+        revision = self.store.transition_task(
+            task, TaskStatus.RUNNING, expected_revision=revision
+        )
+        run_id = create_run(self.store, task, role="EXECUTOR")
+        self.store.transition_task(
+            task, TaskStatus.BLOCKED, expected_revision=revision
+        )
+
+        findings = reconcile_interrupted(self.store)
+        self.assertEqual(
+            {finding.aggregate_type for finding in findings}, {"FLOW", "RUN"}
+        )
+        self.assertEqual(
+            get_run(self.store, run_id)["status"], RunStatus.INTERRUPTED.value
+        )
+        self.assertEqual(
+            self.store.get_task(task)["status"], TaskStatus.BLOCKED.value
         )
 
     def test_foreign_keys_are_enforced(self) -> None:
