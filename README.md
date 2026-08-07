@@ -41,14 +41,16 @@ Versioned product
 
 ## Current status
 
-Origin Forge is in **Phase 0 — Specification and Foundations**.
+Origin Forge is in **Phase 2 — Bounded Local Worker**.
 
-The current baseline defines the core architecture, state model, security boundaries, implementation contracts, and staged roadmap. The first executable implementation will be the durable runtime; LLM integration intentionally comes later.
+Phase 1 established the durable Goal / Flow / Task / Run control plane, recovery, verification, and causal lineage. Phase 2 is connecting that state to a replaceable local coding model through read-only repository snapshots and structured patch proposals. The model can propose changes, but it still cannot apply patches, execute shell commands, or declare Tasks successful.
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Phase 0 Implementation Specification](docs/phase-0-spec.md)
+- [Phase 1 Runtime Notes](docs/phase-1-notes.md)
+- [Phase 2 Worker Notes](docs/phase-2-notes.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
@@ -57,7 +59,7 @@ The current baseline defines the core architecture, state model, security bounda
 
 ## Initial technology direction
 
-The first implementation is expected to use:
+The implementation currently uses or targets:
 
 - Python for the harness
 - SQLite for durable state
