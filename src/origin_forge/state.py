@@ -18,6 +18,14 @@ class FlowStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
+class RunStatus(StrEnum):
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    INTERRUPTED = "INTERRUPTED"
+    CANCELLED = "CANCELLED"
+
+
 class TaskStatus(StrEnum):
     QUEUED = "QUEUED"
     READY = "READY"
