@@ -78,7 +78,7 @@ class WorkspaceAuditor:
         if current["status"] == WorkspaceStatus.APPLIED.value:
             self.workspaces.transition(
                 workspace_id,
-                WorkspaceStatus.VERIFIED if passed else WorkspaceStatus.FAILED,
+                WorkspaceStatus.AUDITED if passed else WorkspaceStatus.FAILED,
                 expected_revision=int(current["revision"]),
                 event_type="WORKSPACE_AUDIT_PASSED" if passed else "WORKSPACE_AUDIT_FAILED",
             )
