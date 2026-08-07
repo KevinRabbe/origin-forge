@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-CONFIG_VERSION = 2
-DEFAULT_CONFIG = """# Origin Forge project configuration
-version = 2
+CONFIG_VERSION = 3
+DEFAULT_CONFIG = '''# Origin Forge project configuration
+version = 3
 policy_profile = "local-default"
 
 [limits]
@@ -15,12 +15,17 @@ max_strategy_retries = 2
 max_verification_failures = 3
 
 [sandbox]
+backend = "unconfigured"
+image = ""
 network = false
+memory = "2g"
+cpus = 2.0
+pids_limit = 256
 
 [commands]
 build = []
 test = []
-"""
+'''
 
 
 @dataclass(frozen=True)
@@ -39,6 +44,11 @@ class ProjectConfig:
     max_strategy_retries: int
     max_verification_failures: int
     sandbox_network: bool
+    sandbox_backend: str
+    sandbox_image: str | None
+    sandbox_memory: str
+    sandbox_cpus: float
+    sandbox_pids_limit: int
     approved_build_commands: tuple[CommandSpec, ...]
     approved_test_commands: tuple[CommandSpec, ...]
 
@@ -120,9 +130,9 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         raw = tomllib.load(handle)
 
     version = int(raw.get("version", 0))
-    if version not in {1, CONFIG_VERSION}:
+    if version not in {1, 2, CONFIG_VERSION}:
         raise ValueError(
-            f"unsupported config version {version}; expected 1 or {CONFIG_VERSION}"
+            f"unsupported config version {version}; expected 1, 2, or {CONFIG_VERSION}"
         )
 
     limits = raw.get("limits", {})
@@ -145,6 +155,16 @@ def load_config(project_root: str | Path) -> ProjectConfig:
     network = sandbox.get("network", False)
     if not isinstance(network, bool):
         raise ValueError("sandbox.network must be boolean")
+    backend = str(sandbox.get("backend", "unconfigured"))
+    image_raw = sandbox.get("image", "")
+    if not isinstance(image_raw, str):
+        raise ValueError("sandbox.image must be a string")
+    image = image_raw.strip() or None
+    memory = str(sandbox.get("memory", "2g"))
+    cpus = float(sandbox.get("cpus", 2.0))
+    pids_limit = int(sandbox.get("pids_limit", 256))
+    if cpus <= 0 or pids_limit <= 0:
+        raise ValueError("sandbox resource limits must be positive")
 
     parser = _legacy_commands if version == 1 else _structured_commands
     return ProjectConfig(
@@ -153,6 +173,11 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         max_strategy_retries=strategy,
         max_verification_failures=verification,
         sandbox_network=network,
+        sandbox_backend=backend,
+        sandbox_image=image,
+        sandbox_memory=memory,
+        sandbox_cpus=cpus,
+        sandbox_pids_limit=pids_limit,
         approved_build_commands=parser(commands.get("build"), "build"),
         approved_test_commands=parser(commands.get("test"), "test"),
     )

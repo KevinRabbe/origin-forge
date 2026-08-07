@@ -65,6 +65,9 @@ class SandboxBackend(Protocol):
     @property
     def guarantees(self) -> SandboxGuarantees: ...
 
+    @property
+    def provenance(self) -> Mapping[str, object]: ...
+
     def available(self) -> bool: ...
 
     def run(self, job: SandboxJob) -> SandboxResult: ...
@@ -75,6 +78,10 @@ class UnconfiguredSandboxBackend:
 
     backend_id = "unconfigured"
     guarantees = SandboxGuarantees(False, False, False, False)
+
+    @property
+    def provenance(self) -> Mapping[str, object]:
+        return {}
 
     def available(self) -> bool:
         return False

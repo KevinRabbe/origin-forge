@@ -46,6 +46,10 @@ class FakeSandboxBackend:
         self.error = error
         self.jobs: list[SandboxJob] = []
 
+    @property
+    def provenance(self) -> dict[str, object]:
+        return {"fake": True}
+
     def available(self) -> bool:
         return True
 
@@ -142,9 +146,13 @@ class SandboxedVerificationTests(unittest.TestCase):
             backend.jobs[0].argv, ("python", "-m", "unittest", "-q")
         )
         self.assertFalse(backend.jobs[0].network_allowed)
-        self.assertEqual(
-            backend.jobs[0].workspace_path, self.workspaces.path(self.workspace_id)
-        )
+        self.assertEqual(backend.jobs[0].workspace_path, self.workspaces.path(self.workspace_id))
+        with self.runtime.store.session() as conn:
+            evidence = conn.execute(
+                "SELECT evidence_json FROM verifications WHERE id = ?",
+                (result.results[0].verification_id,),
+            ).fetchone()["evidence_json"]
+        self.assertIn('"backend_provenance":{"fake":true}', evidence)
 
     def test_nonzero_command_fails_workspace(self) -> None:
         self._write_config(
