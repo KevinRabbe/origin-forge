@@ -1,104 +1,56 @@
 # Phase 1 Runtime Notes
 
-The initial durable runtime branch establishes the first executable Origin Forge substrate without any LLM integration.
+Status: **Completion candidate — pending final CI/review**
+
+Phase 1 establishes the first executable Origin Forge substrate without any LLM integration. Its purpose is to prove that project truth, long-running work, recovery, verification, and causal history can exist independently of model conversation state.
 
 ## Implemented
 
+### Durable control state
+
 - Python package and CLI entry point
-- SQLite schema version 1
-- migration bootstrap
+- SQLite durable state
+- ordered schema migrations
+- tested schema v1 → v2 upgrade
 - typed infrastructure IDs
-- Flow and Task state machines
+- Goal / Flow / Task state machines
 - optimistic revision checks
 - append-only state-event journal
-- Goal / Flow / Task creation
-- verification records
-- Task success gated on passing Verification
-- explicit Run lifecycle with attempt accounting
+- restart-safe state persistence
+
+### Goal / Flow / Task semantics
+
+- Goal / Flow / Task creation and inspection
+- explicit Goal lifecycle
+- Task success requires passing Verification
+- Goal success requires:
+  - completed/cancelled Flows
+  - explicit passing Goal Verification
+- same-Flow parent/child Task invariant
+- parent Task completion blocked while child work remains active
+- Flow completion blocked while active/failed work remains unresolved
+
+### Run lifecycle and recovery
+
+- explicit Run lifecycle
+- Task attempt accounting
+- one active Run lease per Task
+- Run assignment cleared on normal completion
 - recovery inspection for interrupted `RUNNING` Flow/Task/Run records
 - idempotent recovery reconciliation:
   - interrupted Run → `INTERRUPTED`
   - running Task → `BLOCKED` with revision increment
   - running Flow → `BLOCKED` with revision increment
-- `OriginForgeRuntime` application-service boundary above raw persistence
-- project-local `.origin-forge/config.toml` bootstrap and validation
-- project ownership checks for Goal / Flow / Task / Run access
-- same-Flow parent/child Task invariant
-- parent Task completion blocked while child work remains active
-- Flow completion blocked while active/failed work remains unresolved
-- CLI operations for Goal / Flow / Task / Run creation, inspection, and transitions
-- status summary including active policy/retry configuration
-- local runtime database isolation under `.origin-forge/`
-- GitHub Actions test matrix for Python 3.12 and 3.13
+- Run assignment cleared during interruption recovery
+- mixed-state recovery safety:
+  - already-terminal Runs are not rewritten
+  - already-blocked Tasks remain blocked while orphaned Runs are interrupted
 
-## Validation performed before publishing the latest branch state
+### Runtime/API boundary
 
-```text
-PYTHONPATH=src python -W error::ResourceWarning -m unittest discover -s tests -v
-```
+`OriginForgeStore` owns persistence mechanics.
 
-Result:
-
-```text
-Ran 16 tests
-OK
-```
-
-The suite currently verifies:
-
-1. typed unique infrastructure IDs
-2. idempotent project initialization
-3. Flow transitions and event journaling
-4. stale revision rejection
-5. terminal-state transition enforcement
-6. Verification-gated Task success
-7. repeatable recovery inspection
-8. Run lifecycle and Task attempt accounting
-9. idempotent interrupted-run reconciliation
-10. SQLite foreign-key enforcement
-11. durable state after database reopen
-12. project configuration bootstrap/load
-13. same-Flow parent/child enforcement
-14. parent completion blocked by incomplete children
-15. Flow completion blocked by incomplete Tasks
-16. CLI Goal create/show round-trip
-
-A CLI smoke path now includes:
-
-```text
-origin-forge --project-root <project> init --name demo
-origin-forge --project-root <project> status
-
-origin-forge --project-root <project> goal create "Build feature" \
-  --success "tests pass"
-origin-forge --project-root <project> goal list
-origin-forge --project-root <project> goal show <GOAL-ID>
-
-origin-forge --project-root <project> flow create <GOAL-ID>
-origin-forge --project-root <project> flow show <FLOW-ID>
-origin-forge --project-root <project> flow transition <FLOW-ID> RUNNING --revision 0
-
-origin-forge --project-root <project> task create <FLOW-ID> "Implement bounded work"
-origin-forge --project-root <project> task show <TASK-ID>
-origin-forge --project-root <project> task transition <TASK-ID> READY --revision 0
-
-origin-forge --project-root <project> run start <TASK-ID> --role EXECUTOR
-origin-forge --project-root <project> run show <RUN-ID>
-origin-forge --project-root <project> run finish <RUN-ID> SUCCEEDED
-
-origin-forge --project-root <project> recover
-origin-forge --project-root <project> recover --apply
-```
-
-`recover` without `--apply` is inspection-only. `recover --apply` reconciles stale `RUNNING` records conservatively rather than assuming they succeeded.
-
-## Architectural boundary introduced in this slice
-
-`OriginForgeStore` is the persistence mechanism. It owns SQLite mechanics, row-level state transitions, optimistic revisions, and the event journal.
-
-`OriginForgeRuntime` is now the application-service boundary. It owns cross-record/project invariants and is the layer future Managers, schedulers, and user interfaces should call.
-
-Conceptually:
+`OriginForgeRuntime` is the application-service boundary for execution state and cross-record invariants.
 
 ```text
 CLI / future Manager
@@ -110,20 +62,162 @@ OriginForgeStore
 SQLite
 ```
 
-This prevents future agent code from turning raw database access into the effective API.
+Future agent code should not use arbitrary SQL as its effective API.
 
-## Remaining Phase 1 work
+### Verification
 
-The durable substrate is now substantial, but Phase 1 should still harden it before model integration:
+- Verification records
+- Runtime Verification APIs for Goal / Flow / Task / Run
+- Verification listing
+- machine-readable CLI operations for recording/inspecting Verification
 
-- richer list/status queries for Flows, Tasks, and Runs
-- explicit Verification CLI/API through the Runtime boundary instead of test-only Store access
-- Goal completion semantics tied to Flow/Verification evidence
-- stronger Run/Task assignment invariants
-- recovery tests around mixed and partially terminal state
-- migration organization that remains maintainable beyond schema version 1
-- configuration for project-approved build/test commands without embedding shell policy in model prompts
-- additional database integrity constraints where they improve correctness
-- structured error/exit-code behavior for CLI automation
+### Causal lineage
 
-No model runtime belongs in this phase until these durable-state behaviors are stable.
+`OriginForgeLineage` is a separate service for provenance-oriented records:
+
+```text
+Decision
+   ↓
+Change
+   ↓
+Artifact
+   ↓
+Verification
+```
+
+Implemented:
+
+- Decisions linked to Project / Goal / Task
+- Decision Goal/Task consistency checks
+- Changes linked to Task / Decision / Run
+- Run/Task consistency checks for Changes
+- Artifacts linked to Project / Change / parent Artifact / Run
+- automatic SHA-256 hashing of existing local Artifact files
+- local Artifact paths cannot escape the project root
+- Artifact Verification
+- state events for Decision / Change / Artifact creation
+
+This is the initial substrate for future questions such as:
+
+> Why does this exist?
+
+and for later cryptographic provenance/company-signature work.
+
+### Project configuration
+
+`origin-forge init` creates:
+
+```text
+.origin-forge/config.toml
+```
+
+Current configuration includes:
+
+- policy profile
+- maximum strategy retries
+- maximum verification failures
+- project-approved build commands
+- project-approved test commands
+
+The command lists are only configuration at this phase; actual shell/tool policy enforcement belongs to the safe-execution/tool phases.
+
+### CLI
+
+Current core CLI includes:
+
+```text
+origin-forge init
+origin-forge status
+origin-forge recover [--apply]
+
+origin-forge goal create|list|show|transition
+origin-forge flow create|list|show|transition
+origin-forge task create|list|show|transition
+origin-forge run start|list|show|finish
+origin-forge verify record|list
+```
+
+CLI failures use structured JSON error classes and stable non-zero categories for automation instead of raw tracebacks for expected runtime errors.
+
+### CI
+
+GitHub Actions executes the unit-test suite on:
+
+- Python 3.12
+- Python 3.13
+
+with `ResourceWarning` promoted to an error.
+
+## Local validation
+
+Command:
+
+```text
+PYTHONPATH=src python -W error::ResourceWarning -m unittest discover -s tests -v
+```
+
+Current result:
+
+```text
+Ran 27 tests
+OK
+```
+
+The suite covers:
+
+1. typed unique IDs
+2. idempotent project initialization
+3. Flow transitions/event journaling
+4. stale revision rejection
+5. terminal-state enforcement
+6. Verification-gated Task success
+7. repeatable recovery inspection
+8. Run lifecycle/attempt accounting
+9. idempotent interruption recovery
+10. foreign-key enforcement
+11. durable state after reopen
+12. configuration bootstrap/load
+13. same-Flow parent/child enforcement
+14. parent completion dependency enforcement
+15. Flow completion dependency enforcement
+16. Goal completion + Goal Verification
+17. one-active-Run leasing
+18. Run assignment cleanup
+19. list/query Runtime APIs
+20. Runtime Verification APIs
+21. structured CLI error behavior
+22. CLI Goal round-trip
+23. schema v1 → v2 migration
+24. Decision→Change→Artifact lineage
+25. Artifact SHA-256 hashing and Verification
+26. project-root Artifact path containment
+27. mixed/partially-terminal recovery safety
+
+## Phase 1 exit-condition assessment
+
+The roadmap required Phase 1 to provide persistent structured state, migrations, revisioned mutation, restart recovery, and the durable objects needed before model execution.
+
+This branch now provides those requirements plus the initial causal lineage service.
+
+No LLM call is required to use or validate any Phase-1 behavior.
+
+## Intentionally deferred
+
+These belong to later phases rather than blocking Phase 1:
+
+- shell/tool permission enforcement
+- Git worktree isolation/checkpoints
+- Manager / Executor / Auditor orchestration
+- local model integration
+- LSP / Tree-sitter / repository context selection
+- Skills
+- Tool Search
+- model/resource scheduling
+- Project Entity graph / Design Bible
+- cryptographic signatures and company root keys
+- media-specific watermarking
+- Pixelorama / Blockbench / image / audio integrations
+
+## Next phase
+
+After this branch passes final CI/review, the next implementation phase is **Phase 2 — Basic Local Coding Agent**, but model access should still be deliberately narrow: one bounded Task, controlled repository reads, controlled patch output, and no broad autonomy yet.
