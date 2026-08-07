@@ -7,6 +7,14 @@ class InvalidTransition(ValueError):
     pass
 
 
+class GoalStatus(StrEnum):
+    OPEN = "OPEN"
+    ACTIVE = "ACTIVE"
+    BLOCKED = "BLOCKED"
+    SUCCEEDED = "SUCCEEDED"
+    CANCELLED = "CANCELLED"
+
+
 class FlowStatus(StrEnum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
@@ -36,6 +44,17 @@ class TaskStatus(StrEnum):
     QUARANTINED = "QUARANTINED"
     SUCCEEDED = "SUCCEEDED"
     CANCELLED = "CANCELLED"
+
+
+GOAL_TRANSITIONS: dict[GoalStatus, frozenset[GoalStatus]] = {
+    GoalStatus.OPEN: frozenset({GoalStatus.ACTIVE, GoalStatus.CANCELLED}),
+    GoalStatus.ACTIVE: frozenset(
+        {GoalStatus.BLOCKED, GoalStatus.SUCCEEDED, GoalStatus.CANCELLED}
+    ),
+    GoalStatus.BLOCKED: frozenset({GoalStatus.ACTIVE, GoalStatus.CANCELLED}),
+    GoalStatus.SUCCEEDED: frozenset(),
+    GoalStatus.CANCELLED: frozenset(),
+}
 
 
 FLOW_TRANSITIONS: dict[FlowStatus, frozenset[FlowStatus]] = {
