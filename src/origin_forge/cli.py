@@ -2,21 +2,38 @@ from __future__ import annotations
 
 import argparse
 import json
+from enum import StrEnum
 from pathlib import Path
 
-from .runs import reconcile_interrupted
-from .service import OriginForgeStore
-
-STATE_DIR = ".origin-forge"
-DB_NAME = "project.db"
+from .runtime import OriginForgeRuntime
+from .state import FlowStatus, RunStatus, TaskStatus
 
 
-def _db_path(project_root: Path) -> Path:
-    return project_root / STATE_DIR / DB_NAME
+def _enum_value(enum_type: type[StrEnum], value: str):
+    try:
+        return enum_type(value.upper())
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in enum_type)
+        raise argparse.ArgumentTypeError(f"expected one of: {allowed}") from exc
 
 
-def _store(project_root: Path) -> OriginForgeStore:
-    return OriginForgeStore(_db_path(project_root))
+def _flow_status(value: str) -> FlowStatus:
+    return _enum_value(FlowStatus, value)
+
+
+def _task_status(value: str) -> TaskStatus:
+    return _enum_value(TaskStatus, value)
+
+
+def _run_status(value: str) -> RunStatus:
+    status = _enum_value(RunStatus, value)
+    if status == RunStatus.RUNNING:
+        raise argparse.ArgumentTypeError("run finish requires a terminal status")
+    return status
+
+
+def _print(value) -> None:
+    print(json.dumps(value, indent=2, sort_keys=True, default=str))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,56 +46,169 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    init_parser = sub.add_parser(
-        "init", help="initialize Origin Forge state for a project"
-    )
+    init_parser = sub.add_parser("init", help="initialize Origin Forge state")
     init_parser.add_argument("--name", help="project name (default: directory name)")
 
     sub.add_parser("status", help="show durable runtime status")
+
     recover_parser = sub.add_parser(
         "recover", help="inspect or reconcile interrupted RUNNING records"
     )
-    recover_parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="mark interrupted runs as INTERRUPTED and running tasks/flows as BLOCKED",
+    recover_parser.add_argument("--apply", action="store_true")
+
+    goal = sub.add_parser("goal", help="manage goals").add_subparsers(
+        dest="goal_command", required=True
     )
+    goal_create = goal.add_parser("create")
+    goal_create.add_argument("objective")
+    goal_create.add_argument("--success", action="append", default=[])
+    goal_create.add_argument("--constraint", action="append", default=[])
+    goal_create.add_argument("--priority", type=int, default=0)
+    goal.add_parser("list")
+    goal_show = goal.add_parser("show")
+    goal_show.add_argument("goal_id")
+
+    flow = sub.add_parser("flow", help="manage flows").add_subparsers(
+        dest="flow_command", required=True
+    )
+    flow_create = flow.add_parser("create")
+    flow_create.add_argument("goal_id")
+    flow_create.add_argument("--controller")
+    flow_show = flow.add_parser("show")
+    flow_show.add_argument("flow_id")
+    flow_transition = flow.add_parser("transition")
+    flow_transition.add_argument("flow_id")
+    flow_transition.add_argument("status", type=_flow_status)
+    flow_transition.add_argument("--revision", required=True, type=int)
+
+    task = sub.add_parser("task", help="manage tasks").add_subparsers(
+        dest="task_command", required=True
+    )
+    task_create = task.add_parser("create")
+    task_create.add_argument("flow_id")
+    task_create.add_argument("objective")
+    task_create.add_argument("--parent")
+    task_create.add_argument("--accept", action="append", default=[])
+    task_create.add_argument("--constraint", action="append", default=[])
+    task_create.add_argument("--capability", action="append", default=[])
+    task_create.add_argument("--priority", type=int, default=0)
+    task_show = task.add_parser("show")
+    task_show.add_argument("task_id")
+    task_transition = task.add_parser("transition")
+    task_transition.add_argument("task_id")
+    task_transition.add_argument("status", type=_task_status)
+    task_transition.add_argument("--revision", required=True, type=int)
+
+    run = sub.add_parser("run", help="manage runs").add_subparsers(
+        dest="run_command", required=True
+    )
+    run_start = run.add_parser("start")
+    run_start.add_argument("task_id")
+    run_start.add_argument("--role", default="EXECUTOR")
+    run_start.add_argument("--model-profile")
+    run_finish = run.add_parser("finish")
+    run_finish.add_argument("run_id")
+    run_finish.add_argument("status", type=_run_status)
+    run_finish.add_argument("--failure-reason")
+    run_show = run.add_parser("show")
+    run_show.add_argument("run_id")
 
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    root = args.project_root.resolve()
-    store = _store(root)
+    runtime = OriginForgeRuntime(args.project_root)
 
     if args.command == "init":
-        project_id = store.initialize_project(args.name or root.name, root)
-        print(
-            json.dumps(
-                {"project_id": project_id, "database": str(store.db_path)}, indent=2
-            )
-        )
+        _print(runtime.initialize(args.name))
         return 0
 
     if args.command == "status":
-        print(json.dumps(store.status_summary(), indent=2, sort_keys=True))
+        _print(runtime.status())
         return 0
 
     if args.command == "recover":
-        raw_findings = (
-            reconcile_interrupted(store) if args.apply else store.recovery_findings()
+        raw = runtime.recover() if args.apply else runtime.recovery_findings()
+        _print(
+            {"applied": bool(args.apply), "findings": [item.__dict__ for item in raw]}
         )
-        findings = [finding.__dict__ for finding in raw_findings]
-        print(
-            json.dumps(
-                {"applied": bool(args.apply), "findings": findings},
-                indent=2,
-                sort_keys=True,
-            )
-        )
-        if args.apply:
-            return 0
-        return 1 if findings else 0
+        return 0 if args.apply or not raw else 1
 
-    raise AssertionError(f"unhandled command {args.command}")
+    if args.command == "goal":
+        if args.goal_command == "create":
+            goal_id = runtime.create_goal(
+                args.objective,
+                success_criteria=args.success,
+                constraints=args.constraint,
+                priority=args.priority,
+            )
+            _print(runtime.get_goal(goal_id))
+            return 0
+        if args.goal_command == "list":
+            _print(runtime.list_goals())
+            return 0
+        if args.goal_command == "show":
+            _print(runtime.get_goal(args.goal_id))
+            return 0
+
+    if args.command == "flow":
+        if args.flow_command == "create":
+            flow_id = runtime.create_flow(args.goal_id, controller=args.controller)
+            _print(runtime.get_flow(flow_id))
+            return 0
+        if args.flow_command == "show":
+            _print(runtime.get_flow(args.flow_id))
+            return 0
+        if args.flow_command == "transition":
+            runtime.transition_flow(
+                args.flow_id, args.status, expected_revision=args.revision
+            )
+            _print(runtime.get_flow(args.flow_id))
+            return 0
+
+    if args.command == "task":
+        if args.task_command == "create":
+            task_id = runtime.create_task(
+                args.flow_id,
+                args.objective,
+                parent_task_id=args.parent,
+                acceptance_criteria=args.accept,
+                constraints=args.constraint,
+                required_capabilities=args.capability,
+                priority=args.priority,
+            )
+            _print(runtime.get_task(task_id))
+            return 0
+        if args.task_command == "show":
+            _print(runtime.get_task(args.task_id))
+            return 0
+        if args.task_command == "transition":
+            runtime.transition_task(
+                args.task_id, args.status, expected_revision=args.revision
+            )
+            _print(runtime.get_task(args.task_id))
+            return 0
+
+    if args.command == "run":
+        if args.run_command == "start":
+            run_id = runtime.start_run(
+                args.task_id,
+                role=args.role,
+                model_profile=args.model_profile,
+            )
+            _print(runtime.get_run(run_id))
+            return 0
+        if args.run_command == "finish":
+            runtime.finish_run(
+                args.run_id,
+                args.status,
+                failure_reason=args.failure_reason,
+            )
+            _print(runtime.get_run(args.run_id))
+            return 0
+        if args.run_command == "show":
+            _print(runtime.get_run(args.run_id))
+            return 0
+
+    raise AssertionError("unhandled command")
