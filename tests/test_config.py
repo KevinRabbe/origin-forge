@@ -8,11 +8,16 @@ from origin_forge.config import load_config
 
 
 class ConfigV2Tests(unittest.TestCase):
-    def test_default_config_is_v2_and_network_off(self) -> None:
+    def test_default_config_is_v3_and_network_off(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = load_config(Path(temp))
-            self.assertEqual(config.version, 2)
+            self.assertEqual(config.version, 3)
             self.assertFalse(config.sandbox_network)
+            self.assertEqual(config.sandbox_backend, "unconfigured")
+            self.assertIsNone(config.sandbox_image)
+            self.assertEqual(config.sandbox_memory, "2g")
+            self.assertEqual(config.sandbox_cpus, 2.0)
+            self.assertEqual(config.sandbox_pids_limit, 256)
             self.assertEqual(config.approved_build_commands, ())
             self.assertEqual(config.approved_test_commands, ())
 
