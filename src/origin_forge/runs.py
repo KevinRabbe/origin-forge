@@ -37,6 +37,14 @@ def create_run(
                 raise InvalidTransition(
                     f"run requires RUNNING task; task {task_id} is {task['status']}"
                 )
+            active = conn.execute(
+                "SELECT id FROM runs WHERE task_id = ? AND status = ? LIMIT 1",
+                (task_id, RunStatus.RUNNING.value),
+            ).fetchone()
+            if active is not None:
+                raise InvalidTransition(
+                    f"task {task_id} already has active run {active['id']}"
+                )
 
         conn.execute(
             """INSERT INTO runs(
@@ -121,6 +129,16 @@ def finish_run(
                 RunStatus.RUNNING.value,
             ),
         )
+        task_row = conn.execute(
+            "SELECT task_id FROM runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        if task_row is not None and task_row["task_id"] is not None:
+            conn.execute(
+                """UPDATE tasks SET assigned_run_id = NULL, updated_at = ?
+                   WHERE id = ? AND assigned_run_id = ?""",
+                (now, task_row["task_id"], run_id),
+            )
+
         store._append_event(
             conn,
             "RUN",
@@ -173,6 +191,16 @@ def reconcile_interrupted(store: OriginForgeStore) -> list[RecoveryFinding]:
                     ),
                 )
                 if cursor.rowcount:
+                    task_row = conn.execute(
+                        "SELECT task_id FROM runs WHERE id = ?",
+                        (finding.aggregate_id,),
+                    ).fetchone()
+                    if task_row is not None and task_row["task_id"] is not None:
+                        conn.execute(
+                            """UPDATE tasks SET assigned_run_id = NULL, updated_at = ?
+                               WHERE id = ? AND assigned_run_id = ?""",
+                            (now, task_row["task_id"], finding.aggregate_id),
+                        )
                     store._append_event(
                         conn,
                         "RUN",
