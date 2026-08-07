@@ -4,9 +4,10 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .config import ensure_config, load_config
+from .goals import transition_goal
 from .runs import create_run, finish_run, get_run, reconcile_interrupted
 from .service import OriginForgeStore
-from .state import FlowStatus, RunStatus, TaskStatus
+from .state import FlowStatus, GoalStatus, RunStatus, TaskStatus
 
 
 class RuntimeInvariantError(RuntimeError):
@@ -18,11 +19,7 @@ def _row_dict(row) -> dict[str, Any]:
 
 
 class OriginForgeRuntime:
-    """Application-service boundary above durable persistence.
-
-    The Store owns database mechanics. Runtime owns cross-record invariants and
-    is the surface the CLI and future Manager should use.
-    """
+    """Application-service boundary above durable persistence."""
 
     def __init__(self, project_root: str | Path):
         self.project_root = Path(project_root).resolve()
@@ -92,9 +89,52 @@ class OriginForgeRuntime:
                 raise KeyError(goal_id)
             return _row_dict(row)
 
+    def transition_goal(
+        self, goal_id: str, target: GoalStatus, *, expected_revision: int
+    ) -> int:
+        self.get_goal(goal_id)
+        if target == GoalStatus.SUCCEEDED:
+            with self.store.session() as conn:
+                flows = conn.execute(
+                    "SELECT id, status FROM flows WHERE goal_id = ? ORDER BY created_at, rowid",
+                    (goal_id,),
+                ).fetchall()
+            if not flows:
+                raise RuntimeInvariantError("goal cannot succeed without at least one flow")
+            incomplete = [
+                row
+                for row in flows
+                if row["status"]
+                not in (FlowStatus.SUCCEEDED.value, FlowStatus.CANCELLED.value)
+            ]
+            if incomplete:
+                details = ", ".join(
+                    f"{row['id']}={row['status']}" for row in incomplete
+                )
+                raise RuntimeInvariantError(
+                    f"goal cannot succeed while flows are incomplete: {details}"
+                )
+        return transition_goal(
+            self.store, goal_id, target, expected_revision=expected_revision
+        )
+
     def create_flow(self, goal_id: str, *, controller: str | None = None) -> str:
         self.get_goal(goal_id)
         return self.store.create_flow(goal_id, controller=controller)
+
+    def list_flows(self, goal_id: str | None = None) -> list[dict[str, Any]]:
+        project_id = self.project_id()
+        params: list[Any] = [project_id]
+        sql = """SELECT f.* FROM flows f
+                 JOIN goals g ON g.id = f.goal_id
+                 WHERE g.project_id = ?"""
+        if goal_id is not None:
+            self.get_goal(goal_id)
+            sql += " AND f.goal_id = ?"
+            params.append(goal_id)
+        sql += " ORDER BY f.created_at, f.rowid"
+        with self.store.session() as conn:
+            return [_row_dict(row) for row in conn.execute(sql, params)]
 
     def get_flow(self, flow_id: str) -> dict[str, Any]:
         project_id = self.project_id()
@@ -162,6 +202,21 @@ class OriginForgeRuntime:
             required_capabilities=required_capabilities,
             priority=priority,
         )
+
+    def list_tasks(self, flow_id: str | None = None) -> list[dict[str, Any]]:
+        project_id = self.project_id()
+        params: list[Any] = [project_id]
+        sql = """SELECT t.* FROM tasks t
+                 JOIN flows f ON f.id = t.flow_id
+                 JOIN goals g ON g.id = f.goal_id
+                 WHERE g.project_id = ?"""
+        if flow_id is not None:
+            self.get_flow(flow_id)
+            sql += " AND t.flow_id = ?"
+            params.append(flow_id)
+        sql += " ORDER BY t.created_at, t.rowid"
+        with self.store.session() as conn:
+            return [_row_dict(row) for row in conn.execute(sql, params)]
 
     def get_task(self, task_id: str) -> dict[str, Any]:
         project_id = self.project_id()
@@ -236,6 +291,83 @@ class OriginForgeRuntime:
             self.get_task(row["task_id"])
         return _row_dict(row)
 
+    def list_runs(self, task_id: str | None = None) -> list[dict[str, Any]]:
+        project_id = self.project_id()
+        params: list[Any] = [project_id]
+        sql = """SELECT r.* FROM runs r
+                 JOIN tasks t ON t.id = r.task_id
+                 JOIN flows f ON f.id = t.flow_id
+                 JOIN goals g ON g.id = f.goal_id
+                 WHERE g.project_id = ?"""
+        if task_id is not None:
+            self.get_task(task_id)
+            sql += " AND r.task_id = ?"
+            params.append(task_id)
+        sql += " ORDER BY r.started_at, r.rowid"
+        with self.store.session() as conn:
+            return [_row_dict(row) for row in conn.execute(sql, params)]
+
+    def record_verification(
+        self,
+        target_type: str,
+        target_id: str,
+        *,
+        verification_type: str,
+        verifier: str,
+        status: str,
+        evidence: dict[str, Any] | None = None,
+        metrics: dict[str, Any] | None = None,
+        run_id: str | None = None,
+    ) -> str:
+        kind = target_type.upper()
+        if kind == "GOAL":
+            self.get_goal(target_id)
+        elif kind == "FLOW":
+            self.get_flow(target_id)
+        elif kind == "TASK":
+            self.get_task(target_id)
+        elif kind == "RUN":
+            self.get_run(target_id)
+        else:
+            raise ValueError(f"unsupported Phase 1 verification target: {target_type}")
+        if run_id is not None:
+            self.get_run(run_id)
+        return self.store.record_verification(
+            target_type=kind,
+            target_id=target_id,
+            verification_type=verification_type,
+            verifier=verifier,
+            status=status,
+            evidence=evidence,
+            metrics=metrics,
+            run_id=run_id,
+        )
+
+    def list_verifications(
+        self, target_type: str, target_id: str
+    ) -> list[dict[str, Any]]:
+        kind = target_type.upper()
+        if kind == "GOAL":
+            self.get_goal(target_id)
+        elif kind == "FLOW":
+            self.get_flow(target_id)
+        elif kind == "TASK":
+            self.get_task(target_id)
+        elif kind == "RUN":
+            self.get_run(target_id)
+        else:
+            raise ValueError(f"unsupported Phase 1 verification target: {target_type}")
+        with self.store.session() as conn:
+            return [
+                _row_dict(row)
+                for row in conn.execute(
+                    """SELECT * FROM verifications
+                       WHERE target_type = ? AND target_id = ?
+                       ORDER BY created_at, rowid""",
+                    (kind, target_id),
+                )
+            ]
+
     def recovery_findings(self):
         return self.store.recovery_findings()
 
@@ -243,12 +375,34 @@ class OriginForgeRuntime:
         return reconcile_interrupted(self.store)
 
     def status(self) -> dict[str, Any]:
+        project_id = self.project_id()
         result = self.store.status_summary()
         config = load_config(self.project_root)
+        with self.store.session() as conn:
+            result["goals"] = {
+                row["status"]: row["count"]
+                for row in conn.execute(
+                    "SELECT status, COUNT(*) AS count FROM goals WHERE project_id = ? GROUP BY status",
+                    (project_id,),
+                )
+            }
+            result["runs"] = {
+                row["status"]: row["count"]
+                for row in conn.execute(
+                    """SELECT r.status, COUNT(*) AS count FROM runs r
+                       JOIN tasks t ON t.id = r.task_id
+                       JOIN flows f ON f.id = t.flow_id
+                       JOIN goals g ON g.id = f.goal_id
+                       WHERE g.project_id = ? GROUP BY r.status""",
+                    (project_id,),
+                )
+            }
         result["config"] = {
             "version": config.version,
             "policy_profile": config.policy_profile,
             "max_strategy_retries": config.max_strategy_retries,
             "max_verification_failures": config.max_verification_failures,
+            "approved_build_commands": list(config.approved_build_commands),
+            "approved_test_commands": list(config.approved_test_commands),
         }
         return result
