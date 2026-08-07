@@ -15,9 +15,18 @@ from origin_forge.worker import LocalPatchWorker
 
 
 class FakeModel:
-    def __init__(self, response_text: str, model_id: str = "fake-local-model"):
+    def __init__(
+        self,
+        response_text: str,
+        model_id: str = "fake-local-model",
+        *,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ):
         self.response_text = response_text
         self._model_id = model_id
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
         self.requests: list[ModelRequest] = []
 
     @property
@@ -26,7 +35,12 @@ class FakeModel:
 
     def generate(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request)
-        return ModelResponse(self.response_text, self.model_id)
+        return ModelResponse(
+            self.response_text,
+            self.model_id,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+        )
 
 
 class PhaseTwoWorkerTests(unittest.TestCase):
@@ -134,6 +148,15 @@ class PhaseTwoWorkerTests(unittest.TestCase):
             [row["type"] for row in artifacts],
             ["CONTEXT_PACKAGE", "MODEL_RESPONSE", "PATCH_PROPOSAL"],
         )
+        with self.runtime.store.session() as conn:
+            lineage = conn.execute(
+                """SELECT id, parent_artifact_id, type FROM artifacts
+                   WHERE created_by_run_id = ? ORDER BY created_at, rowid""",
+                (result.run_id,),
+            ).fetchall()
+        self.assertIsNone(lineage[0]["parent_artifact_id"])
+        self.assertEqual(lineage[1]["parent_artifact_id"], lineage[0]["id"])
+        self.assertEqual(lineage[2]["parent_artifact_id"], lineage[1]["id"])
 
     def test_stale_proposal_fails_run_and_does_not_modify_file(self) -> None:
         response = json.dumps(
