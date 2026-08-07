@@ -12,6 +12,10 @@ policy_profile = "local-default"
 [limits]
 max_strategy_retries = 2
 max_verification_failures = 3
+
+[commands]
+build = []
+test = []
 """
 
 
@@ -21,6 +25,8 @@ class ProjectConfig:
     policy_profile: str
     max_strategy_retries: int
     max_verification_failures: int
+    approved_build_commands: tuple[str, ...]
+    approved_test_commands: tuple[str, ...]
 
 
 def config_path(project_root: str | Path) -> Path:
@@ -35,6 +41,14 @@ def ensure_config(project_root: str | Path) -> Path:
     return path
 
 
+def _commands(raw: object, field: str) -> tuple[str, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise ValueError(f"commands.{field} must be an array of strings")
+    return tuple(raw)
+
+
 def load_config(project_root: str | Path) -> ProjectConfig:
     path = ensure_config(project_root)
     with path.open("rb") as handle:
@@ -47,14 +61,22 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         )
 
     limits = raw.get("limits", {})
+    if not isinstance(limits, dict):
+        raise ValueError("limits must be a TOML table")
     strategy = int(limits.get("max_strategy_retries", 2))
     verification = int(limits.get("max_verification_failures", 3))
     if strategy < 0 or verification < 0:
         raise ValueError("retry limits must be non-negative")
+
+    commands = raw.get("commands", {})
+    if not isinstance(commands, dict):
+        raise ValueError("commands must be a TOML table")
 
     return ProjectConfig(
         version=version,
         policy_profile=str(raw.get("policy_profile", "local-default")),
         max_strategy_retries=strategy,
         max_verification_failures=verification,
+        approved_build_commands=_commands(commands.get("build"), "build"),
+        approved_test_commands=_commands(commands.get("test"), "test"),
     )
