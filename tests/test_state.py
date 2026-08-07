@@ -6,8 +6,9 @@ import unittest
 from pathlib import Path
 
 from origin_forge.ids import IdKind, validate_id
+from origin_forge.runs import create_run, finish_run, get_run, reconcile_interrupted
 from origin_forge.service import OriginForgeStore, StaleRevision, VerificationRequired
-from origin_forge.state import FlowStatus, InvalidTransition, TaskStatus
+from origin_forge.state import FlowStatus, InvalidTransition, RunStatus, TaskStatus
 
 
 class OriginForgeStateTests(unittest.TestCase):
@@ -119,6 +120,62 @@ class OriginForgeStateTests(unittest.TestCase):
         second = self.store.recovery_findings()
         self.assertEqual(first, second)
         self.assertEqual({finding.aggregate_type for finding in first}, {"FLOW", "TASK"})
+
+    def test_run_lifecycle_and_attempt_count(self) -> None:
+        _, task = self._flow_and_task()
+        revision = self.store.transition_task(
+            task, TaskStatus.READY, expected_revision=0
+        )
+        self.store.transition_task(
+            task, TaskStatus.RUNNING, expected_revision=revision
+        )
+
+        run_id = create_run(
+            self.store, task, role="EXECUTOR", model_profile="test-model"
+        )
+        self.assertEqual(
+            get_run(self.store, run_id)["status"], RunStatus.RUNNING.value
+        )
+        self.assertEqual(self.store.get_task(task)["attempt_count"], 1)
+
+        finish_run(
+            self.store,
+            run_id,
+            RunStatus.SUCCEEDED,
+            input_token_count=10,
+            output_token_count=5,
+        )
+        run = get_run(self.store, run_id)
+        self.assertEqual(run["status"], RunStatus.SUCCEEDED.value)
+        self.assertIsNotNone(run["ended_at"])
+
+    def test_reconcile_interrupted_is_idempotent(self) -> None:
+        flow, task = self._flow_and_task()
+        self.store.transition_flow(flow, FlowStatus.RUNNING, expected_revision=0)
+        revision = self.store.transition_task(
+            task, TaskStatus.READY, expected_revision=0
+        )
+        self.store.transition_task(
+            task, TaskStatus.RUNNING, expected_revision=revision
+        )
+        run_id = create_run(self.store, task, role="EXECUTOR")
+
+        first = reconcile_interrupted(self.store)
+        second = reconcile_interrupted(self.store)
+
+        self.assertEqual(
+            {finding.aggregate_type for finding in first}, {"FLOW", "TASK", "RUN"}
+        )
+        self.assertEqual(second, [])
+        self.assertEqual(
+            self.store.get_flow(flow)["status"], FlowStatus.BLOCKED.value
+        )
+        self.assertEqual(
+            self.store.get_task(task)["status"], TaskStatus.BLOCKED.value
+        )
+        self.assertEqual(
+            get_run(self.store, run_id)["status"], RunStatus.INTERRUPTED.value
+        )
 
     def test_foreign_keys_are_enforced(self) -> None:
         with self.store.session() as conn:
