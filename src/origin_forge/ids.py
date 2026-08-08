@@ -20,6 +20,9 @@ class IdKind(StrEnum):
     DREAM_CANDIDATE = "DREAM"
     MEMORY_ENTRY = "MEM"
     MEMORY_GENERATION = "MEMGEN"
+    SPECIALIST_CONTRACT = "SPCON"
+    SPECIALIST_REPORT = "SPREP"
+    SPECIALIST_FINDING = "SPFIND"
 
 
 def new_id(kind: IdKind) -> str:
