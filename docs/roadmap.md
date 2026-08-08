@@ -2,7 +2,7 @@
 
 Status: **Implementation baseline aligned with repository history**
 
-This roadmap uses the phase numbers that actually exist in the repository. Earlier planning documents described several capabilities under different phase numbers; this file is now the canonical execution order.
+This roadmap uses the phase numbers that actually exist in the repository. Earlier planning documents described several capabilities under different phase numbers; this file is the canonical execution order.
 
 The ordering rule is unchanged: prove durable, reversible, independently verified infrastructure before expanding autonomy or media production.
 
@@ -143,9 +143,9 @@ Implemented:
 
 Exit condition met: a bounded Executor can receive automatically selected task-relevant context without model-controlled filesystem search.
 
-## Phase 9 — Governed Skills — IN REVIEW
+## Phase 9 — Governed Skills — DONE
 
-Add instruction-only project Skills:
+Implemented instruction-only project Skills:
 
 ```text
 .origin-forge/skills/<name>/
@@ -153,27 +153,26 @@ Add instruction-only project Skills:
 └── skill.toml
 ```
 
-Requirements:
+Implemented:
 
 - deterministic selection from durable Task evidence
 - progressive disclosure
 - semantic versions
 - SHA-256 fingerprints
 - Run/Artifact provenance
-- hard instruction/count budgets
-- fail-closed package containment
-- no executable Skill content yet
+- hard catalog/instruction/read budgets
+- fail-closed package containment and symlink rejection
+- single-snapshot Skill loading per selection pass
+- no executable Skill content
 - no new authority granted by a Skill
 
-Exit condition:
+Exit condition met: the Executor sees full procedural instructions only for relevant Skills, while the exact Skill versions/fingerprints used by a Run remain reconstructable.
 
-> The Executor sees full procedural instructions only for relevant Skills, while the exact Skill versions/fingerprints used by a Run remain reconstructable.
+## Phase 10 — Structural Context Graph — DONE
 
-## Phase 10 — Structural Context Graph — IN REVIEW
+Implemented deterministic structural context on top of Phase-8 lexical discovery:
 
-Add deterministic structural context on top of Phase-8 lexical discovery:
-
-- Python AST index
+- bounded Python AST index
 - definitions
 - direct imports
 - reverse importers
@@ -181,6 +180,7 @@ Add deterministic structural context on top of Phase-8 lexical discovery:
 - Task-symbol evidence
 - one-hop bounded expansion
 - shared `WorkspaceContextSelector`
+- retry-time reselection inside every fresh Workspace
 
 The selector composes:
 
@@ -192,97 +192,140 @@ optional structural expansion
 final bounded context
 ```
 
+Exit condition met: one-shot and retry orchestration use one deterministic Workspace-local context-selection boundary, and structural relationships improve context without recursive repository dumping.
+
+## Phase 11 — LSP and General Code Intelligence — REVALIDATING
+
+Implementation exists in PR #16 and is being revalidated against the current mainline after Phases 12 and 13 landed first.
+
+Implemented on the Phase-11 branch:
+
+- provider-neutral code-intelligence interface
+- deterministic Python AST provider
+- semantic context expansion through the shared selector
+- bounded LSP JSON-RPC client/session
+- UTF-8/16/32 position conversion
+- Workspace URI containment using the shared portable path policy
+- normalized definitions/references/workspace symbols/diagnostics
+- diagnostics as supplementary evidence, not a correctness oracle
+- config-v4 trusted LSP server registry
+- sandboxed Podman language-server hosting
+- worktree-only LSP source policy
+- operator-only configured server status surface
+
+The model receives normalized query results, not unrestricted control of a language server.
+
+Merge condition:
+
+> The complete Python 3.12 + 3.13 matrix must pass on the exact current-main PR merge ref before Phase 11 is merged.
+
+## Phase 12 — Governed Skill Evaluation and Benchmarks — DONE
+
+Implemented measurable Skill quality control:
+
+- immutable eval cases
+- exact fixture/scorer/environment fingerprints
+- paired with-vs-without Skill trials
+- identical paired seeds and alternating execution order
+- regression-dominant verdicts
+- success-rate / score / duration / model-call / token metrics
+- bounded experiment design
+- exact Skill snapshot refs
+- immutable content-addressed reports
+- replayability checks against current Skills/cases
+- evidence-only operator CLI
+
+Exit condition met: a Skill version can be accepted or rejected using repeatable task outcomes rather than intuition, without granting the benchmark system Skill-promotion authority.
+
+## Phase 13 — Tool Registry and Tool Search — DONE
+
+Implemented deterministic capability inventory and progressive disclosure:
+
+- immutable governed `ToolDescriptor` catalog
+- bounded input/output schemas and metadata
+- permissions/side effects/determinism/reversibility/resource/timeout/verifier metadata
+- content-addressed catalog snapshots
+- authority filtering before discovery
+- constant `search_tools` / `describe_tool` model-facing gateway
+- deterministic bounded lexical/capability ranking
+- hydration and cumulative response budgets
+- hidden/unknown tool denial equivalence
+- disclosure-footprint metrics
+
+Phase 13 deliberately does **not** add generic `call_tool` authority.
+
+Exit condition met: a model can discover and hydrate relevant authorized tool contracts from a growing registry without loading every schema into context or gaining new authority through search.
+
+## Phase 14 — Model and Resource Scheduler — IN REVIEW
+
+PR #21 currently implements the config-independent scheduler substrate while Phase 11's config-v4 merge gate is completed.
+
+Implemented on the Phase-14 branch:
+
+- atomic process-local CPU/RAM/GPU leases
+- VRAM headroom and GPU compute-slot accounting
+- exclusive GPU leases
+- deterministic multi-GPU best-fit placement
+- static incompatibility vs temporary contention distinction
+- read-only resource admission inspection
+- empirical/governed model resource profiles
+- semantic model roles
+- explicit primary + fallback policy chains
+- no implicit model downgrade
+- model load/use/unload lifecycle
+- trusted runtime-loader dispatch
+- `ModelAdapter` / existing Worker integration
+- Run-level model/resource selection provenance
+- read-only model-policy inspection
+- bounded standalone resource/model config parser
+- safe-disabled scheduler construction factory
+
+Remaining before merge:
+
+- inherit Phase-11 config v4 and wire the standalone parser as backward-compatible config v5
+- add safe configured operator inventory/resource status
+- exact-head Python 3.12 + 3.13 hosted matrix
+
 Exit condition:
 
-> Both one-shot and retry orchestration can use one deterministic Workspace-local context-selection boundary, and structural relationships improve context without recursive repository dumping.
+> Origin Forge can choose between explicitly governed local model profiles and safely schedule incompatible CPU/GPU workloads without losing durable Task state or creating a hidden retry queue.
 
-## Phase 11 — LSP and General Code Intelligence — NEXT
+## Phase 15 — Offline Dream Cycle / Memory Consolidation — PLANNED
 
-Extend structural intelligence beyond the Python-only AST baseline.
+Separate production-time cognition from offline cross-session learning.
 
 Add:
 
-- code-intelligence provider interface
-- Language Server Protocol client
-- workspace symbols
-- go-to-definition
-- references
-- diagnostics
-- language-server capability detection
-- bounded/time-limited queries
-- optional Tree-sitter adapters where LSP is unavailable or too expensive
-- LSP diagnostics as verification evidence where appropriate
+- bounded frozen Dream input manifests over verified Runs/Tasks/Decisions/Verifications
+- immutable content-addressed derived `MemoryEntry` objects
+- parent-linked immutable `MemoryGeneration` snapshots
+- deterministic duplicate/staleness/contradiction preprocessing
+- model-optional cross-run Dream Analyzer
+- independent Dream Auditor
+- proposal-only Dream candidates
+- candidate classes for memory, Skills, routing, context strategy, process/architecture, and data quality
+- safe deterministic derived-index maintenance only
+- routing of Skill candidates into Phase-12 evaluation / later Skill Workshop
+- routing/context candidates into benchmark gates
+- explicit model/resource budgets through Phase 14
+- first-class Dream observability/provenance
 
-The model should receive query results, not unrestricted control of a language server.
-
-Exit condition:
-
-> At least two supported language/tooling configurations can retrieve definitions/references/diagnostics through one bounded code-intelligence contract, and measured retrieval quality beats lexical-only context on selected benchmarks.
-
-## Phase 12 — Skill Evaluation
-
-Add measurable Skill quality control:
-
-- Skill test cases
-- with-vs-without Skill comparisons
-- blind old-vs-new comparisons where useful
-- regression evaluation
-- success-rate metrics
-- token/context metrics
-- model-call metrics
-- duration/resource metrics
-
-Exit condition:
-
-> A Skill version can be accepted or rejected using repeatable task outcomes rather than intuition.
-
-## Phase 13 — Tool Registry and Tool Search
-
-Formalize deterministic capabilities and progressive tool disclosure.
-
-Tool contract includes:
-
-- ID/name/version
-- input/output schema
-- permissions
-- side effects
-- deterministic flag
-- reversibility
-- resource requirements
-- timeout
-- verifier
-
-Expose to models primarily through:
+Core rule:
 
 ```text
-search_tools(query)
-describe_tool(id)
-call_tool(id, args)
+Dreaming may discover candidate knowledge.
+It may not redefine canonical truth.
 ```
 
-Exit condition:
+Dreaming cannot modify source code, canonical Decisions, Design Bible content, Task/Verification outcomes, active Skills, routing policy, permissions, company identity, or merge state.
 
-> A model can reliably discover relevant tools from a growing registry without loading every schema into context.
-
-## Phase 14 — Model and Resource Scheduler
-
-Add:
-
-- empirical model profiles
-- capability routing
-- escalation policy integration
-- model load/unload lifecycle
-- VRAM/RAM accounting
-- CPU/GPU scheduling
-- incompatible-GPU-job serialization
-- task/model budgets
-- tokens/time/resource telemetry
+See `docs/phase-15-dream-cycle.md` for the full architecture and acceptance tests.
 
 Exit condition:
 
-> Origin Forge can choose between at least two local model profiles and safely schedule incompatible GPU workloads without losing durable Task state.
+> Origin Forge can inspect bounded completed verified work, discover cross-session patterns and stale derived knowledge, independently audit those findings, create an immutable new memory generation, and emit improvement candidates into existing evaluation/governance gates without granting the Dream process self-modification authority.
 
-## Phase 15 — Isolated Specialist Roles
+## Phase 16 — Isolated Specialist Roles
 
 Introduce only roles that measurably improve outcomes:
 
@@ -297,7 +340,7 @@ Exit condition:
 
 > Specialist isolation improves selected benchmarks without creating an uncontrolled agent swarm.
 
-## Phase 16 — Project Intelligence
+## Phase 17 — Project Intelligence
 
 Add semantic product state:
 
@@ -312,7 +355,7 @@ Exit condition:
 
 > Origin Forge can reason about a feature/entity across multiple files and media and identify affected dependencies before modification.
 
-## Phase 17 — Cryptographic Provenance
+## Phase 18 — Cryptographic Provenance
 
 Build on the existing Artifact hashes and causal lineage:
 
@@ -327,7 +370,7 @@ Exit condition:
 
 > Every accepted Artifact can be cryptographically traced to its Task, Run, parent state, model, Skills, tools and Verification evidence.
 
-## Phase 18 — Pixelorama Integration
+## Phase 19 — Pixelorama Integration
 
 Add deterministic 2D production:
 
@@ -344,7 +387,7 @@ Exit condition:
 
 > A bounded Task can create or modify a 2D game asset, validate it, and register it as a provenance-tracked Artifact.
 
-## Phase 19 — Blockbench Integration
+## Phase 20 — Blockbench Integration
 
 Add structured 3D production:
 
@@ -361,7 +404,7 @@ Exit condition:
 
 > A bounded Task can create/modify and validate a structured 3D asset through deterministic Blockbench-facing operations.
 
-## Phase 20 — Image and Vision
+## Phase 21 — Image and Vision
 
 Add replaceable local adapters for:
 
@@ -375,7 +418,7 @@ Exit condition:
 
 > Generation and independent visual inspection participate in a closed production/verification loop.
 
-## Phase 21 — Audio
+## Phase 22 — Audio
 
 Add:
 
@@ -389,7 +432,7 @@ Exit condition:
 
 > Origin Forge can create, process, validate and provenance-track a game audio Artifact from a structured Task.
 
-## Phase 22 — Runtime Observation
+## Phase 23 — Runtime Observation
 
 Add:
 
@@ -404,7 +447,7 @@ Exit condition:
 
 > The Auditor can inspect actual runtime behavior rather than relying only on source-level evidence.
 
-## Phase 23 — Automated Playtesting
+## Phase 24 — Automated Playtesting
 
 Add synthetic players/bots and telemetry for suitable games.
 
@@ -422,7 +465,7 @@ Exit condition:
 
 > Gameplay changes can be evaluated using repeatable runtime evidence.
 
-## Phase 24 — Simulation Layer
+## Phase 25 — Simulation Layer
 
 Add cheap pre-implementation simulation for systems such as:
 
@@ -439,7 +482,7 @@ Exit condition:
 
 > At least one game-system design can be statistically evaluated before full implementation.
 
-## Phase 25 — Skill Workshop
+## Phase 26 — Skill Workshop
 
 Add governed operational learning:
 
@@ -452,13 +495,13 @@ observed reusable pattern
 → new signed Skill version
 ```
 
-Active agents may propose but never silently replace their own governing Skills.
+Dream Cycle candidates may enter this pipeline, but active agents and Dream processes may never silently replace governing Skills.
 
 Exit condition:
 
 > Origin Forge can improve procedural knowledge while preserving review, provenance and rollback.
 
-## Phase 26 — Code Mode Experiments
+## Phase 27 — Code Mode Experiments
 
 Benchmark sandboxed model-written mini-workflows that combine multiple tool operations without returning to the model between every operation.
 
@@ -468,7 +511,7 @@ Exit condition:
 
 > Enable only for model/task profiles where measured reliability or cost is better than ordinary structured tool calls.
 
-## Phase 27 — Cross-Media Watermarking
+## Phase 28 — Cross-Media Watermarking
 
 Develop watermark/fingerprint adapters for:
 
@@ -483,7 +526,7 @@ Exit condition:
 
 > At least one robust media watermark can be resolved back to the permanent company provenance identity.
 
-## Phase 28 — Training / Fine-Tuning Research
+## Phase 29 — Training / Fine-Tuning Research
 
 Only after a substantial verified trajectory dataset exists, investigate:
 
@@ -491,12 +534,15 @@ Only after a substantial verified trajectory dataset exists, investigate:
 - specialized tool-use models
 - coding-agent fine-tuning
 - infrastructure-native agent models
+- offline distillation from verified trajectories and audited Dream outcomes
+
+Training remains separate from symbolic Dream consolidation. No production model rewrites its own weights.
 
 Exit condition:
 
 > Training is justified by measured evidence that software-level improvements alone have reached a meaningful limit.
 
-## Phase 29 — Full Production Interface
+## Phase 30 — Full Production Interface
 
 Build the polished visual environment around proven infrastructure.
 
@@ -509,6 +555,7 @@ Potential surfaces:
 - verification evidence
 - provenance inspector
 - model/resource monitor
+- Dream/memory-generation inspector
 - `why does this exist?` history
 
 The UI stays late so early architecture is not distorted around a premature frontend.
@@ -569,6 +616,7 @@ Target capabilities:
 - structural/LSP code intelligence
 - tool discovery
 - model/resource scheduling
+- offline memory consolidation and audited improvement proposals
 - specialist review
 - project graph + Design Bible
 - cryptographic provenance
