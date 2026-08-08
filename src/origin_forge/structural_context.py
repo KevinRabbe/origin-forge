@@ -227,7 +227,7 @@ class PythonStructuralContext:
 
     def _index(self) -> tuple[tuple[_PythonFile, ...], int, int]:
         indexed: list[_PythonFile] = []
-        indexed_bytes = 0
+        scanned_bytes = 0
         considered = 0
         parse_failures = 0
 
@@ -244,12 +244,13 @@ class PythonStructuralContext:
                 continue
             if size > self.repository.max_file_bytes:
                 continue
-            if indexed_bytes + size > self.settings.max_scan_bytes:
+            if scanned_bytes + size > self.settings.max_scan_bytes:
                 continue
             try:
                 source = self.repository.read_text(path)
             except (RepositoryAccessError, ContextBudgetExceeded):
                 continue
+            scanned_bytes += source.byte_count
             try:
                 tree = ast.parse(source.content, filename=source.path)
             except (SyntaxError, ValueError):
@@ -270,9 +271,8 @@ class PythonStructuralContext:
                     ),
                 )
             )
-            indexed_bytes += source.byte_count
 
-        return tuple(indexed), parse_failures, indexed_bytes
+        return tuple(indexed), parse_failures, scanned_bytes
 
     @staticmethod
     def _internal_import_paths(
