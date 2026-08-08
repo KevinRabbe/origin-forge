@@ -165,6 +165,8 @@ This is intentional backward compatibility: installing no Skills should not alte
 
 Skill instructions are trusted project control-plane input, not repository content discovered by the model.
 
+Phase 9 inherits the portable repository-path policy now enforced by the hardened base: serialized repository paths use one host-independent syntax, protected roots are matched case-insensitively, and case-colliding path identities fail closed. Skills cannot bypass that boundary because they only augment bounded instructions; they do not replace repository, patch, or sandbox path validation.
+
 Important boundaries remain:
 
 - `.origin-forge` cannot be targeted by Patch Proposals
