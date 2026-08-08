@@ -8,6 +8,7 @@ from .apply import IsolatedPatchApplier
 from .audit import WorkspaceAuditor
 from .config import load_config
 from .context import ContextBuilder
+from .context_discovery import TaskContextDiscoverer
 from .model import ModelAdapter
 from .repository import RepositoryReader
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
@@ -28,6 +29,7 @@ class AttemptOutcome(StrEnum):
 class AttemptStage(StrEnum):
     PREFLIGHT = "PREFLIGHT"
     WORKSPACE = "WORKSPACE"
+    CONTEXT = "CONTEXT"
     EXECUTOR = "EXECUTOR"
     APPLY = "APPLY"
     AUDIT = "AUDIT"
@@ -44,6 +46,7 @@ class OrchestrationResult:
     proposal_artifact_id: str | None = None
     workspace_id: str | None = None
     task_verification_id: str | None = None
+    context_paths: tuple[str, ...] = ()
 
 
 class BoundedTaskOrchestrator:
@@ -51,7 +54,8 @@ class BoundedTaskOrchestrator:
 
     The Workspace is created before the Executor sees repository content. The
     model therefore reads and proposes against the exact snapshot that the
-    deterministic applier later mutates.
+    deterministic applier later mutates. Context may be supplied explicitly or
+    discovered deterministically inside that same Workspace snapshot.
     """
 
     def __init__(
@@ -187,13 +191,22 @@ class BoundedTaskOrchestrator:
         self,
         task_id: str,
         *,
-        selected_paths: Iterable[str],
+        selected_paths: Iterable[str] | None = None,
+        auto_context: bool = False,
+        context_seed_paths: Iterable[str] = (),
         model_profile: str | None = None,
         require_changes: bool = True,
     ) -> OrchestrationResult:
-        selected = tuple(selected_paths)
-        if not selected:
-            raise ValueError("bounded orchestration requires at least one selected context file")
+        selected = tuple(selected_paths or ())
+        seeds = tuple(context_seed_paths)
+        if auto_context and selected:
+            raise ValueError("auto_context cannot be combined with selected_paths")
+        if not auto_context and not selected:
+            raise ValueError(
+                "bounded orchestration requires selected context files or auto_context=True"
+            )
+        if seeds and not auto_context:
+            raise ValueError("context_seed_paths require auto_context=True")
 
         try:
             task = self._preflight(task_id)
@@ -248,9 +261,59 @@ class BoundedTaskOrchestrator:
                 task_verification_id=verification_id,
             )
 
+        workspace_path = self.workspaces.path(workspace_id)
+        repository = RepositoryReader(workspace_path)
+        context_paths = selected
+        if auto_context:
+            try:
+                discovery = TaskContextDiscoverer(
+                    self.runtime,
+                    repository,
+                ).discover(
+                    task_id,
+                    seed_paths=seeds,
+                )
+                context_paths = discovery.paths
+            except Exception as exc:
+                reason = f"{type(exc).__name__}: {exc}"
+                self._abandon_if_unused(workspace_id)
+                verification_id = self._finish_task(
+                    task_id,
+                    target=TaskStatus.BLOCKED,
+                    reason=reason,
+                    verification_status="BLOCKED",
+                    stage=AttemptStage.CONTEXT,
+                    evidence={"workspace_id": workspace_id},
+                )
+                return OrchestrationResult(
+                    task_id,
+                    AttemptOutcome.BLOCKED,
+                    AttemptStage.CONTEXT,
+                    reason=reason,
+                    workspace_id=workspace_id,
+                    task_verification_id=verification_id,
+                )
+            if not context_paths:
+                reason = "automatic context discovery found no relevant tracked files"
+                self._abandon_if_unused(workspace_id)
+                verification_id = self._finish_task(
+                    task_id,
+                    target=TaskStatus.BLOCKED,
+                    reason=reason,
+                    verification_status="INCONCLUSIVE",
+                    stage=AttemptStage.CONTEXT,
+                    evidence={"workspace_id": workspace_id},
+                )
+                return OrchestrationResult(
+                    task_id,
+                    AttemptOutcome.BLOCKED,
+                    AttemptStage.CONTEXT,
+                    reason=reason,
+                    workspace_id=workspace_id,
+                    task_verification_id=verification_id,
+                )
+
         try:
-            workspace_path = self.workspaces.path(workspace_id)
-            repository = RepositoryReader(workspace_path)
             context_builder = ContextBuilder(
                 self.runtime,
                 repository,
@@ -262,7 +325,7 @@ class BoundedTaskOrchestrator:
                 context_builder=context_builder,
             ).execute(
                 task_id,
-                selected_paths=selected,
+                selected_paths=context_paths,
                 model_profile=model_profile or self.model.model_id,
             )
             proposal_artifact_id = worker_result.proposal_artifact_id
@@ -278,6 +341,7 @@ class BoundedTaskOrchestrator:
                     evidence={
                         "proposal_artifact_id": proposal_artifact_id,
                         "workspace_id": workspace_id,
+                        "context_paths": list(context_paths),
                     },
                 )
                 return OrchestrationResult(
@@ -288,6 +352,7 @@ class BoundedTaskOrchestrator:
                     proposal_artifact_id,
                     workspace_id,
                     verification_id,
+                    context_paths,
                 )
         except Exception as exc:
             reason = f"{type(exc).__name__}: {exc}"
@@ -298,7 +363,10 @@ class BoundedTaskOrchestrator:
                 reason=reason,
                 verification_status="FAIL",
                 stage=AttemptStage.EXECUTOR,
-                evidence={"workspace_id": workspace_id},
+                evidence={
+                    "workspace_id": workspace_id,
+                    "context_paths": list(context_paths),
+                },
             )
             return OrchestrationResult(
                 task_id,
@@ -307,6 +375,7 @@ class BoundedTaskOrchestrator:
                 reason,
                 workspace_id=workspace_id,
                 task_verification_id=verification_id,
+                context_paths=context_paths,
             )
 
         try:
@@ -325,6 +394,7 @@ class BoundedTaskOrchestrator:
                 evidence={
                     "proposal_artifact_id": proposal_artifact_id,
                     "workspace_id": workspace_id,
+                    "context_paths": list(context_paths),
                 },
             )
             return OrchestrationResult(
@@ -335,6 +405,7 @@ class BoundedTaskOrchestrator:
                 proposal_artifact_id,
                 workspace_id,
                 verification_id,
+                context_paths,
             )
 
         try:
@@ -354,6 +425,7 @@ class BoundedTaskOrchestrator:
                     "proposal_artifact_id": proposal_artifact_id,
                     "workspace_id": workspace_id,
                     "diff_artifact_id": apply_result.diff_artifact_id,
+                    "context_paths": list(context_paths),
                 },
             )
             return OrchestrationResult(
@@ -364,6 +436,7 @@ class BoundedTaskOrchestrator:
                 proposal_artifact_id,
                 workspace_id,
                 verification_id,
+                context_paths,
             )
 
         if not audit_result.passed:
@@ -379,6 +452,7 @@ class BoundedTaskOrchestrator:
                     "workspace_id": workspace_id,
                     "audit_verification_id": audit_result.verification_id,
                     "diff_artifact_id": apply_result.diff_artifact_id,
+                    "context_paths": list(context_paths),
                 },
             )
             return OrchestrationResult(
@@ -389,6 +463,7 @@ class BoundedTaskOrchestrator:
                 proposal_artifact_id,
                 workspace_id,
                 verification_id,
+                context_paths,
             )
 
         try:
@@ -409,6 +484,7 @@ class BoundedTaskOrchestrator:
                     "proposal_artifact_id": proposal_artifact_id,
                     "workspace_id": workspace_id,
                     "audit_verification_id": audit_result.verification_id,
+                    "context_paths": list(context_paths),
                 },
             )
             return OrchestrationResult(
@@ -419,6 +495,7 @@ class BoundedTaskOrchestrator:
                 proposal_artifact_id,
                 workspace_id,
                 verification_id,
+                context_paths,
             )
 
         if not sandbox_result.passed:
@@ -445,6 +522,7 @@ class BoundedTaskOrchestrator:
                     "sandbox_verification_ids": [
                         item.verification_id for item in sandbox_result.results
                     ],
+                    "context_paths": list(context_paths),
                 },
             )
             return OrchestrationResult(
@@ -455,6 +533,7 @@ class BoundedTaskOrchestrator:
                 proposal_artifact_id,
                 workspace_id,
                 verification_id,
+                context_paths,
             )
 
         workspace = self.workspaces.get(workspace_id)
@@ -466,7 +545,10 @@ class BoundedTaskOrchestrator:
                 reason=reason,
                 verification_status="FAIL",
                 stage=AttemptStage.SANDBOX,
-                evidence={"workspace_id": workspace_id},
+                evidence={
+                    "workspace_id": workspace_id,
+                    "context_paths": list(context_paths),
+                },
             )
             return OrchestrationResult(
                 task_id,
@@ -476,6 +558,7 @@ class BoundedTaskOrchestrator:
                 proposal_artifact_id,
                 workspace_id,
                 verification_id,
+                context_paths,
             )
 
         verification_id = self._record_task_verification(
@@ -490,6 +573,7 @@ class BoundedTaskOrchestrator:
                 "sandbox_verification_ids": [
                     item.verification_id for item in sandbox_result.results
                 ],
+                "context_paths": list(context_paths),
             },
         )
         task = self.runtime.get_task(task_id)
@@ -505,4 +589,5 @@ class BoundedTaskOrchestrator:
             proposal_artifact_id=proposal_artifact_id,
             workspace_id=workspace_id,
             task_verification_id=verification_id,
+            context_paths=context_paths,
         )
