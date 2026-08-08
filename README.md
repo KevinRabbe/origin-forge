@@ -41,17 +41,17 @@ Versioned product
 
 ## Current status
 
-Origin Forge is in **Phase 8 — Deterministic Context Discovery**.
+Origin Forge is in **Phase 9 — Governed Skills**.
 
-Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implemented the first real sandbox backend using Podman. Phase 6 connected those components into a snapshot-first single coding attempt. Phase 7 added bounded retry/resume/model escalation. Phase 8 now adds deterministic automatic context selection for the one-shot Manager.
+Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implemented the first real sandbox backend using Podman. Phase 6 connected those components into a snapshot-first single coding attempt. Phase 7 added bounded retry/resume/model escalation. Phase 8 added deterministic automatic source-context selection. Phase 9 now adds bounded reusable procedural knowledge without increasing model authority.
 
-Automatic context remains snapshot-local: Origin Forge creates the isolated Git Workspace first, scans only tracked UTF-8 text inside that Workspace, applies hard scan and selection budgets, ranks files from durable Task terms, and then feeds the selected paths through the normal `ContextBuilder`. Uncommitted changes in the user's live checkout remain outside the model's view.
+Project Skills live under `.origin-forge/skills/<name>/` and contain only `SKILL.md` plus `skill.toml` in this phase. Skills are deterministically selected from durable Task evidence, SHA-256 fingerprinted, recorded on the Executor Run, and captured as a `SKILL_BUNDLE` artifact before the model response. A Skill changes **how the bounded Executor reasons**, not what it is allowed to do.
 
-Manual context selection remains supported. Automatic selection is explicit opt-in, can accept bounded seed files, and returns no arbitrary fallback context when the repository contains no relevant evidence.
+Projects with no Skills preserve the prior request shape and behavior. Phase 9 deliberately excludes Skill scripts, external Skill installation, self-modifying Skills, automatic promotion, and other executable Skill content.
 
-Phase-7 retry policy still uses explicit context paths in this phase; Origin Forge does not duplicate the retry state machine just to wire automatic context through it prematurely.
+Automatic source context remains snapshot-local: Origin Forge creates the isolated Git Workspace first, scans only tracked UTF-8 text inside that Workspace, applies hard scan and selection budgets, ranks files from durable Task terms, and then feeds the selected paths through the normal `ContextBuilder`. Uncommitted changes in the user's live checkout remain outside the model's view.
 
-There is still **no automatic merge, arbitrary shell surface, unlimited retry loop, or model-controlled filesystem search**.
+There is still **no automatic merge, arbitrary shell surface, unlimited retry loop, model-controlled filesystem search, or Skill-granted authority escalation**.
 
 ## Documentation
 
@@ -65,6 +65,7 @@ There is still **no automatic merge, arbitrary shell surface, unlimited retry lo
 - [Phase 6 Bounded Orchestration Notes](docs/phase-6-notes.md)
 - [Phase 7 Retry Policy Notes](docs/phase-7-notes.md)
 - [Phase 8 Context Discovery Notes](docs/phase-8-notes.md)
+- [Phase 9 Governed Skills Notes](docs/phase-9-notes.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
@@ -84,6 +85,7 @@ The implementation currently uses or targets:
 - snapshot-first bounded orchestration
 - durable bounded retry/resume/model-escalation policy
 - deterministic tracked-file context discovery
+- governed instruction-only Skills with deterministic selection and provenance
 - Tree-sitter + LSP for later structural code intelligence where they measurably improve context quality
 - Pixelorama for 2D production
 - Blockbench for 3D production
