@@ -66,7 +66,7 @@ class WorkspaceContextSelectorTests(unittest.TestCase):
         flow = self.runtime.create_flow(goal)
         return self.runtime.create_task(flow, objective)
 
-    def test_manual_selection_is_unchanged_without_structural_expansion(self) -> None:
+    def test_manual_selection_is_unchanged_without_expansion(self) -> None:
         task = self._task("Fix WidgetService")
         result = self.selector.select(
             task,
@@ -76,6 +76,7 @@ class WorkspaceContextSelectorTests(unittest.TestCase):
         self.assertEqual(result.paths, ("src/pkg/service.py",))
         self.assertIsNone(result.lexical)
         self.assertIsNone(result.structural)
+        self.assertIsNone(result.semantic)
 
     def test_auto_selection_uses_existing_lexical_discovery(self) -> None:
         task = self._task("Fix WidgetService")
@@ -84,6 +85,7 @@ class WorkspaceContextSelectorTests(unittest.TestCase):
         self.assertIn("src/pkg/service.py", result.paths)
         self.assertIsNotNone(result.lexical)
         self.assertIsNone(result.structural)
+        self.assertIsNone(result.semantic)
 
     def test_structural_expansion_composes_with_manual_seed(self) -> None:
         task = self._task("Fix WidgetService parsing")
@@ -97,6 +99,7 @@ class WorkspaceContextSelectorTests(unittest.TestCase):
         self.assertIn("src/pkg/models.py", result.paths)
         self.assertIn("tests/test_service.py", result.paths)
         self.assertIsNotNone(result.structural)
+        self.assertIsNone(result.semantic)
 
     def test_structural_expansion_composes_with_auto_selection(self) -> None:
         task = self._task("Fix WidgetService parsing")
@@ -110,6 +113,33 @@ class WorkspaceContextSelectorTests(unittest.TestCase):
         self.assertIn("src/pkg/models.py", result.paths)
         self.assertIsNotNone(result.lexical)
         self.assertIsNotNone(result.structural)
+        self.assertIsNone(result.semantic)
+
+    def test_semantic_expansion_uses_deterministic_ast_provider_by_default(self) -> None:
+        task = self._task("Repair WidgetParser parse failure")
+        result = self.selector.select(
+            task,
+            selected_paths=["src/pkg/service.py"],
+            semantic_context=True,
+        )
+        self.assertEqual(result.mode, "MANUAL+SEMANTIC")
+        self.assertEqual(result.paths[0], "src/pkg/service.py")
+        self.assertIn("src/pkg/models.py", result.paths)
+        self.assertIsNotNone(result.semantic)
+        self.assertIn("widgetparser", result.semantic.query_terms)
+
+    def test_structural_and_semantic_share_one_selection_pipeline(self) -> None:
+        task = self._task("Repair WidgetParser in WidgetService")
+        result = self.selector.select(
+            task,
+            selected_paths=["src/pkg/service.py"],
+            structural_context=True,
+            semantic_context=True,
+        )
+        self.assertEqual(result.mode, "MANUAL+STRUCTURAL+SEMANTIC")
+        self.assertIsNotNone(result.structural)
+        self.assertIsNotNone(result.semantic)
+        self.assertIn("src/pkg/models.py", result.paths)
 
     def test_auto_and_manual_are_mutually_exclusive(self) -> None:
         task = self._task("Fix WidgetService")
@@ -129,16 +159,18 @@ class WorkspaceContextSelectorTests(unittest.TestCase):
                 seed_paths=["tests/test_service.py"],
             )
 
-    def test_auto_no_match_remains_empty_even_with_structural_enabled(self) -> None:
+    def test_auto_no_match_remains_empty_even_with_all_expansion_enabled(self) -> None:
         task = self._task("Implement quantum banana telemetry")
         result = self.selector.select(
             task,
             auto_context=True,
             structural_context=True,
+            semantic_context=True,
         )
         self.assertEqual(result.paths, ())
         self.assertIsNotNone(result.lexical)
         self.assertIsNone(result.structural)
+        self.assertIsNone(result.semantic)
 
 
 if __name__ == "__main__":
