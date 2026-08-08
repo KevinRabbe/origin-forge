@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import tempfile
 import unittest
@@ -11,21 +12,31 @@ from origin_forge.model_resource_cli import build_parser, main
 
 
 class ModelResourceCliTests(unittest.TestCase):
-    def test_cli_surface_is_read_only_and_has_no_runtime_control_flags(self) -> None:
-        help_text = build_parser().format_help()
-        self.assertIn("status", help_text)
+    def test_cli_surface_is_read_only_and_has_only_status_operation(self) -> None:
+        parser = build_parser()
+        subparsers = [
+            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+        ]
+        self.assertEqual(len(subparsers), 1)
+        self.assertEqual(set(subparsers[0].choices), {"status"})
+
+        option_strings = {
+            option
+            for action in parser._actions
+            for option in getattr(action, "option_strings", ())
+        }
         for forbidden in (
-            "load",
-            "start",
-            "download",
-            "lease",
-            "release",
-            "model-path",
-            "argv",
-            "image",
-            "set-policy",
+            "--load",
+            "--start",
+            "--download",
+            "--lease",
+            "--release",
+            "--model-path",
+            "--argv",
+            "--image",
+            "--set-policy",
         ):
-            self.assertNotIn(forbidden, help_text)
+            self.assertNotIn(forbidden, option_strings)
 
     def test_default_status_is_safe_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
