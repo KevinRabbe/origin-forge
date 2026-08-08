@@ -122,8 +122,33 @@ class ModelDreamPlannerTests(unittest.TestCase):
         self.assertEqual(self.store.load_candidate(candidate.candidate_id), candidate)
         self.assertEqual(self.store.list_generation_ids(), before_generations)
         self.assertEqual(self.runtime.get_run(model_run)["status"], RunStatus.RUNNING.value)
+        self.assertTrue(result.trace_verification_id.startswith("VERIFY-"))
         self.assertFalse(result.to_dict()["memory_generation_created"])
         self.assertFalse(result.to_dict()["canonical_project_state_changed"])
+
+        verifications = self.runtime.list_verifications("RUN", model_run)
+        self.assertEqual(len(verifications), 1)
+        trace = verifications[0]
+        self.assertEqual(trace["id"], result.trace_verification_id)
+        self.assertEqual(trace["verification_type"], "dream-model-structural-capture")
+        self.assertEqual(trace["status"], "PASS")
+        evidence = json.loads(trace["evidence_json"])
+        metrics = json.loads(trace["metrics_json"])
+        self.assertEqual(evidence["manifest_id"], result.plan.manifest.manifest_id)
+        self.assertEqual(evidence["manifest_hash"], result.plan.manifest.content_hash)
+        self.assertEqual(evidence["model_profile"], "dream-model")
+        self.assertEqual(evidence["model_id"], "dream-planner-model")
+        self.assertEqual(evidence["context_hash"], result.model_analysis.context_hash)
+        self.assertEqual(evidence["response_hash"], result.model_analysis.response_hash)
+        self.assertFalse(evidence["semantic_claims_verified"])
+        self.assertFalse(evidence["memory_generation_created"])
+        self.assertFalse(evidence["canonical_project_state_changed"])
+        self.assertEqual(metrics["input_tokens"], 100)
+        self.assertEqual(metrics["output_tokens"], 25)
+        self.assertEqual(metrics["observed_analysis_tokens"], 125)
+        self.assertEqual(metrics["model_candidate_count"], 1)
+        self.assertEqual(metrics["persisted_candidate_count"], 1)
+        self.assertEqual(metrics["audit_count"], 1)
 
     def test_zero_model_call_budget_fails_before_model_or_persistence(self) -> None:
         task, model_run = self._active_model_run()
@@ -139,6 +164,7 @@ class ModelDreamPlannerTests(unittest.TestCase):
             )
         self.assertEqual(model.requests, [])
         self.assertEqual(self.store.list_manifest_ids(), before)
+        self.assertEqual(self.runtime.list_verifications("RUN", model_run), [])
 
     def test_wrong_model_role_fails_before_model_or_persistence(self) -> None:
         task, model_run = self._active_model_run(role="EXECUTOR")
@@ -153,6 +179,7 @@ class ModelDreamPlannerTests(unittest.TestCase):
             )
         self.assertEqual(model.requests, [])
         self.assertEqual(self.store.list_manifest_ids(), before)
+        self.assertEqual(self.runtime.list_verifications("RUN", model_run), [])
 
     def test_model_run_must_belong_to_supplied_task(self) -> None:
         first_task, model_run = self._active_model_run()
@@ -168,6 +195,7 @@ class ModelDreamPlannerTests(unittest.TestCase):
                 model_task_id=second_task,
             )
         self.assertEqual(model.requests, [])
+        self.assertEqual(self.runtime.list_verifications("RUN", model_run), [])
 
     def test_missing_token_accounting_fails_closed_without_partial_persistence(self) -> None:
         task, model_run = self._active_model_run()
@@ -183,6 +211,7 @@ class ModelDreamPlannerTests(unittest.TestCase):
         self.assertEqual(len(model.requests), 1)
         self.assertEqual(self.store.list_manifest_ids(), before)
         self.assertEqual(self.store.list_candidate_ids(), ())
+        self.assertEqual(self.runtime.list_verifications("RUN", model_run), [])
 
     def test_token_overflow_fails_closed_without_partial_persistence(self) -> None:
         task, model_run = self._active_model_run()
@@ -197,6 +226,7 @@ class ModelDreamPlannerTests(unittest.TestCase):
             )
         self.assertEqual(self.store.list_manifest_ids(), ())
         self.assertEqual(self.store.list_candidate_ids(), ())
+        self.assertEqual(self.runtime.list_verifications("RUN", model_run), [])
 
     def test_semantically_duplicate_model_candidates_are_deduplicated(self) -> None:
         task, model_run = self._active_model_run()
@@ -211,6 +241,10 @@ class ModelDreamPlannerTests(unittest.TestCase):
         self.assertEqual(len(result.plan.candidates), 1)
         self.assertEqual(len(result.model_analysis.candidates), 1)
         self.assertEqual(len(self.store.list_candidate_ids()), 1)
+        trace = self.runtime.list_verifications("RUN", model_run)[0]
+        metrics = json.loads(trace["metrics_json"])
+        self.assertEqual(metrics["model_candidate_count"], 1)
+        self.assertEqual(metrics["persisted_candidate_count"], 1)
 
     def test_model_planner_exposes_no_generation_promotion_or_project_mutation_operation(self) -> None:
         model = FakeDreamModel({"candidates": []})
