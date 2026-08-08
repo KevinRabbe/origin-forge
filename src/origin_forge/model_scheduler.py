@@ -15,6 +15,7 @@ from .resource_scheduler import (
 
 
 _PROFILE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_MODEL_ID_RE = re.compile(r"^[^\s\x00-\x1f\x7f]{1,256}$")
 
 
 class ModelSchedulingError(RuntimeError):
@@ -54,19 +55,23 @@ class ModelResourceProfile:
     def __post_init__(self) -> None:
         for value, name in (
             (self.profile_id, "profile_id"),
-            (self.model_id, "model_id"),
             (self.runtime_id, "runtime_id"),
         ):
             if not isinstance(value, str) or not _PROFILE_ID_RE.fullmatch(value):
                 raise ValueError(f"invalid model profile {name}: {value!r}")
+        if not isinstance(self.model_id, str) or not _MODEL_ID_RE.fullmatch(self.model_id):
+            raise ValueError(f"invalid model profile model_id: {self.model_id!r}")
         if not isinstance(self.role, ModelRole):
             raise ValueError("model profile role must be a ModelRole")
         if not isinstance(self.resources, ResourceRequest):
             raise ValueError("model profile resources must be a ResourceRequest")
         if self.model_hash is not None and (
-            not isinstance(self.model_hash, str) or not self.model_hash.strip()
+            not isinstance(self.model_hash, str)
+            or not self.model_hash.strip()
+            or len(self.model_hash) > 512
+            or any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in self.model_hash)
         ):
-            raise ValueError("model profile model_hash must be a non-empty string or null")
+            raise ValueError("model profile model_hash must be a bounded non-whitespace string or null")
 
     def to_dict(self) -> dict[str, object]:
         gpu = self.resources.gpu
