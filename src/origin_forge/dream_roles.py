@@ -81,6 +81,10 @@ class DreamAnalysisPackage:
         ids = [item.entry_id for item in entries]
         if len(ids) != len(set(ids)):
             raise DreamRoleError("analysis package contains duplicate memory entry IDs")
+        if self.preprocess_report.memory_entry_count != len(entries):
+            raise DreamRoleError(
+                "analysis package memory entries do not match preprocessing report count"
+            )
         object.__setattr__(
             self,
             "memory_entries",
