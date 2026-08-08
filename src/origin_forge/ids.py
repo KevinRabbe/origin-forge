@@ -27,6 +27,11 @@ class IdKind(StrEnum):
     ENTITY_RELATION = "REL"
     ENTITY_BINDING = "BIND"
     DESIGN_RULE = "RULE"
+    COMPANY_IDENTITY = "COMPANY"
+    PROVENANCE_KEY = "PKEY"
+    KEY_CERTIFICATE = "KEYCERT"
+    KEY_REVOCATION = "KEYREV"
+    PROVENANCE_MANIFEST = "PROV"
 
 
 def new_id(kind: IdKind) -> str:
