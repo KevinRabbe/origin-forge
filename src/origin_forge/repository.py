@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from .path_policy import is_protected_root, portable_relative_path
+from .path_policy import is_protected_root, portable_path_key, portable_relative_path
 
 
 class RepositoryAccessError(RuntimeError):
@@ -110,17 +110,23 @@ class RepositoryReader:
             raise ValueError("max_total_bytes must be positive")
 
         result: list[SourceFile] = []
-        seen: set[str] = set()
+        seen: dict[str, str] = {}
         total = 0
         for path in paths:
             source = self.read_text(path)
-            if source.path in seen:
-                continue
+            key = portable_path_key(source.path)
+            previous = seen.get(key)
+            if previous is not None:
+                if previous == source.path:
+                    continue
+                raise RepositoryAccessError(
+                    f"repository context contains case-colliding files: {previous} and {source.path}"
+                )
             total += source.byte_count
             if total > max_total_bytes:
                 raise ContextBudgetExceeded(
                     f"repository context exceeds total limit ({total} > {max_total_bytes} bytes)"
                 )
-            seen.add(source.path)
+            seen[key] = source.path
             result.append(source)
         return tuple(result)
