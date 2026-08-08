@@ -46,7 +46,7 @@ character  zero-based Unicode codepoint index
 
 Provider adapters are responsible for converting their native representation.
 
-This matters for LSP because a language server can use negotiated position encodings such as UTF-8, UTF-16 or UTF-32 code units. Protocol-specific encoding semantics must stay inside the LSP adapter.
+This matters for LSP because a language server can use negotiated position encodings such as UTF-8, UTF-16 or UTF-32 code units. Protocol-specific encoding semantics stay inside the LSP adapter.
 
 ## Deterministic Python provider
 
@@ -80,15 +80,86 @@ The first LSP layer is deliberately process-free.
 - UTF-8 / UTF-16 / UTF-32 position conversion
 - rejection of code-unit offsets that split Unicode characters
 
-This lets protocol mechanics be verified independently of any external server process.
+## Bounded JSON-RPC session
+
+`LspJsonRpcSession` runs over caller-supplied byte streams.
+
+Current rules:
+
+- exactly one outstanding client request
+- exact response-ID correlation
+- request timeout
+- timeout makes the session terminal
+- bounded pending notifications
+- wrong/missing JSON-RPC 2.0 protocol state fails closed
+- server-to-client requests are rejected with `MethodNotFound` until a specific safe handler exists
+- protocol/message size limits remain active for every read/write
+
+The one-outstanding-request rule is intentional. Origin Forge does not need multiplexing complexity before it has evidence that concurrent LSP requests improve throughput.
+
+## Workspace URI containment
+
+`LspWorkspaceMapper` is the trust boundary for file locations.
+
+It converts between relative Workspace paths and `file://` URIs while enforcing:
+
+- Workspace-root containment after resolution
+- `.git` protection
+- `.origin-forge` protection
+- symlink-escape rejection
+- non-file URI rejection
+- remote-host file URI rejection
+- query/fragment rejection
+
+A language server returning one unsafe location causes the query to fail rather than silently adding that path to model context.
+
+## Initialization and capability negotiation
+
+`initialize_lsp_session` advertises the small code-intelligence capabilities Origin Forge intends to use and parses the server response into `LspServerCapabilities`.
+
+Position encoding is explicit:
+
+- `utf-8`
+- `utf-16`
+- `utf-32`
+
+If the server omits position-encoding negotiation, the compatibility fallback is UTF-16.
+
+Normalized capability flags currently cover:
+
+- workspace symbols
+- definitions
+- references
+- pull diagnostics
+
+## Process-neutral LSP provider
+
+`LspCodeIntelligenceProvider` connects an already-initialized bounded LSP session to the same `CodeIntelligenceProvider` interface as the Python AST implementation.
+
+It supports:
+
+- `workspace/symbol`
+- `textDocument/definition`
+- `textDocument/references`
+- `textDocument/diagnostic`
+
+All raw results are normalized into Origin Forge data types. Returned URIs are revalidated through `LspWorkspaceMapper`, and LSP character offsets are converted from the negotiated encoding back to Origin Forge Unicode-codepoint positions.
+
+The model never receives a raw LSP session or arbitrary LSP method surface.
+
+## Why process execution is still separate
+
+Phase 11 can now speak and normalize LSP without deciding how the server process is hosted.
+
+That separation is deliberate. Starting a language server is a security boundary because some servers can invoke compilers, build systems, plugins, proc macros, project interpreters, or network-dependent tooling depending on configuration.
+
+Origin Forge should not accidentally turn "code intelligence" into general project-code execution.
 
 ## Future trusted-server boundary
 
-A later Phase-11 increment may launch an LSP server only through an explicit trusted configuration.
+Before Origin Forge itself launches an LSP server, the process layer must define at least:
 
-Before that is allowed, the process layer must define at least:
-
-- exact executable/argv allowlist
+- exact trusted executable/argv policy
 - Workspace root passed explicitly
 - `shell=False`
 - clean/bounded environment
@@ -97,13 +168,13 @@ Before that is allowed, the process layer must define at least:
 - independently bounded stderr drain
 - capability negotiation
 - request-ID correlation
-- server-request policy
+- explicit safe server-request handlers only
 - graceful shutdown plus forced termination fallback
 - URI/path containment on every returned location
-- no network unless explicitly required/allowed
+- enforceable network policy
 - no model control over server executable or arguments
 
-Project code must never be executed merely to obtain code intelligence.
+For language servers that can execute project code, a persistent isolated/sandboxed hosting backend is preferable to a native-host process.
 
 ## Relationship to Phase 10
 
@@ -129,6 +200,33 @@ final bounded ContextPackage / Auditor evidence
 
 The implementation should be benchmarked before structural/LSP expansion becomes a default behavior.
 
+## Current regression surface
+
+Phase-11 tests cover:
+
+- provider protocol/capabilities
+- Python class/method/function scope classification
+- Python definition/reference lookup
+- Python syntax diagnostics
+- tracked-only and symlink-safe indexing
+- scan budgets/determinism
+- byte-accurate LSP framing
+- LSP message/header bounds
+- UTF-8 content enforcement
+- UTF-8/UTF-16/UTF-32 position conversion
+- split-codepoint rejection
+- JSON-RPC request/response correlation
+- remote errors
+- server-request rejection
+- terminal request timeouts
+- bounded notification queues
+- JSON-RPC version enforcement
+- Workspace URI round-trip and containment
+- external/non-file/symlink URI rejection
+- capability negotiation and UTF-16 fallback
+- process-neutral workspace-symbol/definition/reference/diagnostic normalization
+- external result location rejection
+
 ## Deferred
 
 Not included in the current substrate:
@@ -137,7 +235,7 @@ Not included in the current substrate:
 - arbitrary host shell execution
 - project-controlled LSP executable selection
 - language-server plugins downloaded from the internet
-- model-controlled LSP queries
+- model-controlled raw LSP queries
 - unbounded workspace symbol/reference requests
 - automatic file mutation from code-action/edit responses
 - trusting diagnostics as the only verification oracle
