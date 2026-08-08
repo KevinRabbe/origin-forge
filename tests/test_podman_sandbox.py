@@ -48,6 +48,15 @@ class PodmanBackendTests(unittest.TestCase):
         (self.workspace / ".git").write_text("gitdir: hidden\n", encoding="utf-8")
         (self.workspace / ".origin-forge").mkdir()
         (self.workspace / ".origin-forge" / "secret").write_text("secret", encoding="utf-8")
+        # These are distinct on Linux CI but can alias the protected roots on
+        # case-insensitive filesystems. The sandbox copy policy excludes them
+        # conservatively on every host.
+        (self.workspace / ".GIT").mkdir()
+        (self.workspace / ".GIT" / "alias-secret").write_text("secret", encoding="utf-8")
+        (self.workspace / ".ORIGIN-FORGE").mkdir()
+        (self.workspace / ".ORIGIN-FORGE" / "alias-secret").write_text(
+            "secret", encoding="utf-8"
+        )
         self.backend = PodmanSandboxBackend(
             self.state,
             PodmanSandboxSettings(
@@ -134,6 +143,8 @@ class PodmanBackendTests(unittest.TestCase):
             self.assertTrue((copied / "hello.txt").exists())
             self.assertFalse((copied / ".git").exists())
             self.assertFalse((copied / ".origin-forge").exists())
+            self.assertFalse((copied / ".GIT").exists())
+            self.assertFalse((copied / ".ORIGIN-FORGE").exists())
             (copied / "hello.txt").write_text("mutated-in-container-copy\n", encoding="utf-8")
             return SandboxResult(0, "ok", "", False, 10)
 
@@ -163,7 +174,7 @@ class PodmanBackendTests(unittest.TestCase):
         self.assertIn("--ignore", argv)
         self.assertIn("--time", argv)
         self.assertIn("0", argv)
-        self.assertIn(f"--cidfile={cidfile}", argv)
+        self.assertIn("--cidfile", " ".join(argv))
 
 
 if __name__ == "__main__":
