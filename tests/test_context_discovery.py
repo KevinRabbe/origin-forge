@@ -94,11 +94,14 @@ class ContextDiscoveryTests(unittest.TestCase):
         result = self._discoverer().discover(task)
 
         self.assertGreaterEqual(len(result.selected), 2)
-        self.assertEqual(result.paths[0], "src/payment_service.py")
-        self.assertIn("tests/test_payment_service.py", result.paths[:3])
+        self.assertEqual(
+            set(result.paths[:2]),
+            {"src/payment_service.py", "tests/test_payment_service.py"},
+        )
         self.assertIn("payment", result.query_terms)
         self.assertIn("refund", result.query_terms)
         self.assertGreater(result.selected[0].score, 0)
+        self.assertGreater(result.selected[1].score, 0)
 
     def test_untracked_files_are_never_discovered(self) -> None:
         (self.root / "secret_payment_notes.py").write_text(
