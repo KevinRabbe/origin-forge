@@ -310,11 +310,11 @@ class SkillRegistry:
         )
         return Skill(metadata, instructions)
 
-    def catalog(self) -> tuple[SkillMetadata, ...]:
+    def _loaded_catalog(self) -> tuple[Skill, ...]:
         root = self._validated_root()
         if not root.exists():
             return ()
-        skills: list[SkillMetadata] = []
+        skills: list[Skill] = []
         for directory in sorted(root.iterdir(), key=lambda item: item.name):
             if directory.name.startswith("."):
                 continue
@@ -322,8 +322,11 @@ class SkillRegistry:
                 raise SkillFormatError(
                     f"Skill registry contains unsupported entry: {directory.name}"
                 )
-            skills.append(self._load_from_dir(directory).metadata)
+            skills.append(self._load_from_dir(directory))
         return tuple(skills)
+
+    def catalog(self) -> tuple[SkillMetadata, ...]:
+        return tuple(skill.metadata for skill in self._loaded_catalog())
 
     def load(self, name: str) -> Skill:
         directory = self._skill_dir(name)
@@ -378,8 +381,8 @@ class SkillRegistry:
         *,
         names: Iterable[str] | None = None,
     ) -> SkillSelection:
-        catalog = self.catalog()
-        by_name = {metadata.name: metadata for metadata in catalog}
+        catalog = self._loaded_catalog()
+        by_name = {skill.metadata.name: skill for skill in catalog}
         selected: list[Skill] = []
 
         if names is not None:
@@ -389,19 +392,20 @@ class SkillRegistry:
                     f"explicit Skill selection exceeds count limit ({len(ordered_names)} > {self.max_selected_skills})"
                 )
             for name in ordered_names:
-                if name not in by_name:
+                skill = by_name.get(name)
+                if skill is None:
                     raise KeyError(name)
-                selected.append(self.load(name))
+                selected.append(skill)
         else:
             terms, capabilities = self._task_terms(task_id)
             ranked: list[tuple[int, str]] = []
-            for metadata in catalog:
-                score = self._score(metadata, terms, capabilities)
+            for skill in catalog:
+                score = self._score(skill.metadata, terms, capabilities)
                 if score > 0:
-                    ranked.append((score, metadata.name))
+                    ranked.append((score, skill.metadata.name))
             ranked.sort(key=lambda item: (-item[0], item[1]))
             for _, name in ranked[: self.max_selected_skills]:
-                selected.append(self.load(name))
+                selected.append(by_name[name])
 
         total = sum(skill.instruction_bytes for skill in selected)
         if total > self.max_selected_instruction_bytes:
