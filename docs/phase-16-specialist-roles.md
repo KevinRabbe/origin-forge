@@ -1,6 +1,6 @@
 # Phase 16 — Isolated Specialist Roles
 
-Status: **implementation starting after Phase 15**
+Status: **DONE — Reviewer-first implementation complete; additional specialist roles remain evidence-gated**
 
 Phase 16 adds a small number of isolated specialist model roles that can improve review, research, testing strategy, and later visual critique without creating an uncontrolled agent swarm or weakening Origin Forge's existing deterministic authority boundaries.
 
