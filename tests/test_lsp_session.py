@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 import unittest
 
 from origin_forge.lsp_protocol import LspProtocolError, encode_lsp_message, read_lsp_message
@@ -163,7 +164,7 @@ class LspSessionTests(unittest.TestCase):
             session.close()
             pipes.close()
 
-    def test_notification_limit_fails_closed(self) -> None:
+    def test_notification_count_limit_fails_closed(self) -> None:
         pipes = _PipePair()
         session = LspJsonRpcSession(
             pipes.client_reader,
@@ -197,6 +198,70 @@ class LspSessionTests(unittest.TestCase):
             session.close()
             pipes.close()
             thread.join(timeout=1)
+
+    def test_notification_byte_limit_fails_closed(self) -> None:
+        pipes = _PipePair()
+        session = LspJsonRpcSession(
+            pipes.client_reader,
+            pipes.client_writer,
+            max_pending_notifications=10,
+            max_pending_notification_bytes=96,
+        )
+
+        def server() -> None:
+            read_lsp_message(pipes.server_reader)
+            pipes.server_writer.write(
+                encode_lsp_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "method": "window/logMessage",
+                        "params": {"message": "x" * 256},
+                    }
+                )
+            )
+            pipes.server_writer.flush()
+
+        thread = threading.Thread(target=server)
+        thread.start()
+        try:
+            with self.assertRaisesRegex(
+                LspProtocolError,
+                "notification byte limit",
+            ):
+                session.request("workspace/symbol", {"query": ""})
+        finally:
+            session.close()
+            pipes.close()
+            thread.join(timeout=1)
+
+    def test_second_pending_response_makes_session_terminal(self) -> None:
+        pipes = _PipePair()
+        session = LspJsonRpcSession(pipes.client_reader, pipes.client_writer)
+        try:
+            pipes.server_writer.write(
+                encode_lsp_message(
+                    {"jsonrpc": "2.0", "id": 1, "result": {"first": True}}
+                )
+            )
+            pipes.server_writer.write(
+                encode_lsp_message(
+                    {"jsonrpc": "2.0", "id": 2, "result": {"second": True}}
+                )
+            )
+            pipes.server_writer.flush()
+
+            deadline = time.monotonic() + 1.0
+            while session._fatal_error() is None and time.monotonic() < deadline:
+                time.sleep(0.001)
+
+            with self.assertRaisesRegex(
+                LspProtocolError,
+                "pending response limit",
+            ):
+                session.request("workspace/symbol", {"query": ""})
+        finally:
+            session.close()
+            pipes.close()
 
 
 if __name__ == "__main__":
