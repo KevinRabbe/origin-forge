@@ -218,12 +218,10 @@ def initialize_lsp_session(
                 "diagnostic": {},
             },
         },
-        "workspaceFolders": [
-            {
-                "uri": mapper.server_root_uri,
-                "name": mapper.workspace_root.name,
-            }
-        ],
+        # Origin Forge currently exposes one immutable Workspace root. It does
+        # not advertise dynamic workspace-folder support, so do not imply that
+        # contract merely because rootUri points at the same directory.
+        "workspaceFolders": None,
         "trace": "off",
     }
     result = session.request(
