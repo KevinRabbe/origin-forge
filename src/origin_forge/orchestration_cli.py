@@ -16,7 +16,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m origin_forge.orchestration_cli")
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     parser.add_argument("task_id")
-    parser.add_argument("--file", action="append", required=True, dest="files")
+    context = parser.add_mutually_exclusive_group(required=True)
+    context.add_argument("--file", action="append", dest="files")
+    context.add_argument("--auto-context", action="store_true")
+    parser.add_argument(
+        "--seed-file",
+        action="append",
+        default=[],
+        dest="seed_files",
+        help="force a file into automatic context selection; requires --auto-context",
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--model", default="local-model")
     parser.add_argument("--api-key", default="no-key")
@@ -28,7 +37,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.seed_files and not args.auto_context:
+        parser.error("--seed-file requires --auto-context")
+
     runtime = OriginForgeRuntime(args.project_root)
     config = load_config(runtime.project_root)
     backend = create_sandbox_backend(runtime, config)
@@ -44,6 +57,8 @@ def main(argv: list[str] | None = None) -> int:
     result = BoundedTaskOrchestrator(runtime, model, backend).execute(
         args.task_id,
         selected_paths=args.files,
+        auto_context=args.auto_context,
+        context_seed_paths=args.seed_files,
         model_profile=args.model,
     )
     print(json.dumps(asdict(result), indent=2, sort_keys=True, default=str))
