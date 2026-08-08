@@ -80,7 +80,7 @@ class CodeDiagnosticsEvaluatorTests(unittest.TestCase):
         self.assertEqual(result.error_count, 1)
         self.assertEqual(result.warning_count, 1)
         self.assertEqual(result.diagnostics[0].severity, DiagnosticSeverity.ERROR)
-        self.assertEqual(provider.calls[0][0], ("src/a.py", "src/b.py"))
+        self.assertEqual(provider.calls[0], (("src/a.py", "src/b.py"), 100))
 
     def test_warning_only_result_passes(self) -> None:
         provider = FakeDiagnosticsProvider(
@@ -115,6 +115,41 @@ class CodeDiagnosticsEvaluatorTests(unittest.TestCase):
         self.assertEqual(len(result.evidence), 3)
         self.assertEqual(result.evidence[0]["message"], "xxxxxxxx…")
         self.assertEqual(provider.calls[0], (("src/a.py",), 3))
+
+    def test_provider_request_budget_is_partitioned_across_paths(self) -> None:
+        provider = FakeDiagnosticsProvider()
+        CodeDiagnosticsEvaluator(
+            provider,
+            settings=CodeDiagnosticsSettings(
+                max_diagnostics=5,
+                max_paths=4,
+            ),
+        ).evaluate(["a.py", "b.py"])
+
+        self.assertEqual(provider.calls, [(('a.py', 'b.py'), 2)])
+        paths, per_file = provider.calls[0]
+        self.assertLessEqual(len(paths) * per_file, 5)
+
+    def test_excessive_path_set_fails_before_provider_request(self) -> None:
+        provider = FakeDiagnosticsProvider()
+        evaluator = CodeDiagnosticsEvaluator(
+            provider,
+            settings=CodeDiagnosticsSettings(
+                max_diagnostics=10,
+                max_paths=2,
+            ),
+        )
+
+        with self.assertRaisesRegex(CodeIntelligenceError, "path request exceeds"):
+            evaluator.evaluate(["a.py", "b.py", "c.py"])
+        self.assertEqual(provider.calls, [])
+
+    def test_empty_path_set_does_not_call_provider(self) -> None:
+        provider = FakeDiagnosticsProvider()
+        result = CodeDiagnosticsEvaluator(provider).evaluate([])
+        self.assertTrue(result.passed)
+        self.assertEqual(result.diagnostics, ())
+        self.assertEqual(provider.calls, [])
 
     def test_unavailable_or_unsupported_provider_fails_explicitly(self) -> None:
         with self.assertRaisesRegex(CodeIntelligenceError, "unavailable"):
