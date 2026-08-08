@@ -49,6 +49,10 @@ class LspJsonRpcSession:
     buffered under a hard count limit. Server-to-client requests are rejected
     with JSON-RPC MethodNotFound until Origin Forge explicitly implements a
     safe handler for a specific method.
+
+    A request timeout makes the session terminal. Once response correlation is
+    uncertain, the owner must replace the session rather than risk consuming a
+    late response as evidence for a later request.
     """
 
     def __init__(
@@ -72,6 +76,7 @@ class LspJsonRpcSession:
         self._notification_lock = threading.Lock()
         self._write_lock = threading.Lock()
         self._request_lock = threading.Lock()
+        self._fatal_lock = threading.Lock()
         self._next_id = 1
         self._closed = False
         self._fatal: BaseException | None = None
@@ -81,6 +86,10 @@ class LspJsonRpcSession:
             daemon=True,
         )
         self._reader_thread.start()
+
+    def _fatal_error(self) -> BaseException | None:
+        with self._fatal_lock:
+            return self._fatal
 
     def _write_message(self, payload: dict) -> None:
         if self._closed:
@@ -97,9 +106,16 @@ class LspJsonRpcSession:
                 raise LspSessionClosed(f"cannot write LSP message: {exc}") from exc
 
     def _set_fatal(self, error: BaseException) -> None:
-        if self._fatal is None:
+        with self._fatal_lock:
+            if self._fatal is not None:
+                return
             self._fatal = error
-            self._responses.put(_Failure(error))
+        self._responses.put(_Failure(error))
+
+    def _raise_if_fatal(self) -> None:
+        error = self._fatal_error()
+        if error is not None:
+            raise error
 
     def _reject_server_request(self, message: dict) -> None:
         request_id = message.get("id")
@@ -158,10 +174,10 @@ class LspJsonRpcSession:
             raise ValueError("LSP request method may not be empty")
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
-        if self._fatal is not None:
-            raise self._fatal
+        self._raise_if_fatal()
 
         with self._request_lock:
+            self._raise_if_fatal()
             request_id = self._next_id
             self._next_id += 1
             payload: dict = {
@@ -177,15 +193,15 @@ class LspJsonRpcSession:
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise LspRequestTimeout(
-                        f"LSP request timed out: {method}"
-                    )
+                    error = LspRequestTimeout(f"LSP request timed out: {method}")
+                    self._set_fatal(error)
+                    raise error
                 try:
                     response = self._responses.get(timeout=remaining)
                 except queue.Empty as exc:
-                    raise LspRequestTimeout(
-                        f"LSP request timed out: {method}"
-                    ) from exc
+                    error = LspRequestTimeout(f"LSP request timed out: {method}")
+                    self._set_fatal(error)
+                    raise error from exc
                 if isinstance(response, _Failure):
                     raise response.error
                 if response.get("id") != request_id:
@@ -208,6 +224,7 @@ class LspJsonRpcSession:
     def notify(self, method: str, params: object | None = None) -> None:
         if not method:
             raise ValueError("LSP notification method may not be empty")
+        self._raise_if_fatal()
         payload: dict = {"jsonrpc": "2.0", "method": method}
         if params is not None:
             payload["params"] = params
