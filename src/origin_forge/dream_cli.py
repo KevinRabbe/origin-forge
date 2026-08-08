@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .dream_cycle import DreamCycleService
 from .dream_generation import DreamGenerationBuilder
 from .dream_models import DreamBudget
 from .dream_planner import DreamPlanningCoordinator
@@ -11,28 +12,51 @@ from .dream_store import DreamStore
 from .runtime import OriginForgeRuntime
 
 
+def _add_plan_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--run", action="append", required=True, dest="run_ids")
+    parser.add_argument("--parent-generation")
+    parser.add_argument("--window-start")
+    parser.add_argument("--window-end")
+    parser.add_argument("--max-runs", type=int, default=100)
+    parser.add_argument("--max-evidence-bytes", type=int, default=4 * 1024 * 1024)
+    parser.add_argument("--max-candidates", type=int, default=128)
+
+
+def _budget(args) -> DreamBudget:
+    return DreamBudget(
+        max_runs=args.max_runs,
+        max_total_evidence_bytes=args.max_evidence_bytes,
+        max_candidates=args.max_candidates,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m origin_forge.dream_cli",
         description=(
-            "Plan and inspect proposal-only offline Dream consolidation. "
-            "This CLI does not promote memory, modify Skills/policy/source, or run a generative Dream model."
+            "Run, plan, and inspect proposal-only offline Dream consolidation. "
+            "This CLI does not promote memory, modify Skills/policy/source, or invoke a generative Dream model."
         ),
     )
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     commands = parser.add_subparsers(dest="command", required=True)
 
+    commands.add_parser(
+        "status",
+        help="show Dream catalogs and durable Dream Run status without invoking a model",
+    )
+
     plan = commands.add_parser(
         "plan",
         help="freeze completed Run evidence and persist deterministic proposal-only Dream findings",
     )
-    plan.add_argument("--run", action="append", required=True, dest="run_ids")
-    plan.add_argument("--parent-generation")
-    plan.add_argument("--window-start")
-    plan.add_argument("--window-end")
-    plan.add_argument("--max-runs", type=int, default=100)
-    plan.add_argument("--max-evidence-bytes", type=int, default=4 * 1024 * 1024)
-    plan.add_argument("--max-candidates", type=int, default=128)
+    _add_plan_arguments(plan)
+
+    run = commands.add_parser(
+        "run",
+        help="execute one durable deterministic proposal-only Dream Cycle",
+    )
+    _add_plan_arguments(run)
 
     commands.add_parser("manifest-list", help="list stored immutable Dream input manifests")
     manifest_show = commands.add_parser("manifest-show", help="show one stored Dream input manifest")
@@ -65,22 +89,48 @@ def _print(value: object) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True))
 
 
+def _run_summary(runtime: OriginForgeRuntime) -> list[dict[str, object]]:
+    return [
+        {
+            "run_id": row["id"],
+            "task_id": row["task_id"],
+            "role": row["role"],
+            "status": row["status"],
+            "model_profile": row["model_profile"],
+            "started_at": row["started_at"],
+            "ended_at": row["ended_at"],
+        }
+        for row in runtime.list_runs()
+        if row["role"] in {DreamCycleService.RUN_ROLE, "DREAM_ANALYZER"}
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     runtime = OriginForgeRuntime(args.project_root)
     store = DreamStore(runtime)
 
     try:
-        if args.command == "plan":
-            budget = DreamBudget(
-                max_runs=args.max_runs,
-                max_total_evidence_bytes=args.max_evidence_bytes,
-                max_candidates=args.max_candidates,
+        if args.command == "status":
+            _print(
+                {
+                    "manifests": len(store.list_manifest_ids()),
+                    "candidates": len(store.list_candidate_ids()),
+                    "audits": len(store.list_audit_ids()),
+                    "memory_entries": len(store.list_memory_entry_ids()),
+                    "memory_generations": len(store.list_generation_ids()),
+                    "dream_runs": _run_summary(runtime),
+                    "generative_model_cli_enabled": False,
+                    "automatic_memory_generation_enabled": False,
+                }
             )
+            return 0
+
+        if args.command == "plan":
             result = DreamPlanningCoordinator(runtime, store).plan(
                 args.run_ids,
                 parent_generation_id=args.parent_generation,
-                budget=budget,
+                budget=_budget(args),
                 window_start=args.window_start,
                 window_end=args.window_end,
             )
@@ -98,6 +148,17 @@ def main(argv: list[str] | None = None) -> int:
                     "model_invoked": False,
                 }
             )
+            return 0
+
+        if args.command == "run":
+            result = DreamCycleService(runtime, store).run(
+                args.run_ids,
+                parent_generation_id=args.parent_generation,
+                budget=_budget(args),
+                window_start=args.window_start,
+                window_end=args.window_end,
+            )
+            _print(result.to_dict())
             return 0
 
         if args.command == "manifest-list":
