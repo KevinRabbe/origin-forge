@@ -46,14 +46,16 @@ class DreamCliTests(unittest.TestCase):
             code = main(["--project-root", str(self.root), *args])
         return code, json.loads(output.getvalue())
 
-    def test_cli_surface_has_no_promotion_model_or_mutation_command(self) -> None:
+    def test_cli_surface_has_durable_run_but_no_promotion_model_or_mutation_command(self) -> None:
         parser = build_parser()
         subparsers = [
             action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
         ]
         self.assertEqual(len(subparsers), 1)
         commands = set(subparsers[0].choices)
+        self.assertIn("status", commands)
         self.assertIn("plan", commands)
+        self.assertIn("run", commands)
         self.assertIn("active-memory", commands)
         for forbidden in (
             "approve",
@@ -61,12 +63,29 @@ class DreamCliTests(unittest.TestCase):
             "apply",
             "merge",
             "model-run",
+            "run-model",
             "generate",
             "skill-update",
             "policy-update",
             "generation-create",
         ):
             self.assertNotIn(forbidden, commands)
+
+    def test_status_is_non_generative_and_reports_only_dream_runs(self) -> None:
+        ordinary = self._completed_failed_run()
+        before_runs = len(self.runtime.list_runs())
+        code, payload = self._call("status")
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["manifests"], 0)
+        self.assertEqual(payload["candidates"], 0)
+        self.assertEqual(payload["audits"], 0)
+        self.assertEqual(payload["memory_entries"], 0)
+        self.assertEqual(payload["memory_generations"], 0)
+        self.assertEqual(payload["dream_runs"], [])
+        self.assertFalse(payload["generative_model_cli_enabled"])
+        self.assertFalse(payload["automatic_memory_generation_enabled"])
+        self.assertEqual(len(self.runtime.list_runs()), before_runs)
+        self.assertIn(ordinary, [item["id"] for item in self.runtime.list_runs()])
 
     def test_plan_completed_run_persists_manifest_without_generation_or_model(self) -> None:
         run = self._completed_failed_run()
@@ -93,6 +112,35 @@ class DreamCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(generations["generations"], [])
 
+    def test_run_completed_evidence_creates_closed_durable_dream_cycle_only(self) -> None:
+        evidence_run = self._completed_failed_run()
+        code, payload = self._call("run", "--run", evidence_run)
+        self.assertEqual(code, 0)
+        self.assertTrue(payload["goal_id"].startswith("GOAL-"))
+        self.assertTrue(payload["flow_id"].startswith("FLOW-"))
+        self.assertTrue(payload["task_id"].startswith("TASK-"))
+        self.assertTrue(payload["run_id"].startswith("RUN-"))
+        self.assertTrue(payload["verification_id"].startswith("VERIFY-"))
+        self.assertTrue(payload["manifest_id"].startswith("DREAMIN-"))
+        self.assertFalse(payload["model_invoked"])
+        self.assertFalse(payload["memory_generation_created"])
+        self.assertEqual(self.runtime.get_run(payload["run_id"])["status"], RunStatus.SUCCEEDED.value)
+
+        code, status = self._call("status")
+        self.assertEqual(code, 0)
+        self.assertEqual(status["manifests"], 1)
+        self.assertEqual(len(status["dream_runs"]), 1)
+        self.assertEqual(status["dream_runs"][0]["run_id"], payload["run_id"])
+        self.assertEqual(status["dream_runs"][0]["role"], "DREAM_CYCLE")
+        self.assertEqual(status["dream_runs"][0]["status"], RunStatus.SUCCEEDED.value)
+        self.assertIsNone(status["dream_runs"][0]["model_profile"])
+        self.assertFalse(status["generative_model_cli_enabled"])
+        self.assertFalse(status["automatic_memory_generation_enabled"])
+
+        code, generations = self._call("generation-list")
+        self.assertEqual(code, 0)
+        self.assertEqual(generations["generations"], [])
+
     def test_plan_active_run_returns_structured_failure_and_persists_nothing(self) -> None:
         goal = self.runtime.create_goal("Active")
         flow = self.runtime.create_flow(goal)
@@ -105,6 +153,25 @@ class DreamCliTests(unittest.TestCase):
         code, payload = self._call("plan", "--run", run)
         self.assertEqual(code, 2)
         self.assertIn("RUN is still active", payload["detail"])
+        _, listed = self._call("manifest-list")
+        self.assertEqual(listed["manifests"], [])
+
+    def test_run_active_evidence_returns_structured_failure_and_closes_dream_run(self) -> None:
+        goal = self.runtime.create_goal("Active")
+        flow = self.runtime.create_flow(goal)
+        self.runtime.transition_flow(flow, FlowStatus.RUNNING, expected_revision=0)
+        task = self.runtime.create_task(flow, "Active task")
+        revision = self.runtime.transition_task(task, TaskStatus.READY, expected_revision=0)
+        self.runtime.transition_task(task, TaskStatus.RUNNING, expected_revision=revision)
+        run = self.runtime.start_run(task, role="EXECUTOR")
+
+        code, payload = self._call("run", "--run", run)
+        self.assertEqual(code, 2)
+        self.assertIn("RUN is still active", payload["detail"])
+        _, status = self._call("status")
+        self.assertEqual(len(status["dream_runs"]), 1)
+        self.assertEqual(status["dream_runs"][0]["role"], "DREAM_CYCLE")
+        self.assertEqual(status["dream_runs"][0]["status"], RunStatus.FAILED.value)
         _, listed = self._call("manifest-list")
         self.assertEqual(listed["manifests"], [])
 
