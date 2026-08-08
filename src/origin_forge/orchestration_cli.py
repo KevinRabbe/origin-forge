@@ -26,6 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="seed_files",
         help="force a file into automatic context selection; requires --auto-context",
     )
+    parser.add_argument(
+        "--structural-context",
+        action="store_true",
+        help="expand selected context with bounded Python structural relationships",
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--model", default="local-model")
     parser.add_argument("--api-key", default="no-key")
@@ -59,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         selected_paths=args.files,
         auto_context=args.auto_context,
         context_seed_paths=args.seed_files,
+        structural_context=args.structural_context,
         model_profile=args.model,
     )
     print(json.dumps(asdict(result), indent=2, sort_keys=True, default=str))
