@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -46,6 +47,7 @@ class PortablePathPolicyTests(unittest.TestCase):
         self.assertFalse(is_protected_root("origin-forge"))
 
     def test_portable_paths_reject_host_dependent_syntax(self) -> None:
+        non_nfc = unicodedata.normalize("NFD", "é") + ".py"
         rejected = (
             r"src\file.py",
             "C:/Windows/system.ini",
@@ -57,6 +59,15 @@ class PortablePathPolicyTests(unittest.TestCase):
             "src//file.py",
             ".GIT/config",
             ".Origin-Forge/config.toml",
+            "src/file.py:metadata",
+            "NUL.txt",
+            "con",
+            "COM1.log",
+            "lpt9",
+            "src/bad?.py",
+            "src/trailing.",
+            "src/trailing ",
+            f"src/{non_nfc}",
         )
         for raw in rejected:
             with self.subTest(raw=raw), self.assertRaises(ValueError):
@@ -67,6 +78,10 @@ class PortablePathPolicyTests(unittest.TestCase):
             portable_path_key("Src/Widget.py"),
             portable_path_key("src/widget.py"),
         )
+
+    def test_normal_nfc_unicode_path_is_accepted(self) -> None:
+        path = portable_relative_path("src/Grüße-猫.py")
+        self.assertEqual(path.as_posix(), "src/Grüße-猫.py")
 
 
 class RepositoryPathSecurityTests(unittest.TestCase):
@@ -81,7 +96,13 @@ class RepositoryPathSecurityTests(unittest.TestCase):
     def test_repository_reader_rejects_windows_syntax_on_linux_too(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             reader = RepositoryReader(temp)
-            for raw in (r"src\file.py", "C:/outside.py", "C:relative.py"):
+            for raw in (
+                r"src\file.py",
+                "C:/outside.py",
+                "C:relative.py",
+                "src/file.py:metadata",
+                "NUL.txt",
+            ):
                 with self.subTest(raw=raw), self.assertRaises(RepositoryAccessError):
                     reader.exists(raw)
 
@@ -119,7 +140,14 @@ class PatchPathSecurityTests(unittest.TestCase):
                 parse_patch_proposal(create_proposal(raw))
 
     def test_parser_rejects_nonportable_path_syntax(self) -> None:
-        for raw in (r"src\file.py", "C:/outside.py", "src/../file.py", "src//file.py"):
+        for raw in (
+            r"src\file.py",
+            "C:/outside.py",
+            "src/../file.py",
+            "src//file.py",
+            "src/file.py:metadata",
+            "NUL.txt",
+        ):
             with self.subTest(raw=raw), self.assertRaises(PatchValidationError):
                 parse_patch_proposal(create_proposal(raw))
 
