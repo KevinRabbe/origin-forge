@@ -136,11 +136,14 @@ class SkillRegistry:
         *,
         root: str | Path | None = None,
         max_skill_bytes: int = 64 * 1024,
+        max_catalog_skills: int = 256,
         max_selected_skills: int = 3,
         max_selected_instruction_bytes: int = 96 * 1024,
     ):
         if max_skill_bytes <= 0:
             raise ValueError("max_skill_bytes must be positive")
+        if max_catalog_skills <= 0:
+            raise ValueError("max_catalog_skills must be positive")
         if max_selected_skills <= 0:
             raise ValueError("max_selected_skills must be positive")
         if max_selected_instruction_bytes <= 0:
@@ -156,6 +159,7 @@ class SkillRegistry:
         except ValueError as exc:
             raise SkillFormatError("Skill registry root must stay inside .origin-forge") from exc
         self.max_skill_bytes = max_skill_bytes
+        self.max_catalog_skills = max_catalog_skills
         self.max_selected_skills = max_selected_skills
         self.max_selected_instruction_bytes = max_selected_instruction_bytes
 
@@ -184,17 +188,14 @@ class SkillRegistry:
         if path.is_symlink():
             raise SkillFormatError(f"Skill file may not be a symlink: {path.name}")
         try:
-            size = path.stat().st_size
-        except OSError as exc:
-            raise SkillFormatError(f"cannot stat Skill file {path.name}: {exc}") from exc
-        if size > max_bytes:
-            raise SkillBudgetExceeded(
-                f"Skill file {path.name} exceeds limit ({size} > {max_bytes} bytes)"
-            )
-        try:
-            data = path.read_bytes()
+            with path.open("rb") as handle:
+                data = handle.read(max_bytes + 1)
         except OSError as exc:
             raise SkillFormatError(f"cannot read Skill file {path.name}: {exc}") from exc
+        if len(data) > max_bytes:
+            raise SkillBudgetExceeded(
+                f"Skill file {path.name} exceeds limit ({len(data)} > {max_bytes} bytes)"
+            )
         try:
             return data.decode("utf-8"), data
         except UnicodeDecodeError as exc:
@@ -265,16 +266,20 @@ class SkillRegistry:
         resolved = self._skill_dir(name)
         if resolved != directory.resolve() or not resolved.is_dir():
             raise SkillFormatError(f"invalid Skill directory: {name}")
-        entries = {item.name for item in resolved.iterdir()}
         required = {"SKILL.md", "skill.toml"}
+        entries: set[str] = set()
+        try:
+            for item in resolved.iterdir():
+                if item.name not in required:
+                    raise SkillFormatError(
+                        f"Skill {name} contains unsupported Phase-9 content: {item.name}"
+                    )
+                entries.add(item.name)
+        except OSError as exc:
+            raise SkillFormatError(f"cannot enumerate Skill {name}: {exc}") from exc
         missing = required - entries
         if missing:
             raise SkillFormatError(f"Skill {name} is missing: {', '.join(sorted(missing))}")
-        extra = entries - required
-        if extra:
-            raise SkillFormatError(
-                f"Skill {name} contains unsupported Phase-9 content: {', '.join(sorted(extra))}"
-            )
 
         skill_text, skill_bytes = self._read_utf8(resolved / "SKILL.md", max_bytes=self.max_skill_bytes)
         toml_text, toml_bytes = self._read_utf8(resolved / "skill.toml", max_bytes=16 * 1024)
@@ -314,16 +319,25 @@ class SkillRegistry:
         root = self._validated_root()
         if not root.exists():
             return ()
-        skills: list[Skill] = []
-        for directory in sorted(root.iterdir(), key=lambda item: item.name):
-            if directory.name.startswith("."):
-                continue
-            if not directory.is_dir() or directory.is_symlink():
-                raise SkillFormatError(
-                    f"Skill registry contains unsupported entry: {directory.name}"
-                )
-            skills.append(self._load_from_dir(directory))
-        return tuple(skills)
+        directories: list[Path] = []
+        try:
+            for directory in root.iterdir():
+                if directory.name.startswith("."):
+                    continue
+                if not directory.is_dir() or directory.is_symlink():
+                    raise SkillFormatError(
+                        f"Skill registry contains unsupported entry: {directory.name}"
+                    )
+                if len(directories) >= self.max_catalog_skills:
+                    raise SkillBudgetExceeded(
+                        "Skill catalog exceeds count limit "
+                        f"({len(directories) + 1} > {self.max_catalog_skills})"
+                    )
+                directories.append(directory)
+        except OSError as exc:
+            raise SkillFormatError(f"cannot enumerate Skill registry: {exc}") from exc
+        directories.sort(key=lambda item: item.name)
+        return tuple(self._load_from_dir(directory) for directory in directories)
 
     def catalog(self) -> tuple[SkillMetadata, ...]:
         return tuple(skill.metadata for skill in self._loaded_catalog())
