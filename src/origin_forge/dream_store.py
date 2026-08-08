@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Callable, Iterable, TypeVar
@@ -416,13 +417,29 @@ class DreamStore:
         ).encode("utf-8")
 
     @staticmethod
-    def _atomic_write(path: Path, data: bytes) -> None:
+    def _atomic_write(path: Path, data: bytes) -> bool:
+        """Publish fully-written bytes without ever replacing an existing object.
+
+        Returns True when this writer created the target and False when another
+        writer already published that target name. The caller must compare a
+        racing winner's bytes before treating the operation as idempotent.
+        """
+
         temp = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
             with temp.open("xb") as handle:
                 handle.write(data)
                 handle.flush()
-            temp.replace(path)
+                os.fsync(handle.fileno())
+            try:
+                os.link(temp, path)
+            except FileExistsError:
+                return False
+            except OSError as exc:
+                raise DreamStoreError(
+                    f"unable to atomically publish Dream object: {path.name}"
+                ) from exc
+            return True
         finally:
             temp.unlink(missing_ok=True)
 
@@ -523,7 +540,10 @@ class DreamStore:
             raise DreamStoreError(
                 f"{label} catalog exceeds limit ({maximum_count + 1} > {maximum_count})"
             )
-        self._atomic_write(path, data)
+        if not self._atomic_write(path, data):
+            current = self._bounded_read(path, maximum_bytes, label)
+            if current != data:
+                raise DreamStoreError(f"{label} ID is immutable and already exists: {object_id}")
         return path
 
     def _load(
