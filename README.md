@@ -41,13 +41,13 @@ Versioned product
 
 ## Current status
 
-Origin Forge is in **Phase 5 — Podman Sandbox Backend**.
+Origin Forge is in **Phase 6 — Snapshot-First Bounded Orchestration**.
 
-Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implements the first real backend behind that contract using Podman.
+Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implemented the first real sandbox backend using Podman. Phase 6 now connects those components into a single bounded coding attempt.
 
-The Podman backend resolves an explicitly configured local image to its local image ID, uses no automatic pulls, defaults network access off, applies resource and privilege restrictions, and runs only project-approved structured commands against a disposable copy of the audited Workspace. The audited Git worktree itself is not mounted into the container.
+The Phase-6 Manager creates the isolated Git Workspace **before** the model sees repository content. Context, SHA-256 proposal preconditions, deterministic application, audit, and sandbox verification therefore all operate on one Git snapshot rather than the user's potentially dirty live checkout.
 
-There is still **no arbitrary shell command surface and no automatic merge**. `sandbox verify` can execute only the required commands already declared in project configuration.
+A successful attempt still does **not** merge anything. The verified change remains isolated. There is no arbitrary shell surface, no automatic retry loop, no automatic context discovery, and no model-controlled merge authority.
 
 ## Documentation
 
@@ -58,6 +58,7 @@ There is still **no arbitrary shell command surface and no automatic merge**. `s
 - [Phase 3 Isolation Notes](docs/phase-3-notes.md)
 - [Phase 4 Sandbox Notes](docs/phase-4-notes.md)
 - [Phase 5 Podman Sandbox Notes](docs/phase-5-notes.md)
+- [Phase 6 Bounded Orchestration Notes](docs/phase-6-notes.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
@@ -74,6 +75,7 @@ The implementation currently uses or targets:
 - llama.cpp-compatible local inference
 - Podman as the first real sandbox backend for executing AI-modified code
 - replaceable sandbox backends behind a common verification contract
+- snapshot-first bounded orchestration for the first complete coding attempt
 - ripgrep + Tree-sitter + LSP for code intelligence
 - Pixelorama for 2D production
 - Blockbench for 3D production
