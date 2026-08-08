@@ -14,12 +14,15 @@ from .code_intelligence import (
 @dataclass(frozen=True)
 class CodeDiagnosticsSettings:
     max_diagnostics: int = 200
+    max_paths: int = 64
     max_message_chars: int = 2000
     fail_on_errors: bool = True
 
     def __post_init__(self) -> None:
         if self.max_diagnostics <= 0:
             raise ValueError("max_diagnostics must be positive")
+        if self.max_paths <= 0:
+            raise ValueError("max_paths must be positive")
         if self.max_message_chars <= 0:
             raise ValueError("max_message_chars must be positive")
 
@@ -71,10 +74,28 @@ class CodeDiagnosticsEvaluator:
             )
 
         unique_paths = tuple(dict.fromkeys(paths))
-        raw = self.provider.diagnostics(
-            unique_paths,
-            limit_per_file=self.settings.max_diagnostics,
-        )
+        path_budget = min(self.settings.max_paths, self.settings.max_diagnostics)
+        if len(unique_paths) > path_budget:
+            raise CodeIntelligenceError(
+                "diagnostic path request exceeds bounded evaluator limit "
+                f"({len(unique_paths)} > {path_budget})"
+            )
+
+        if unique_paths:
+            # Bound the provider request itself, not merely the final evidence
+            # slice. Because path count is capped at max_diagnostics, this
+            # guarantees limit_per_file * path_count <= max_diagnostics.
+            limit_per_file = max(
+                1,
+                self.settings.max_diagnostics // len(unique_paths),
+            )
+            raw = self.provider.diagnostics(
+                unique_paths,
+                limit_per_file=limit_per_file,
+            )
+        else:
+            raw = ()
+
         ordered = sorted(
             raw,
             key=lambda item: (
