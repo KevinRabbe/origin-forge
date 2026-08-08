@@ -171,6 +171,34 @@ class CodeIntelligenceContextTests(unittest.TestCase):
         ).expand(self.task, ["src/service.py"])
         self.assertNotIn("secret.py", result.paths)
 
+    def test_literal_git_pathspec_does_not_widen_wildcard_like_filename(self) -> None:
+        literal = self.root / "src" / "payment[1].py"
+        sibling = self.root / "src" / "payment1.py"
+        literal.write_text("class PaymentCoordinator: pass\n", encoding="utf-8")
+        sibling.write_text("class Other: pass\n", encoding="utf-8")
+        git(self.root, "add", "src/payment[1].py", "src/payment1.py")
+        git(self.root, "commit", "-qm", "literal pathspec fixtures")
+
+        provider = FakeProvider(
+            {
+                "payment": (
+                    CodeSymbol(
+                        "PaymentCoordinator",
+                        SymbolKind.CLASS,
+                        location("src/payment[1].py"),
+                    ),
+                )
+            }
+        )
+        result = CodeIntelligenceContextExpander(
+            self.runtime,
+            self.reader,
+            provider,
+        ).expand(self.task, ["src/service.py"])
+
+        self.assertIn("src/payment[1].py", result.paths)
+        self.assertNotIn("src/payment1.py", result.paths)
+
     def test_query_and_file_budgets_are_hard(self) -> None:
         provider = FakeProvider(
             {
@@ -202,6 +230,21 @@ class CodeIntelligenceContextTests(unittest.TestCase):
         self.assertEqual(len(provider.queries), 1)
         self.assertEqual(provider.queries[0][1], 1)
         self.assertLessEqual(len(result.paths), 2)
+
+    def test_tracked_path_output_budget_is_hard(self) -> None:
+        provider = FakeProvider({})
+        with self.assertRaisesRegex(
+            CodeIntelligenceContextError,
+            "output exceeds byte limit",
+        ):
+            CodeIntelligenceContextExpander(
+                self.runtime,
+                self.reader,
+                provider,
+                settings=CodeIntelligenceContextSettings(
+                    max_git_output_bytes=4,
+                ),
+            ).expand(self.task, ["src/service.py"])
 
     def test_unavailable_provider_fails_explicitly(self) -> None:
         provider = FakeProvider({}, available=False)
