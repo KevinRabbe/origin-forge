@@ -174,7 +174,7 @@ class PodmanBackendTests(unittest.TestCase):
         self.assertIn("--ignore", argv)
         self.assertIn("--time", argv)
         self.assertIn("0", argv)
-        self.assertIn("--cidfile", " ".join(argv))
+        self.assertIn(f"--cidfile={cidfile}", argv)
 
 
 if __name__ == "__main__":
