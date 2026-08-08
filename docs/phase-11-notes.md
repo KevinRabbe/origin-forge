@@ -4,6 +4,19 @@ Status: **stacked development branch; depends on Phase 10**
 
 Phase 11 extends Origin Forge from lexical/structural context selection into a provider-neutral code-intelligence layer while keeping code intelligence as evidence rather than authority.
 
+## Inherited stack
+
+Phase 11 is validated as the top of the current dependency chain, not as an isolated feature branch:
+
+```text
+hardened main
+→ Phase 9 governed Skills
+→ Phase 10 shared structural context
+→ Phase 11 code intelligence / sandboxed LSP
+```
+
+It inherits the portable repository-path policy, governed Skill authority boundary, snapshot-first Workspace selection, and fresh-retry context semantics. Phase 11 may enrich evidence, but it does not replace any of those lower-layer controls.
+
 ## Design rule
 
 A language server, parser, or static analyzer may report symbols, definitions, references, and diagnostics. It does not receive permission to mutate project state, change policy, merge work, decide Task completion, or bypass compiler/test/runtime verification.
