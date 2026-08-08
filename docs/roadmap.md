@@ -1,12 +1,14 @@
 # Origin Forge Roadmap
 
-Status: **Current baseline**
+Status: **Implementation baseline aligned with repository history**
 
-The roadmap is ordered to prove dependable infrastructure before expanding autonomy or media production.
+This roadmap uses the phase numbers that actually exist in the repository. Earlier planning documents described several capabilities under different phase numbers; this file is now the canonical execution order.
 
-## Phase 0 — Specification and Foundations
+The ordering rule is unchanged: prove durable, reversible, independently verified infrastructure before expanding autonomy or media production.
 
-Define before implementation:
+## Phase 0 — Specification and Foundations — DONE
+
+Defined:
 
 - architectural laws
 - core object model
@@ -15,153 +17,242 @@ Define before implementation:
 - authority/security model
 - company-root provenance design
 - project layout
-- tool contract
-- model-profile contract
+- tool/model contracts
 - execution lifecycle
 
-Exit condition:
+Exit condition met: the durable runtime could be implemented without inventing its fundamental semantics during coding.
 
-> A sufficiently precise implementation specification exists that the durable runtime can be built without inventing core semantics while coding.
+## Phase 1 — Durable Runtime — DONE
 
-## Phase 1 — Durable Runtime
+Implemented:
 
-Implement structured persistent state for:
+- SQLite durable state
+- Goal / Flow / Task / Run lifecycle
+- Decision / Change / Artifact / Verification lineage
+- schema migrations
+- optimistic revisions
+- event journal
+- restart recovery
+- verification-gated completion
 
-- Goal
-- Flow
-- Task
-- Decision
-- Change
-- Artifact
-- Verification
-- Run
+Exit condition met: work survives process restart without conversational memory.
+
+## Phase 2 — Bounded Local Worker — DONE
+
+Implemented:
+
+- replaceable local model adapter
+- llama.cpp-compatible local HTTP adapter
+- bounded read-only repository context
+- protected project state
+- content hashes
+- structured PatchProposal output
+- proposal-only worker
+- model response/context/proposal provenance
+
+Exit condition met: a local model can produce a bounded, hash-preconditioned patch proposal without receiving write authority.
+
+## Phase 3 — Isolated Apply and Audit — DONE
+
+Implemented:
+
+- durable Git worktrees
+- deterministic patch application
+- rollback/cleanup
+- persisted Git diff evidence
+- independent content audit
+- proposal artifact integrity checks
+- workspace recovery
+
+Exit condition met: model-generated mutations occur only inside disposable isolated workspaces and are independently audited.
+
+## Phase 4 — Sandboxed Verification Contract — DONE
+
+Implemented:
+
+- `CREATED → APPLIED → AUDITED → VERIFIED` semantics
+- structured approved command specs
+- backend-neutral sandbox contract
+- explicit isolation guarantees
+- required build/test verification
+- blocked-vs-failed infrastructure semantics
+
+Exit condition met: AI-modified code cannot become VERIFIED without acceptable isolated execution evidence.
+
+## Phase 5 — Podman Sandbox Backend — DONE
+
+Implemented:
+
+- Podman backend behind the sandbox contract
+- local content-addressed image resolution
+- no automatic image pulls
+- disposable workspace copies
+- network-off default
+- capability dropping / no-new-privileges
+- memory/CPU/PID bounds
+- bounded stdout/stderr
+- timeout/container cleanup
+
+Exit condition met: required approved commands can execute in a real constrained sandbox without mounting the authoritative worktree writable.
+
+## Phase 6 — Snapshot-First Bounded Orchestration — DONE
+
+Implemented the first complete single-attempt production loop:
+
+```text
+READY Task
+→ isolated Git snapshot
+→ bounded Executor
+→ Patch Proposal
+→ deterministic apply
+→ independent audit
+→ sandbox verification
+→ Task PASS
+```
+
+The Workspace is created before repository context is read, so the model and applier operate on the same immutable base snapshot.
+
+Exit condition met: one bounded coding attempt can complete end-to-end without touching the user's main working tree.
+
+## Phase 7 — Bounded Retry, Resume, Loop Detection and Model Escalation — DONE
+
+Implemented:
+
+- durable retry accounting
+- independent verification-failure budgets
+- deterministic model escalation
+- exact repeated-proposal loop detection
+- resume from CREATED / APPLIED / AUDITED / VERIFIED checkpoints
+- quarantine semantics
+- infrastructure-failure boundedness
+
+Exit condition met: recovery and retries are explicit bounded policy rather than an endless agent loop.
+
+## Phase 8 — Deterministic Context Discovery — DONE
+
+Implemented:
+
+- tracked-file discovery inside the isolated Workspace
+- UTF-8/text and symlink safety
+- hard scan/selection budgets
+- deterministic Task-term ranking
+- explicit seed files
+- manual vs automatic context modes
+- no arbitrary fallback context
+- dirty-live-checkout isolation
+
+Exit condition met: a bounded Executor can receive automatically selected task-relevant context without model-controlled filesystem search.
+
+## Phase 9 — Governed Skills — IN REVIEW
+
+Add instruction-only project Skills:
+
+```text
+.origin-forge/skills/<name>/
+├── SKILL.md
+└── skill.toml
+```
 
 Requirements:
 
-- SQLite
-- schema migrations
-- revisioned Flow mutation
-- restart recovery
-- explicit state transitions
-- appendable history
+- deterministic selection from durable Task evidence
+- progressive disclosure
+- semantic versions
+- SHA-256 fingerprints
+- Run/Artifact provenance
+- hard instruction/count budgets
+- fail-closed package containment
+- no executable Skill content yet
+- no new authority granted by a Skill
 
 Exit condition:
 
-> Create a multi-step Flow, kill/restart the process, and continue from exactly the persisted state without conversational memory.
+> The Executor sees full procedural instructions only for relevant Skills, while the exact Skill versions/fingerprints used by a Run remain reconstructable.
 
-## Phase 2 — Basic Local Coding Agent
+## Phase 10 — Structural Context Graph — IN REVIEW
 
-Add:
+Add deterministic structural context on top of Phase-8 lexical discovery:
 
-- local model adapter
-- filesystem read
-- controlled shell
-- Git inspection
-- patch application
-- bounded Task execution
+- Python AST index
+- definitions
+- direct imports
+- reverse importers
+- source ↔ test relationships
+- Task-symbol evidence
+- one-hop bounded expansion
+- shared `WorkspaceContextSelector`
 
-Exit condition:
-
-> Given a small coding Task, an Executor can inspect the repository and produce a valid isolated patch.
-
-## Phase 3 — Manager / Executor / Auditor
-
-Implement the long-horizon execution core:
+The selector composes:
 
 ```text
-Manager
-→ bounded Task contract
-→ fresh Executor
-→ independent Auditor
-→ verified state
+manual OR lexical auto-context
+        ↓
+optional structural expansion
+        ↓
+final bounded context
 ```
 
 Exit condition:
 
-> The system can complete several sequential Tasks using fresh Executor contexts while preserving only structured verified progress.
+> Both one-shot and retry orchestration can use one deterministic Workspace-local context-selection boundary, and structural relationships improve context without recursive repository dumping.
 
-## Phase 4 — Safe Execution
+## Phase 11 — LSP and General Code Intelligence — NEXT
 
-Add:
-
-- Git worktrees/task branches
-- checkpoints
-- rollback
-- authority matrix
-- permission enforcement
-- lifecycle hooks
-- loop/no-progress detection
-- bounded retries
-- quarantine/block states
-
-Exit condition:
-
-> A failing or maliciously confused Executor cannot damage known-good project state or silently expand its authority.
-
-## Phase 5 — Code Intelligence
+Extend structural intelligence beyond the Python-only AST baseline.
 
 Add:
 
-- ripgrep
-- Tree-sitter
-- Language Server Protocol
-- symbol index
-- definitions/references
+- code-intelligence provider interface
+- Language Server Protocol client
+- workspace symbols
+- go-to-definition
+- references
 - diagnostics
+- language-server capability detection
+- bounded/time-limited queries
+- optional Tree-sitter adapters where LSP is unavailable or too expensive
+- LSP diagnostics as verification evidence where appropriate
+
+The model should receive query results, not unrestricted control of a language server.
 
 Exit condition:
 
-> Repository understanding relies on structured symbol retrieval before broad file dumping, and LSP diagnostics participate in verification.
+> At least two supported language/tooling configurations can retrieve definitions/references/diagnostics through one bounded code-intelligence contract, and measured retrieval quality beats lexical-only context on selected benchmarks.
 
-## Phase 6 — Skill System
+## Phase 12 — Skill Evaluation
 
-Add:
-
-- Skill registry
-- `SKILL.md`
-- metadata/schema
-- versioning
-- dependencies
-- permissions
-- progressive disclosure
-- immutable historical versions
-
-Exit condition:
-
-> The Executor initially sees compact Skill metadata and loads full procedural knowledge only when relevant.
-
-## Phase 7 — Skill Evaluation
-
-Add:
+Add measurable Skill quality control:
 
 - Skill test cases
-- with-vs-without comparisons
+- with-vs-without Skill comparisons
+- blind old-vs-new comparisons where useful
 - regression evaluation
+- success-rate metrics
 - token/context metrics
-- success-rate tracking
+- model-call metrics
+- duration/resource metrics
 
 Exit condition:
 
-> Skill changes can be accepted or rejected using measured task outcomes rather than intuition.
+> A Skill version can be accepted or rejected using repeatable task outcomes rather than intuition.
 
-## Phase 8 — Context Manager
+## Phase 13 — Tool Registry and Tool Search
 
-Add:
+Formalize deterministic capabilities and progressive tool disclosure.
 
-- context budgets
-- relevant-state selection
-- Entity/Decision/Task retrieval
-- context compaction boundaries
-- durable-state promotion rules
-- fresh-session initialization
+Tool contract includes:
 
-Exit condition:
+- ID/name/version
+- input/output schema
+- permissions
+- side effects
+- deterministic flag
+- reversibility
+- resource requirements
+- timeout
+- verifier
 
-> A fresh Executor receives a compact task-specific context from a project with substantially more history than the model context window.
-
-## Phase 9 — Tool Search
-
-Add:
+Expose to models primarily through:
 
 ```text
 search_tools(query)
@@ -169,73 +260,76 @@ describe_tool(id)
 call_tool(id, args)
 ```
 
-Do not place the entire tool schema library in every context.
-
 Exit condition:
 
-> A model can reliably discover and use tools from a growing registry while only loading relevant schemas.
+> A model can reliably discover relevant tools from a growing registry without loading every schema into context.
 
-## Phase 10 — Model and Resource Scheduler
+## Phase 14 — Model and Resource Scheduler
 
 Add:
 
-- model profiles
+- empirical model profiles
 - capability routing
-- escalation policy
-- model load/unload
+- escalation policy integration
+- model load/unload lifecycle
 - VRAM/RAM accounting
 - CPU/GPU scheduling
+- incompatible-GPU-job serialization
 - task/model budgets
+- tokens/time/resource telemetry
 
 Exit condition:
 
-> Origin Forge can choose between at least two model profiles and serialize incompatible GPU workloads without losing task state.
+> Origin Forge can choose between at least two local model profiles and safely schedule incompatible GPU workloads without losing durable Task state.
 
-## Phase 11 — Isolated Specialist Roles
+## Phase 15 — Isolated Specialist Roles
 
-Introduce only roles that provide measurable value:
+Introduce only roles that measurably improve outcomes:
 
 - Reviewer
 - Researcher
 - Tester
-- Critic
+- Visual Critic
+
+Each role gets an isolated context and restricted capabilities.
 
 Exit condition:
 
-> Specialist contexts improve selected benchmarks without turning the system into an uncontrolled agent swarm.
+> Specialist isolation improves selected benchmarks without creating an uncontrolled agent swarm.
 
-## Phase 12 — Project Intelligence
+## Phase 16 — Project Intelligence
 
-Add:
+Add semantic product state:
 
 - Entity graph
 - Design Bible
 - dependency edges
+- implementation/artifact/test relationships
 - impact analysis
 - structured project rules
 
 Exit condition:
 
-> Origin Forge can reason about a feature/entity across multiple code and asset files and determine affected dependencies before modification.
+> Origin Forge can reason about a feature/entity across multiple files and media and identify affected dependencies before modification.
 
-## Phase 13 — Cryptographic Provenance
+## Phase 17 — Cryptographic Provenance
 
-Add:
+Build on the existing Artifact hashes and causal lineage:
 
-- Artifact IDs
-- content hashes
 - signed manifests
 - operational signing keys
-- model/Skill/Tool lineage
 - company-root identity hierarchy
+- model/Skill/Tool lineage
+- key rotation/revocation
+- release/build provenance
 
 Exit condition:
 
-> Every accepted Artifact can be traced to its Task, Run, model, Skill versions, tool versions, parent state, and Verification evidence.
+> Every accepted Artifact can be cryptographically traced to its Task, Run, parent state, model, Skills, tools and Verification evidence.
 
-## Phase 14 — Pixelorama Integration
+## Phase 18 — Pixelorama Integration
 
-Add 2D production:
+Add deterministic 2D production:
 
 - sprites
 - layers
@@ -248,11 +342,11 @@ Add 2D production:
 
 Exit condition:
 
-> A bounded Task can create/modify a 2D game asset, validate it, and register it as a provenance-tracked Artifact.
+> A bounded Task can create or modify a 2D game asset, validate it, and register it as a provenance-tracked Artifact.
 
-## Phase 15 — Blockbench Integration
+## Phase 19 — Blockbench Integration
 
-Add 3D production:
+Add structured 3D production:
 
 - geometry
 - hierarchy/bones
@@ -261,27 +355,27 @@ Add 3D production:
 - textures
 - animation
 - export
-- preview
+- previews
 
 Exit condition:
 
-> A bounded Task can create/modify and validate a structured 3D game asset through deterministic Blockbench-facing operations.
+> A bounded Task can create/modify and validate a structured 3D asset through deterministic Blockbench-facing operations.
 
-## Phase 16 — Image and Vision
+## Phase 20 — Image and Vision
 
 Add replaceable local adapters for:
 
-- image generation
-- image editing
-- visual references/textures
+- image generation/editing
+- concept/reference generation
+- textures/UI exploration
 - screenshot/asset inspection
 - visual critic
 
 Exit condition:
 
-> Generation and independent visual inspection can participate in a closed production/verification loop.
+> Generation and independent visual inspection participate in a closed production/verification loop.
 
-## Phase 17 — Audio
+## Phase 21 — Audio
 
 Add:
 
@@ -293,28 +387,28 @@ Add:
 
 Exit condition:
 
-> Origin Forge can create/process/validate a game audio Artifact from a structured Task.
+> Origin Forge can create, process, validate and provenance-track a game audio Artifact from a structured Task.
 
-## Phase 18 — Runtime Observation
+## Phase 22 — Runtime Observation
 
 Add:
 
-- launch/build automation
+- game/application launch automation
 - screenshots/video capture
 - log ingestion
 - crash detection
 - performance metrics
-- visual regressions
+- visual regression evidence
 
 Exit condition:
 
 > The Auditor can inspect actual runtime behavior rather than relying only on source-level evidence.
 
-## Phase 19 — Automated Playtesting
+## Phase 23 — Automated Playtesting
 
-Add synthetic players/bots and telemetry.
+Add synthetic players/bots and telemetry for suitable games.
 
-Target metrics may include:
+Potential metrics:
 
 - deaths
 - encounter duration
@@ -328,9 +422,9 @@ Exit condition:
 
 > Gameplay changes can be evaluated using repeatable runtime evidence.
 
-## Phase 20 — Simulation Layer
+## Phase 24 — Simulation Layer
 
-Add cheap pre-implementation simulation for suitable systems:
+Add cheap pre-implementation simulation for systems such as:
 
 - economy
 - loot
@@ -345,12 +439,12 @@ Exit condition:
 
 > At least one game-system design can be statistically evaluated before full implementation.
 
-## Phase 21 — Skill Workshop
+## Phase 25 — Skill Workshop
 
-Add governed improvement:
+Add governed operational learning:
 
 ```text
-observed pattern
+observed reusable pattern
 → Skill proposal
 → isolated evaluation
 → regression suite
@@ -358,21 +452,23 @@ observed pattern
 → new signed Skill version
 ```
 
-Exit condition:
-
-> Origin Forge can improve operational knowledge without allowing active agents to silently rewrite their own instructions.
-
-## Phase 22 — Code Mode Experiments
-
-Benchmark sandboxed model-written mini-workflows that combine multiple tool operations without returning to the model between every step.
-
-This phase is experimental and model-dependent.
+Active agents may propose but never silently replace their own governing Skills.
 
 Exit condition:
 
-> Enable only if measured reliability/cost beats ordinary structured tool use for specific model profiles.
+> Origin Forge can improve procedural knowledge while preserving review, provenance and rollback.
 
-## Phase 23 — Cross-Media Watermarking
+## Phase 26 — Code Mode Experiments
+
+Benchmark sandboxed model-written mini-workflows that combine multiple tool operations without returning to the model between every operation.
+
+This remains model-dependent and optional.
+
+Exit condition:
+
+> Enable only for model/task profiles where measured reliability or cost is better than ordinary structured tool calls.
+
+## Phase 27 — Cross-Media Watermarking
 
 Develop watermark/fingerprint adapters for:
 
@@ -381,15 +477,15 @@ Develop watermark/fingerprint adapters for:
 - audio
 - 3D assets
 
-All watermarks link back to the permanent company provenance identity.
+Watermarks complement cryptographic manifests; they never become the sole proof of origin.
 
 Exit condition:
 
-> At least one robust watermark scheme complements cryptographic manifests without making watermarking the sole proof of origin.
+> At least one robust media watermark can be resolved back to the permanent company provenance identity.
 
-## Phase 24 — Training / Fine-Tuning Research
+## Phase 28 — Training / Fine-Tuning Research
 
-Only after enough verified trajectories exist, investigate:
+Only after a substantial verified trajectory dataset exists, investigate:
 
 - routing models
 - specialized tool-use models
@@ -400,9 +496,9 @@ Exit condition:
 
 > Training is justified by measured evidence that software-level improvements alone have reached a meaningful limit.
 
-## Phase 25 — Full Production Interface
+## Phase 29 — Full Production Interface
 
-Build a polished visual interface around the proven runtime.
+Build the polished visual environment around proven infrastructure.
 
 Potential surfaces:
 
@@ -412,59 +508,56 @@ Potential surfaces:
 - Artifact previews
 - verification evidence
 - provenance inspector
-- resource/model monitor
-- "why does this exist?" history
+- model/resource monitor
+- `why does this exist?` history
 
-The UI comes late so early architecture is not distorted around a premature frontend.
+The UI stays late so early architecture is not distorted around a premature frontend.
 
 ---
 
 # v0.1 — First Useful Release
 
-The first genuinely useful release should do one thing exceptionally well:
-
-> Given a real software Task, autonomously inspect a repository, select relevant context, modify code in an isolated workspace, compile/test it, recover from bounded failures, independently audit the result, show the final diff, and persist what happened.
-
-Lifecycle:
+Target lifecycle:
 
 ```text
 Human request
     ↓
-Goal
+Goal / Flow / Task
     ↓
-Flow / Task
+Workspace snapshot
     ↓
-Manager
+Context selection
     ↓
-Context retrieval
+Governed Skills
     ↓
 Fresh Executor
     ↓
-Patch
+Patch Proposal
     ↓
-Compile / tests
+Deterministic Apply
     ↓
-Auditor
+Independent Audit
     ↓
-FAIL → repair/escalate
+Sandbox Build / Tests
+    ↓
+FAIL → bounded repair / escalation
 PASS
     ↓
-Provenance
+Verified durable state + provenance
     ↓
-Review / merge
+Human review / eventual merge
 ```
 
 Success criteria:
 
 - no dependency on long chat history
-- process restart does not lose task state
-- work is isolated from known-good branch
+- process restart does not lose work state
+- known-good project state remains isolated
 - model cannot self-verify completion
-- repeated failure is bounded
+- retries and no-progress loops are bounded
+- selected context is reconstructable
 - final diff is understandable
 - meaningful changes have causal/provenance records
-
-If v0.1 is dependable, Origin Forge has its nervous system.
 
 # v0.5 — Integrated Development Infrastructure
 
@@ -472,28 +565,28 @@ Target capabilities:
 
 - durable long-running work
 - local coding models
-- Skills
-- LSP/code intelligence
+- governed Skills + Skill evaluation
+- structural/LSP code intelligence
 - tool discovery
 - model/resource scheduling
-- project graph
-- Design Bible
-- provenance
+- specialist review
+- project graph + Design Bible
+- cryptographic provenance
 - basic 2D production
 
 # v1.0 — Integrated Game Production
 
-A representative Goal:
+Representative Goal:
 
 > Create a slow heavily armored enemy that lives in abandoned factories and attacks with a large mechanical hammer.
 
-Origin Forge should eventually be capable of coordinating:
+Origin Forge should eventually coordinate:
 
 - design specification
 - gameplay implementation
 - behavior
 - tests
-- 2D/3D asset
+- 2D/3D assets
 - textures
 - animation
 - sound
