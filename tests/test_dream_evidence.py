@@ -14,6 +14,7 @@ from origin_forge.dream_evidence import (
 from origin_forge.dream_models import DreamBudget, EvidenceClass, EvidenceRef
 from origin_forge.ids import IdKind, new_id
 from origin_forge.records import create_decision
+from origin_forge.runs import finish_run as finish_run_record
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import FlowStatus, RunStatus, TaskStatus
 
@@ -46,7 +47,8 @@ class DreamEvidenceTests(unittest.TestCase):
     def _complete_successful_task_with_failed_attempt(self):
         goal, flow, task = self._running_task()
         first = self.runtime.start_run(task, role="EXECUTOR", model_profile="small")
-        self.runtime.finish_run(
+        finish_run_record(
+            self.runtime.store,
             first,
             RunStatus.FAILED,
             failure_reason="tests failed",
@@ -65,7 +67,8 @@ class DreamEvidenceTests(unittest.TestCase):
             metrics={"duration_ms": 250},
             run_id=second,
         )
-        self.runtime.finish_run(
+        finish_run_record(
+            self.runtime.store,
             second,
             RunStatus.SUCCEEDED,
             input_token_count=140,
