@@ -137,6 +137,10 @@ class LspJsonRpcSession:
                     self.reader,
                     max_message_bytes=self.max_message_bytes,
                 )
+                if message.get("jsonrpc") != "2.0":
+                    raise LspProtocolError(
+                        "LSP message must declare jsonrpc='2.0'"
+                    )
                 method = message.get("method")
                 if isinstance(method, str):
                     if "id" in message:
