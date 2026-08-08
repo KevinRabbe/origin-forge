@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+from .code_intelligence import CodeIntelligenceProvider
+from .code_intelligence_context import (
+    CodeIntelligenceContextExpander,
+    SemanticContextResult,
+)
 from .context_discovery import DiscoveryResult, TaskContextDiscoverer
+from .python_code_intelligence import PythonAstCodeIntelligence
 from .repository import RepositoryReader
 from .runtime import OriginForgeRuntime
 from .structural_context import PythonStructuralContext, StructuralExpansionResult
@@ -20,6 +26,7 @@ class ContextSelectionResult:
     mode: str
     lexical: DiscoveryResult | None = None
     structural: StructuralExpansionResult | None = None
+    semantic: SemanticContextResult | None = None
 
 
 class WorkspaceContextSelector:
@@ -27,16 +34,21 @@ class WorkspaceContextSelector:
 
     The selector owns only selection policy. It receives an already-scoped
     RepositoryReader and never creates a Workspace, invokes a model, or mutates
-    repository files.
+    repository files. Semantic expansion uses a caller-supplied read-only
+    provider when present; otherwise the deterministic Python AST provider is
+    used. No provider is queried unless `semantic_context=True`.
     """
 
     def __init__(
         self,
         runtime: OriginForgeRuntime,
         repository: RepositoryReader,
+        *,
+        code_intelligence_provider: CodeIntelligenceProvider | None = None,
     ):
         self.runtime = runtime
         self.repository = repository
+        self.code_intelligence_provider = code_intelligence_provider
 
     def select(
         self,
@@ -46,6 +58,7 @@ class WorkspaceContextSelector:
         auto_context: bool = False,
         seed_paths: Iterable[str] = (),
         structural_context: bool = False,
+        semantic_context: bool = False,
     ) -> ContextSelectionResult:
         explicit = tuple(selected_paths or ())
         seeds = tuple(seed_paths)
@@ -85,10 +98,24 @@ class WorkspaceContextSelector:
             paths = structural.paths
             mode += "+STRUCTURAL"
 
+        semantic: SemanticContextResult | None = None
+        if semantic_context and paths:
+            provider = self.code_intelligence_provider or PythonAstCodeIntelligence(
+                self.repository
+            )
+            semantic = CodeIntelligenceContextExpander(
+                self.runtime,
+                self.repository,
+                provider,
+            ).expand(task_id, paths)
+            paths = semantic.paths
+            mode += "+SEMANTIC"
+
         return ContextSelectionResult(
             task_id=task_id,
             paths=paths,
             mode=mode,
             lexical=lexical,
             structural=structural,
+            semantic=semantic,
         )
