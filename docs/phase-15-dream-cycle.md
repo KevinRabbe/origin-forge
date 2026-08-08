@@ -1,8 +1,10 @@
 # Phase 15 — Offline Dream Cycle / Memory Consolidation
 
-Status: **planned; implementation begins only after Phase 14 is complete**
+Status: **implemented; Phase 16 is next**
 
 Phase 15 introduces a separate offline consolidation process that learns from many completed Origin Forge sessions without allowing the active Executor, the Dream process, or a language model to redefine verified project truth.
+
+Implementation note: the v0 architecture described here is now implemented with deterministic and optional model-backed proposal analysis, independent auditing, immutable versioned memory, durable Dream lifecycle/observability, and non-promoting operator `status` / `plan` / deterministic `run` surfaces. Generative Dream execution is intentionally not exposed through the CLI until a trusted runtime model loader is explicitly wired; the bounded model planner already uses the existing `ModelAdapter` contract.
 
 The core distinction is:
 
@@ -587,9 +589,9 @@ No production model may rewrite its own weights or replace itself through Phase 
 
 ---
 
-## 15. Proposed first implementation slice
+## 15. Implemented v0 scope
 
-Phase 15 v0 should implement only:
+Phase 15 v0 implements:
 
 1. `DreamInputManifest`
    - bounded canonical IDs/hashes/revisions
@@ -630,7 +632,7 @@ origin-forge memory generations
 origin-forge memory show <generation-id>
 ```
 
-No `dream promote`, `dream apply-skill`, `dream change-policy`, or self-modification command in the initial phase.
+No `dream promote`, `dream apply-skill`, `dream change-policy`, or self-modification command exists in the initial phase.
 
 ---
 

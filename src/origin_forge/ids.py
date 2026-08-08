@@ -16,14 +16,18 @@ class IdKind(StrEnum):
     RUN = "RUN"
     EVENT = "EVENT"
     WORKSPACE = "WSPACE"
+    DREAM_MANIFEST = "DREAMIN"
+    DREAM_CANDIDATE = "DREAM"
+    MEMORY_ENTRY = "MEM"
+    MEMORY_GENERATION = "MEMGEN"
 
 
 def new_id(kind: IdKind) -> str:
     """Create an opaque infrastructure-owned ID.
 
-    UUIDv4 is intentionally used in Phase 1 because it is available in the
-    standard library. The ID contract allows a later migration to UUIDv7
-    without changing the type-prefixed external representation.
+    UUIDv4 is intentionally used because it is available in the standard
+    library. The ID contract allows a later migration to UUIDv7 without
+    changing the type-prefixed external representation.
     """
 
     return f"{kind.value}-{uuid4()}"

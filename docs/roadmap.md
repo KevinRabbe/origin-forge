@@ -154,25 +154,34 @@ Hardware leases are ephemeral; durable Task/Run state remains authoritative acro
 
 ---
 
-## Phase 15 — Offline Dream Cycle / Memory Consolidation — NEXT
+## Phase 15 — Offline Dream Cycle / Memory Consolidation — DONE
 
-Separate production-time cognition from offline cross-session learning.
+Implemented a bounded offline consolidation layer that is explicitly separate from production-time execution.
 
-Planned components:
+Implemented components:
 
-- bounded frozen Dream input manifests over verified Runs/Tasks/Decisions/Verifications
+- frozen content-addressed Dream input manifests over terminal Run/Task/Decision/Verification evidence
 - immutable content-addressed `MemoryEntry` objects
 - parent-linked immutable `MemoryGeneration` snapshots
-- deterministic duplicate/staleness/contradiction preprocessing
-- model-optional cross-run Dream Analyzer
-- independent Dream Auditor
-- proposal-only Dream candidates
+- exact evidence hashes/revisions/classes and active-memory revalidation
+- deterministic duplicate/staleness/hash-drift/revision-drift and Decision-supersession preprocessing
+- deterministic data-quality Analyzer
+- optional bounded model-backed cross-run Analyzer using the existing `ModelAdapter` contract
+- independent Dream Auditor with structural-vs-semantic authority separation
+- proposal-only Dream candidates whose candidate type determines the mandatory downstream gate
 - candidate classes for memory, Skills, routing, context strategy, process/architecture, and data quality
-- deterministic derived-index/cache maintenance only
-- Skill candidates routed into Skill Evaluation / later Skill Workshop
-- routing/context candidates routed into benchmark gates
-- explicit Dream model/resource budgets through Phase 14
-- first-class Dream observability and provenance
+- exact `dream-audit` Verification binding before any new memory generation can be constructed
+- ancestor audit revalidation so later durable-evidence tampering invalidates derived memory
+- protected immutable Dream persistence with symlink/containment/size/count validation
+- atomic no-overwrite object publication under competing writers
+- bounded model-call/token/evidence/candidate budgets
+- model context/response hashes and durable model-Dream observability Verifications
+- durable deterministic Dream Cycle Goal/Flow/Task/Run lifecycle with verification-gated completion
+- fail-closed Dream lifecycle cleanup on invalid evidence or planning failure
+- operator `dream status`, `dream plan`, and deterministic `dream run` surfaces
+- read-only manifest/candidate/audit/memory/generation inspection
+- no CLI generative-model execution until a trusted runtime loader is explicitly wired
+- no automatic memory generation, Skill promotion, routing/context policy mutation, source mutation, or merge authority
 
 Core rule:
 
@@ -181,13 +190,13 @@ Dreaming may discover candidate knowledge.
 It may not redefine canonical truth.
 ```
 
-The Dream process cannot modify source code, canonical Decisions, Design Bible content, Goal/Flow/Task/Verification outcomes, active Skills, routing/context policy, permissions, company identity, model weights, or merge state.
+The Dream process cannot modify source code, canonical Decisions, Design Bible content, Goal/Flow/Task/Verification outcomes from analyzed work, active Skills, routing/context policy, permissions, company identity, model weights, or merge state. Its own durable Dream lifecycle records are governed through the normal verified runtime.
 
 See `docs/phase-15-dream-cycle.md` for the detailed architecture and acceptance tests.
 
-**Exit condition:** Origin Forge can inspect bounded completed verified work, discover cross-session patterns and stale derived knowledge, independently audit findings, create an immutable new memory generation, and emit improvement candidates into existing evaluation/governance gates without self-modification authority.
+**Exit condition met:** Origin Forge can inspect bounded completed work including failed attempts, discover cross-session and stale-derived-memory patterns, independently audit findings, construct immutable audit-bound memory generations without mutating parents, and emit improvement candidates into existing governance gates without self-modification authority.
 
-## Phase 16 — Isolated Specialist Roles — PLANNED
+## Phase 16 — Isolated Specialist Roles — NEXT
 
 Introduce only specialist roles that measurably improve outcomes, such as Reviewer, Researcher, Tester, and Visual Critic. Each receives isolated context and restricted capabilities.
 
