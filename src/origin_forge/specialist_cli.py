@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .reviewer_eval_store import ReviewerEvalStore, ReviewerEvalStoreError
 from .reviewer_run import ReviewerRunCoordinator
 from .runtime import OriginForgeRuntime
 from .specialist_evidence_store import SpecialistEvidenceStore, SpecialistEvidenceStoreError
@@ -15,7 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="python -m origin_forge.specialist_cli",
         description=(
             "Read-only inspection of isolated specialist contracts, frozen evidence, "
-            "Reviewer reports, audits, and durable Reviewer Runs."
+            "Reviewer reports, audits, evaluation evidence, and durable Reviewer Runs."
         ),
     )
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
@@ -37,6 +38,20 @@ def build_parser() -> argparse.ArgumentParser:
     commands.add_parser("audit-list", help="list independent Reviewer structural audits")
     audit_show = commands.add_parser("audit-show", help="show one Reviewer structural audit")
     audit_show.add_argument("audit_id")
+
+    commands.add_parser("eval-case-list", help="list immutable Reviewer evaluation cases")
+    eval_case_show = commands.add_parser("eval-case-show", help="show one Reviewer evaluation case")
+    eval_case_show.add_argument("case_id")
+
+    commands.add_parser("eval-report-list", help="list content-addressed Reviewer benchmark reports")
+    eval_report_show = commands.add_parser(
+        "eval-report-show", help="show one Reviewer benchmark report"
+    )
+    eval_report_show.add_argument("report_id")
+    eval_report_status = commands.add_parser(
+        "eval-report-status", help="inspect whether one Reviewer benchmark remains replayable"
+    )
+    eval_report_status.add_argument("report_id")
     return parser
 
 
@@ -64,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     runtime = OriginForgeRuntime(args.project_root)
     store = SpecialistStore(runtime)
     evidence_store = SpecialistEvidenceStore(store)
+    eval_store = ReviewerEvalStore(store, evidence_store)
 
     try:
         if args.command == "status":
@@ -109,10 +125,35 @@ def main(argv: list[str] | None = None) -> int:
             _print(store.load_audit(args.audit_id).to_dict())
             return 0
 
+        if args.command == "eval-case-list":
+            _print({"eval_cases": list(eval_store.list_case_ids())})
+            return 0
+        if args.command == "eval-case-show":
+            case = eval_store.load_case(args.case_id)
+            _print({"case": case.canonical_dict(), "content_hash": case.content_hash})
+            return 0
+
+        if args.command == "eval-report-list":
+            _print({"eval_reports": list(eval_store.list_report_ids())})
+            return 0
+        if args.command == "eval-report-show":
+            _print(eval_store.load_report(args.report_id).payload)
+            return 0
+        if args.command == "eval-report-status":
+            status = eval_store.inspect_replay(args.report_id)
+            _print(status.to_dict())
+            return 0 if status.replayable else 4
+
     except KeyError as exc:
         _print({"error": "NOT_FOUND", "detail": str(exc)})
         return 3
-    except (SpecialistStoreError, SpecialistEvidenceStoreError, OSError, ValueError) as exc:
+    except (
+        SpecialistStoreError,
+        SpecialistEvidenceStoreError,
+        ReviewerEvalStoreError,
+        OSError,
+        ValueError,
+    ) as exc:
         _print({"error": type(exc).__name__, "detail": str(exc)})
         return 2
 
