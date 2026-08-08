@@ -41,13 +41,17 @@ Versioned product
 
 ## Current status
 
-Origin Forge is in **Phase 7 — Bounded Retry, Resume, Loop Detection, and Model Escalation**.
+Origin Forge is in **Phase 8 — Deterministic Context Discovery**.
 
-Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implemented the first real sandbox backend using Podman. Phase 6 connected those components into a snapshot-first single coding attempt. Phase 7 adds explicit bounded policy for resuming durable checkpoints, retrying failed strategies, escalating models, detecting exact repeated proposals, and stopping through quarantine when autonomous continuation is no longer justified.
+Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implemented the first real sandbox backend using Podman. Phase 6 connected those components into a snapshot-first single coding attempt. Phase 7 added bounded retry/resume/model escalation. Phase 8 now adds deterministic automatic context selection for the one-shot Manager.
 
-Retry policy is derived from durable project state rather than an endless conversational loop: Executor Runs count model attempts, sandbox Verification records count deterministic verification failures, Patch Proposal hashes provide exact-repeat detection, and Workspace status determines whether Origin Forge resumes or starts a fresh attempt.
+Automatic context remains snapshot-local: Origin Forge creates the isolated Git Workspace first, scans only tracked UTF-8 text inside that Workspace, applies hard scan and selection budgets, ranks files from durable Task terms, and then feeds the selected paths through the normal `ContextBuilder`. Uncommitted changes in the user's live checkout remain outside the model's view.
 
-There is still **no automatic merge, arbitrary shell surface, or unlimited retry loop**. Retry and verification budgets come from project configuration, infrastructure failures do not silently burn model retries, and a quarantined Task requires explicit intervention before autonomous work can continue.
+Manual context selection remains supported. Automatic selection is explicit opt-in, can accept bounded seed files, and returns no arbitrary fallback context when the repository contains no relevant evidence.
+
+Phase-7 retry policy still uses explicit context paths in this phase; Origin Forge does not duplicate the retry state machine just to wire automatic context through it prematurely.
+
+There is still **no automatic merge, arbitrary shell surface, unlimited retry loop, or model-controlled filesystem search**.
 
 ## Documentation
 
@@ -60,6 +64,7 @@ There is still **no automatic merge, arbitrary shell surface, or unlimited retry
 - [Phase 5 Podman Sandbox Notes](docs/phase-5-notes.md)
 - [Phase 6 Bounded Orchestration Notes](docs/phase-6-notes.md)
 - [Phase 7 Retry Policy Notes](docs/phase-7-notes.md)
+- [Phase 8 Context Discovery Notes](docs/phase-8-notes.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
@@ -78,7 +83,8 @@ The implementation currently uses or targets:
 - replaceable sandbox backends behind a common verification contract
 - snapshot-first bounded orchestration
 - durable bounded retry/resume/model-escalation policy
-- ripgrep + Tree-sitter + LSP for code intelligence
+- deterministic tracked-file context discovery
+- Tree-sitter + LSP for later structural code intelligence where they measurably improve context quality
 - Pixelorama for 2D production
 - Blockbench for 3D production
 - rFXGen + FFmpeg for audio tooling
