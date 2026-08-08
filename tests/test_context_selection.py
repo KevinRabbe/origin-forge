@@ -126,7 +126,8 @@ class WorkspaceContextSelectorTests(unittest.TestCase):
         self.assertEqual(result.paths[0], "src/pkg/service.py")
         self.assertIn("src/pkg/models.py", result.paths)
         self.assertIsNotNone(result.semantic)
-        self.assertIn("widgetparser", result.semantic.query_terms)
+        self.assertIn("widget", result.semantic.query_terms)
+        self.assertIn("parser", result.semantic.query_terms)
 
     def test_structural_and_semantic_share_one_selection_pipeline(self) -> None:
         task = self._task("Repair WidgetParser in WidgetService")
