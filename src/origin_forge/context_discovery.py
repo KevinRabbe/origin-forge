@@ -113,6 +113,12 @@ def _tokens(value: str) -> list[str]:
     return result
 
 
+def _path_tokens(path: str) -> frozenset[str]:
+    candidate = Path(path)
+    without_suffix = candidate.with_suffix("").as_posix() if candidate.suffix else candidate.as_posix()
+    return frozenset(_tokens(without_suffix))
+
+
 class TaskContextDiscoverer:
     """Deterministically rank tracked text files for one durable Task."""
 
@@ -176,11 +182,22 @@ class TaskContextDiscoverer:
             raise ContextDiscoveryError("tracked repository path is not UTF-8") from exc
         return tuple(sorted(dict.fromkeys(paths)))
 
-    def _index(self) -> tuple[tuple[_IndexedSource, ...], int, int]:
+    def _ordered_scan_paths(self, query_terms: tuple[str, ...]) -> tuple[str, ...]:
+        query = set(query_terms)
+        ranked: list[tuple[int, str]] = []
+        for path in self._tracked_paths():
+            matches = len(query.intersection(_path_tokens(path)))
+            ranked.append((matches, path))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        return tuple(path for _, path in ranked)
+
+    def _index(
+        self, query_terms: tuple[str, ...]
+    ) -> tuple[tuple[_IndexedSource, ...], int, int]:
         indexed: list[_IndexedSource] = []
         scanned_bytes = 0
         considered = 0
-        for path in self._tracked_paths():
+        for path in self._ordered_scan_paths(query_terms):
             if considered >= self.settings.max_scan_files:
                 break
             considered += 1
@@ -203,7 +220,7 @@ class TaskContextDiscoverer:
             indexed.append(
                 _IndexedSource(
                     source,
-                    frozenset(_tokens(source.path)),
+                    _path_tokens(source.path),
                     Counter(_tokens(source.content)),
                 )
             )
@@ -218,12 +235,11 @@ class TaskContextDiscoverer:
     ) -> tuple[float, tuple[str, ...]]:
         score = 0.0
         matched: list[str] = []
-        filename = Path(item.source.path).name.casefold()
         stem = Path(item.source.path).stem.casefold()
         for term in query_terms:
             tf = item.content_counts.get(term, 0)
             path_match = term in item.path_tokens
-            filename_match = term == filename or term == stem
+            filename_match = term == stem
             if not tf and not path_match and not filename_match:
                 continue
             matched.append(term)
@@ -244,7 +260,7 @@ class TaskContextDiscoverer:
         seed_paths: Iterable[str] = (),
     ) -> DiscoveryResult:
         query_terms = self._query_terms(task_id)
-        indexed, scanned_files, scanned_bytes = self._index()
+        indexed, scanned_files, scanned_bytes = self._index(query_terms)
         by_path = {item.source.path: item for item in indexed}
 
         document_frequency: Counter[str] = Counter()
