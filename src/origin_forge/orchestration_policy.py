@@ -474,6 +474,7 @@ class BoundedRetryPolicy:
         auto_context: bool = False,
         context_seed_paths: Iterable[str] = (),
         structural_context: bool = False,
+        semantic_context: bool = False,
     ) -> PolicyResult:
         selected = tuple(selected_paths or ())
         seeds = tuple(context_seed_paths)
@@ -584,6 +585,7 @@ class BoundedRetryPolicy:
                 auto_context=auto_context,
                 context_seed_paths=seeds,
                 structural_context=structural_context,
+                semantic_context=semantic_context,
                 model_profile=model.model_id,
             )
             attempts_started += 1

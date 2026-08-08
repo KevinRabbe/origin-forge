@@ -31,6 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="expand selected context with bounded Python structural relationships",
     )
+    parser.add_argument(
+        "--semantic-context",
+        action="store_true",
+        help="expand selected context with bounded deterministic Python symbol evidence",
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--model", default="local-model")
     parser.add_argument("--api-key", default="no-key")
@@ -65,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
         auto_context=args.auto_context,
         context_seed_paths=args.seed_files,
         structural_context=args.structural_context,
+        semantic_context=args.semantic_context,
         model_profile=args.model,
     )
     print(json.dumps(asdict(result), indent=2, sort_keys=True, default=str))
