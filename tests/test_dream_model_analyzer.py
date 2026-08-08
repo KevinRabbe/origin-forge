@@ -40,11 +40,15 @@ class FakeModel:
         self.payload = payload
         self.requests = []
 
+    @property
+    def model_id(self) -> str:
+        return "dream-test-model"
+
     def generate(self, request):
         self.requests.append(request)
         return ModelResponse(
             text=json.dumps(self.payload),
-            model_id="dream-test-model",
+            model_id=self.model_id,
             model_hash="sha256:test-model",
             input_tokens=123,
             output_tokens=45,
@@ -107,7 +111,18 @@ class DreamModelAnalyzerTests(unittest.TestCase):
         self.assertEqual(request.run_id, self.run_id)
         self.assertEqual(request.task_id, self.task_id)
         self.assertEqual(request.instructions, DREAM_ANALYZER_INSTRUCTIONS)
-        self.assertNotIn("required_gate", request.response_schema["properties"]["candidates"]["items"]["properties"])
+        self.assertNotIn(
+            "required_gate",
+            request.response_schema["properties"]["candidates"]["items"]["properties"],
+        )
+
+    def test_model_adapter_contract_is_enforced(self) -> None:
+        class GenerateOnly:
+            def generate(self, request):
+                return ModelResponse(text='{"candidates":[]}', model_id="invalid")
+
+        with self.assertRaisesRegex(TypeError, "ModelAdapter"):
+            BoundedModelDreamAnalyzer(GenerateOnly())
 
     def test_model_cannot_supply_required_gate_or_other_extra_fields(self) -> None:
         payload = self._valid_payload()
@@ -162,8 +177,12 @@ class DreamModelAnalyzerTests(unittest.TestCase):
             def __init__(self, text):
                 self.text = text
 
+            @property
+            def model_id(self) -> str:
+                return "raw"
+
             def generate(self, request):
-                return ModelResponse(text=self.text, model_id="raw")
+                return ModelResponse(text=self.text, model_id=self.model_id)
 
         with self.assertRaisesRegex(DreamModelAnalyzerError, "one JSON object"):
             BoundedModelDreamAnalyzer(RawModel("not-json")).analyze(
