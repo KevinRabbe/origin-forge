@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .code_diagnostics import CodeDiagnosticsEvaluator, CodeDiagnosticsSettings
 from .patches import FileOperation, PatchProposal
 from .proposal_artifacts import load_patch_proposal_artifact
+from .python_code_intelligence import PythonAstCodeIntelligence
 from .repository import RepositoryReader
 from .runtime import OriginForgeRuntime
 from .state import WorkspaceStatus
@@ -19,7 +21,13 @@ class AuditResult:
 
 
 class WorkspaceAuditor:
-    """Read-only deterministic audit of an isolated applied proposal."""
+    """Read-only deterministic audit of an isolated applied proposal.
+
+    Phase 11 also records bounded deterministic Python diagnostics for changed
+    non-deleted files. Those diagnostics are evidence only: they do not add
+    findings or decide whether the patch audit passes. Compiler/tests/runtime
+    verification remain higher-authority correctness signals.
+    """
 
     def __init__(self, runtime: OriginForgeRuntime, workspaces: GitWorkspaceManager | None = None):
         self.runtime = runtime
@@ -35,6 +43,50 @@ class WorkspaceAuditor:
             expected_task_id=workspace["task_id"],
         )
         return self._audit(workspace_id, proposal)
+
+    def _diagnostic_evidence(
+        self,
+        reader: RepositoryReader,
+        proposal: PatchProposal,
+    ) -> dict[str, object]:
+        paths = tuple(
+            change.path
+            for change in proposal.changes
+            if change.operation != FileOperation.DELETE
+        )
+        if not paths:
+            return {
+                "provider_id": "python-ast",
+                "status": "NO_PATHS",
+                "error_count": 0,
+                "warning_count": 0,
+                "diagnostics": [],
+            }
+
+        provider = PythonAstCodeIntelligence(reader)
+        try:
+            result = CodeDiagnosticsEvaluator(
+                provider,
+                settings=CodeDiagnosticsSettings(fail_on_errors=False),
+            ).evaluate(paths)
+        except Exception as exc:
+            # Diagnostic collection is supplementary evidence. Preserve the
+            # failure for review but never turn it into patch-audit authority.
+            error = f"{type(exc).__name__}: {exc}"
+            return {
+                "provider_id": provider.provider_id,
+                "status": "ERROR",
+                "error": error[:2000],
+                "diagnostics": [],
+            }
+
+        return {
+            "provider_id": result.provider_id,
+            "status": "COLLECTED",
+            "error_count": result.error_count,
+            "warning_count": result.warning_count,
+            "diagnostics": list(result.evidence),
+        }
 
     def _audit(self, workspace_id: str, proposal: PatchProposal) -> AuditResult:
         row = self.workspaces.get(workspace_id)
@@ -65,13 +117,18 @@ class WorkspaceAuditor:
             if source.content != change.content:
                 findings.append(f"content mismatch: {change.path}")
 
+        diagnostics = self._diagnostic_evidence(reader, proposal)
         passed = not findings
         verification_id = self.workspaces.record_verification(
             workspace_id,
             verification_type="isolated-patch-audit",
             verifier="OriginForge.WorkspaceAuditor",
             status="PASS" if passed else "FAIL",
-            evidence={"findings": findings, "expected_paths": sorted(expected_paths)},
+            evidence={
+                "findings": findings,
+                "expected_paths": sorted(expected_paths),
+                "code_diagnostics": diagnostics,
+            },
         )
 
         current = self.workspaces.get(workspace_id)
