@@ -1,9 +1,24 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from pathlib import PurePosixPath, PureWindowsPath
 
 
 PROTECTED_ROOTS = frozenset({".git", ".origin-forge"})
+_WINDOWS_INVALID_CHARS = frozenset('<>:"|?*')
+_WINDOWS_RESERVED_BASES = frozenset(
+    {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        "clock$",
+        "conin$",
+        "conout$",
+    }
+)
+_WINDOWS_RESERVED_NUMBERED = re.compile(r"^(?:com|lpt)[1-9]$", re.IGNORECASE)
 
 
 def is_protected_root(name: str) -> bool:
@@ -15,6 +30,26 @@ def is_protected_root(name: str) -> bool:
     """
 
     return name.casefold() in PROTECTED_ROOTS
+
+
+def _validate_portable_component(component: str) -> None:
+    if component in {"", ".", ".."}:
+        raise ValueError("path is invalid")
+    if unicodedata.normalize("NFC", component) != component:
+        raise ValueError("repository path components must use NFC Unicode normalization")
+    if component.endswith((" ", ".")):
+        raise ValueError("repository path components may not end with space or dot")
+    if any(ord(char) < 32 for char in component):
+        raise ValueError("repository path components may not contain control characters")
+    if any(char in _WINDOWS_INVALID_CHARS for char in component):
+        raise ValueError("repository path contains characters unsafe on Windows")
+
+    # Windows reserves these names even when an extension is present, e.g.
+    # NUL.txt. A colon is already rejected above, also closing NTFS ADS syntax
+    # such as file.py:metadata.
+    base = component.split(".", 1)[0].casefold()
+    if base in _WINDOWS_RESERVED_BASES or _WINDOWS_RESERVED_NUMBERED.fullmatch(base):
+        raise ValueError(f"repository path uses Windows-reserved name: {component}")
 
 
 def portable_relative_path(raw: str) -> PurePosixPath:
@@ -37,8 +72,8 @@ def portable_relative_path(raw: str) -> PurePosixPath:
         raise ValueError("path must be project-relative on every supported host")
 
     raw_parts = raw.split("/")
-    if any(part in {"", ".", ".."} for part in raw_parts):
-        raise ValueError("path is invalid")
+    for component in raw_parts:
+        _validate_portable_component(component)
 
     path = PurePosixPath(raw)
     if path.is_absolute() or not path.parts:
@@ -51,10 +86,10 @@ def portable_relative_path(raw: str) -> PurePosixPath:
 def portable_path_key(path: str | PurePosixPath) -> str:
     """Return a conservative cross-platform identity key for a repo path.
 
-    Case-folding intentionally rejects two proposed paths that differ only by
-    case. Such a pair cannot be represented safely on common Windows filesystems
-    and would make deterministic audit/application semantics host-dependent.
+    Case-folding plus NFC normalization intentionally rejects mutation paths that
+    could alias on case-insensitive or Unicode-normalizing filesystems. Such a
+    pair cannot participate safely in one durable cross-platform Task.
     """
 
     value = path if isinstance(path, PurePosixPath) else portable_relative_path(path)
-    return value.as_posix().casefold()
+    return unicodedata.normalize("NFC", value.as_posix()).casefold()
