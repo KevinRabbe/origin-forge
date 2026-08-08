@@ -227,6 +227,16 @@ class ResourceScheduler:
             },
         )
 
+    def _gpu_candidates(self, request: GpuResourceRequest) -> list[GpuCapacity]:
+        if request.device_id is None:
+            return list(self.capacity.gpus)
+        try:
+            return [self.capacity.gpu(request.device_id)]
+        except KeyError as exc:
+            raise ResourceRequestInvalid(
+                f"requested GPU is not configured: {request.device_id}"
+            ) from exc
+
     def _validate_static_fit(self, request: ResourceRequest) -> None:
         if request.cpu_slots > self.capacity.cpu_slots:
             raise ResourceRequestInvalid(
@@ -238,11 +248,7 @@ class ResourceScheduler:
             )
         if request.gpu is None:
             return
-        candidates = (
-            [self.capacity.gpu(request.gpu.device_id)]
-            if request.gpu.device_id is not None
-            else list(self.capacity.gpus)
-        )
+        candidates = self._gpu_candidates(request.gpu)
         if not candidates:
             raise ResourceRequestInvalid("GPU resources were requested but no GPU is configured")
         if not any(
@@ -257,11 +263,7 @@ class ResourceScheduler:
         request: GpuResourceRequest,
         usage: dict[str, tuple[int, int, bool]],
     ) -> GpuCapacity | None:
-        candidates = (
-            [self.capacity.gpu(request.device_id)]
-            if request.device_id is not None
-            else list(self.capacity.gpus)
-        )
+        candidates = self._gpu_candidates(request)
         eligible: list[tuple[int, int, str, GpuCapacity]] = []
         for gpu in candidates:
             used_vram, used_compute, exclusive_active = usage[gpu.device_id]
