@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import PurePosixPath
+from pathlib import PurePosixPath, PureWindowsPath
 
 
 PROTECTED_ROOTS = frozenset({".git", ".origin-forge"})
@@ -18,23 +18,31 @@ def is_protected_root(name: str) -> bool:
 
 
 def portable_relative_path(raw: str) -> PurePosixPath:
-    """Parse an Origin Forge repository path using one cross-platform syntax.
+    """Parse one cross-platform Origin Forge repository path.
 
-    Origin Forge-generated paths are POSIX-style (`/`) regardless of the host.
-    Backslashes are rejected rather than interpreted differently on Windows and
-    Linux. This prevents one serialized Task/Artifact from naming different
-    files depending on the machine that consumes it.
+    Serialized repository paths use POSIX (`/`) separators on every host.
+    Ambiguous or host-dependent spellings are rejected rather than normalized,
+    so the same durable Task/Artifact always names the same repository object.
     """
 
     if not isinstance(raw, str) or not raw.strip():
         raise ValueError("path must be a non-empty string")
+    if "\x00" in raw:
+        raise ValueError("path may not contain NUL")
     if "\\" in raw:
         raise ValueError("repository paths must use '/' separators")
+
+    windows = PureWindowsPath(raw)
+    if windows.drive or windows.root:
+        raise ValueError("path must be project-relative on every supported host")
+
+    raw_parts = raw.split("/")
+    if any(part in {"", ".", ".."} for part in raw_parts):
+        raise ValueError("path is invalid")
+
     path = PurePosixPath(raw)
     if path.is_absolute() or not path.parts:
         raise ValueError("path must be project-relative")
-    if any(part in {"", ".", ".."} for part in path.parts):
-        raise ValueError("path is invalid")
     if is_protected_root(path.parts[0]):
         raise ValueError("path enters protected Origin Forge state")
     return path
