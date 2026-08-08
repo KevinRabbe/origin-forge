@@ -4,8 +4,7 @@ import ast
 import re
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
 
 from .code_intelligence import (
     CodeDiagnostic,
@@ -102,7 +101,7 @@ class _SymbolCollector(ast.NodeVisitor):
     def __init__(self, path: str, content: str):
         self.path = path
         self.content = content
-        self.container: list[str] = []
+        self.scope: list[tuple[str, SymbolKind]] = []
         self.symbols: list[CodeSymbol] = []
 
     def _append(self, node: ast.AST, name: str, kind: SymbolKind) -> None:
@@ -111,29 +110,29 @@ class _SymbolCollector(ast.NodeVisitor):
                 name,
                 kind,
                 CodeLocation(self.path, _definition_name_range(self.content, node, name)),
-                self.container[-1] if self.container else None,
+                self.scope[-1][0] if self.scope else None,
             )
         )
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self._append(node, node.name, SymbolKind.CLASS)
-        self.container.append(node.name)
+        self.scope.append((node.name, SymbolKind.CLASS))
         self.generic_visit(node)
-        self.container.pop()
+        self.scope.pop()
+
+    def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        immediate_class = bool(self.scope and self.scope[-1][1] == SymbolKind.CLASS)
+        kind = SymbolKind.METHOD if immediate_class else SymbolKind.FUNCTION
+        self._append(node, node.name, kind)
+        self.scope.append((node.name, kind))
+        self.generic_visit(node)
+        self.scope.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        kind = SymbolKind.METHOD if self.container else SymbolKind.FUNCTION
-        self._append(node, node.name, kind)
-        self.container.append(node.name)
-        self.generic_visit(node)
-        self.container.pop()
+        self._visit_function(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        kind = SymbolKind.METHOD if self.container else SymbolKind.FUNCTION
-        self._append(node, node.name, kind)
-        self.container.append(node.name)
-        self.generic_visit(node)
-        self.container.pop()
+        self._visit_function(node)
 
 
 class PythonAstCodeIntelligence:
@@ -312,22 +311,13 @@ class PythonAstCodeIntelligence:
         if name is None:
             return ()
         locations: list[CodeLocation] = []
-        declaration_keys: set[tuple[str, TextPosition]] = set()
         for item in self._index():
             for symbol in item.symbols:
-                if symbol.name == name:
-                    declaration_keys.add((symbol.location.path, symbol.location.range.start))
-                    if include_declaration:
-                        locations.append(symbol.location)
+                if symbol.name == name and include_declaration:
+                    locations.append(symbol.location)
             for node in ast.walk(item.tree):
                 if isinstance(node, ast.Name) and node.id == name:
-                    location = CodeLocation(item.path, _node_range(item.content, node))
-                    if not include_declaration and (
-                        location.path,
-                        location.range.start,
-                    ) in declaration_keys:
-                        continue
-                    locations.append(location)
+                    locations.append(CodeLocation(item.path, _node_range(item.content, node)))
 
         unique = {
             (location.path, location.range.start, location.range.end): location
@@ -345,7 +335,7 @@ class PythonAstCodeIntelligence:
         *,
         limit_per_file: int = 100,
     ) -> Sequence[CodeDiagnostic]:
-        limit_per_file = _bounded_limit(limit_per_file)
+        _bounded_limit(limit_per_file)
         result: list[CodeDiagnostic] = []
         for path in dict.fromkeys(paths):
             try:
@@ -359,19 +349,21 @@ class PythonAstCodeIntelligence:
             except SyntaxError as exc:
                 line = max((exc.lineno or 1) - 1, 0)
                 character = max((exc.offset or 1) - 1, 0)
-                end_character = max((exc.end_offset or exc.offset or 1) - 1, character)
-                diagnostic = CodeDiagnostic(
-                    source.path,
-                    TextRange(
-                        TextPosition(line, character),
-                        TextPosition(max((exc.end_lineno or exc.lineno or 1) - 1, line), end_character),
-                    ),
-                    DiagnosticSeverity.ERROR,
-                    exc.msg,
-                    self.provider_id,
-                    "SyntaxError",
+                end_line = max((exc.end_lineno or exc.lineno or 1) - 1, line)
+                end_character = max((exc.end_offset or exc.offset or 1) - 1, 0)
+                if end_line == line:
+                    end_character = max(end_character, character)
+                result.append(
+                    CodeDiagnostic(
+                        source.path,
+                        TextRange(
+                            TextPosition(line, character),
+                            TextPosition(end_line, end_character),
+                        ),
+                        DiagnosticSeverity.ERROR,
+                        exc.msg,
+                        self.provider_id,
+                        "SyntaxError",
+                    )
                 )
-                result.append(diagnostic)
-            if len([item for item in result if item.path == source.path]) >= limit_per_file:
-                continue
         return tuple(result)
