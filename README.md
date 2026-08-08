@@ -41,13 +41,13 @@ Versioned product
 
 ## Current status
 
-Origin Forge is in **Phase 6 — Snapshot-First Bounded Orchestration**.
+Origin Forge is in **Phase 7 — Bounded Retry, Resume, Loop Detection, and Model Escalation**.
 
-Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implemented the first real sandbox backend using Podman. Phase 6 now connects those components into a single bounded coding attempt.
+Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implemented the first real sandbox backend using Podman. Phase 6 connected those components into a snapshot-first single coding attempt. Phase 7 adds explicit bounded policy for resuming durable checkpoints, retrying failed strategies, escalating models, detecting exact repeated proposals, and stopping through quarantine when autonomous continuation is no longer justified.
 
-The Phase-6 Manager creates the isolated Git Workspace **before** the model sees repository content. Context, SHA-256 proposal preconditions, deterministic application, audit, and sandbox verification therefore all operate on one Git snapshot rather than the user's potentially dirty live checkout.
+Retry policy is derived from durable project state rather than an endless conversational loop: Executor Runs count model attempts, sandbox Verification records count deterministic verification failures, Patch Proposal hashes provide exact-repeat detection, and Workspace status determines whether Origin Forge resumes or starts a fresh attempt.
 
-A successful attempt still does **not** merge anything. The verified change remains isolated. There is no arbitrary shell surface, no automatic retry loop, no automatic context discovery, and no model-controlled merge authority.
+There is still **no automatic merge, arbitrary shell surface, or unlimited retry loop**. Retry and verification budgets come from project configuration, infrastructure failures do not silently burn model retries, and a quarantined Task requires explicit intervention before autonomous work can continue.
 
 ## Documentation
 
@@ -59,6 +59,7 @@ A successful attempt still does **not** merge anything. The verified change rema
 - [Phase 4 Sandbox Notes](docs/phase-4-notes.md)
 - [Phase 5 Podman Sandbox Notes](docs/phase-5-notes.md)
 - [Phase 6 Bounded Orchestration Notes](docs/phase-6-notes.md)
+- [Phase 7 Retry Policy Notes](docs/phase-7-notes.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
@@ -75,7 +76,8 @@ The implementation currently uses or targets:
 - llama.cpp-compatible local inference
 - Podman as the first real sandbox backend for executing AI-modified code
 - replaceable sandbox backends behind a common verification contract
-- snapshot-first bounded orchestration for the first complete coding attempt
+- snapshot-first bounded orchestration
+- durable bounded retry/resume/model-escalation policy
 - ripgrep + Tree-sitter + LSP for code intelligence
 - Pixelorama for 2D production
 - Blockbench for 3D production
