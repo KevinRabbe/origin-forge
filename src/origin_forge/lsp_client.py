@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Protocol
-from urllib.parse import urlparse
-from urllib.request import url2pathname
+from urllib.parse import quote, unquote, urlparse
 
 from .lsp_protocol import LspPositionEncoding, LspProtocolError
 
@@ -38,18 +37,71 @@ class LspServerCapabilities:
     diagnostics: bool
 
 
+def _local_netloc(value: str) -> str:
+    folded = value.casefold()
+    if folded in {"", "localhost"}:
+        return ""
+    raise LspWorkspaceError("remote-host file URIs are not allowed")
+
+
+def _parse_file_uri(uri: str) -> tuple[str, PurePosixPath]:
+    parsed = urlparse(uri)
+    if parsed.scheme.casefold() != "file":
+        raise LspWorkspaceError(
+            f"unsupported LSP location URI scheme: {parsed.scheme or '<none>'}"
+        )
+    netloc = _local_netloc(parsed.netloc)
+    if parsed.params or parsed.query or parsed.fragment:
+        raise LspWorkspaceError("LSP file URI may not contain params, query, or fragment")
+    try:
+        decoded = unquote(parsed.path, errors="strict")
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise LspWorkspaceError("invalid percent-encoding in LSP file URI") from exc
+    path = PurePosixPath(decoded)
+    if not path.is_absolute():
+        raise LspWorkspaceError("LSP file URI path must be absolute")
+    return netloc, path
+
+
+def _render_file_uri(netloc: str, path: PurePosixPath) -> str:
+    if not path.is_absolute():
+        raise LspWorkspaceError("LSP server root path must be absolute")
+    encoded = quote(path.as_posix(), safe="/:")
+    return f"file://{netloc}{encoded}"
+
+
 class LspWorkspaceMapper:
-    """Convert between repository-relative paths and contained file URIs."""
+    """Map host Workspace paths to the root URI visible to an LSP server.
+
+    `workspace_root` is the local filesystem tree Origin Forge may read.
+    `server_root_uri` is the same tree as exposed to the language server. For a
+    native process they are naturally the same. For an isolated container the
+    host may own `/host/.../workspace` while the server sees `file:///workspace`.
+    """
 
     _BLOCKED_ROOTS = frozenset({".git", ".origin-forge"})
 
-    def __init__(self, workspace_root: str | Path):
+    def __init__(
+        self,
+        workspace_root: str | Path,
+        *,
+        server_root_uri: str | None = None,
+    ):
         try:
             self.workspace_root = Path(workspace_root).resolve()
         except (OSError, RuntimeError) as exc:
             raise LspWorkspaceError("cannot resolve LSP Workspace root") from exc
         if not self.workspace_root.is_dir():
             raise LspWorkspaceError("LSP Workspace root must be an existing directory")
+
+        root_uri = server_root_uri or self.workspace_root.as_uri()
+        self._server_netloc, self._server_root_path = _parse_file_uri(root_uri)
+        if any(part in {".", ".."} for part in self._server_root_path.parts):
+            raise LspWorkspaceError("LSP server root URI may not contain dot segments")
+        self.server_root_uri = _render_file_uri(
+            self._server_netloc,
+            self._server_root_path,
+        )
 
     def _contained(self, candidate: Path) -> Path:
         try:
@@ -80,25 +132,25 @@ class LspWorkspaceMapper:
                 f"LSP repository path enters protected root: {candidate.parts[0]}"
             )
         resolved = self._contained(self.workspace_root / candidate)
-        return resolved.as_uri()
+        relative = resolved.relative_to(self.workspace_root)
+        server_path = self._server_root_path.joinpath(*relative.parts)
+        return _render_file_uri(self._server_netloc, server_path)
 
     def uri_to_path(self, uri: str) -> str:
         if not isinstance(uri, str) or not uri:
             raise LspWorkspaceError("LSP location URI must be a non-empty string")
-        parsed = urlparse(uri)
-        if parsed.scheme.casefold() != "file":
-            raise LspWorkspaceError(
-                f"unsupported LSP location URI scheme: {parsed.scheme or '<none>'}"
-            )
-        if parsed.netloc.casefold() not in {"", "localhost"}:
-            raise LspWorkspaceError("remote-host file URIs are not allowed")
-        if parsed.params or parsed.query or parsed.fragment:
-            raise LspWorkspaceError("LSP file URI may not contain params, query, or fragment")
+        netloc, server_path = _parse_file_uri(uri)
+        if netloc != self._server_netloc:
+            raise LspWorkspaceError("LSP location URI host does not match server root")
         try:
-            native = Path(url2pathname(parsed.path))
-        except (TypeError, ValueError) as exc:
-            raise LspWorkspaceError("invalid LSP file URI path") from exc
-        resolved = self._contained(native)
+            relative = server_path.relative_to(self._server_root_path)
+        except ValueError as exc:
+            raise LspWorkspaceError("LSP location escapes server-visible Workspace root") from exc
+        if not relative.parts:
+            raise LspWorkspaceError("LSP location refers to Workspace root, not a file")
+        if any(part in {"", ".", ".."} for part in relative.parts):
+            raise LspWorkspaceError("LSP location contains unsafe path segments")
+        resolved = self._contained(self.workspace_root.joinpath(*relative.parts))
         return resolved.relative_to(self.workspace_root).as_posix()
 
 
@@ -152,7 +204,7 @@ def initialize_lsp_session(
             "name": "Origin Forge",
             "version": "phase-11",
         },
-        "rootUri": mapper.workspace_root.as_uri(),
+        "rootUri": mapper.server_root_uri,
         "capabilities": {
             "general": {
                 "positionEncodings": ["utf-8", "utf-16", "utf-32"],
@@ -168,7 +220,7 @@ def initialize_lsp_session(
         },
         "workspaceFolders": [
             {
-                "uri": mapper.workspace_root.as_uri(),
+                "uri": mapper.server_root_uri,
                 "name": mapper.workspace_root.name,
             }
         ],
