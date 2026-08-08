@@ -34,14 +34,32 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 4)
+            self.assertEqual(SCHEMA_VERSION, 5)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
                     row["name"] for row in upgraded.execute("PRAGMA table_info(workspaces)")
                 }
+                tables = {
+                    row["name"]
+                    for row in upgraded.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+                relation_indexes = {
+                    row["name"]
+                    for row in upgraded.execute("PRAGMA index_list(entity_relations)")
+                }
             self.assertIn("revision", workspace_columns)
             self.assertIn("base_commit", workspace_columns)
+            for table in (
+                "entities",
+                "entity_relations",
+                "entity_bindings",
+                "design_rules",
+            ):
+                self.assertIn(table, tables)
+            self.assertIn("idx_entity_relations_active_unique", relation_indexes)
 
 
 if __name__ == "__main__":

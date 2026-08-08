@@ -191,11 +191,108 @@ ON workspaces(task_id)
 WHERE status != 'ABANDONED';
 """
 
+MIGRATION_005 = r"""
+CREATE TABLE entities (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(id, project_id)
+);
+
+CREATE TABLE entity_relations (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    source_entity_id TEXT NOT NULL,
+    relation_type TEXT NOT NULL,
+    target_entity_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    rationale TEXT NOT NULL DEFAULT '',
+    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(id, project_id),
+    FOREIGN KEY(source_entity_id, project_id)
+        REFERENCES entities(id, project_id) ON DELETE CASCADE,
+    FOREIGN KEY(target_entity_id, project_id)
+        REFERENCES entities(id, project_id) ON DELETE CASCADE,
+    CHECK(source_entity_id != target_entity_id)
+);
+
+CREATE TABLE entity_bindings (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    entity_id TEXT NOT NULL,
+    binding_type TEXT NOT NULL,
+    target_ref TEXT NOT NULL,
+    target_hash TEXT,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(id, project_id),
+    FOREIGN KEY(entity_id, project_id)
+        REFERENCES entities(id, project_id) ON DELETE CASCADE
+);
+
+CREATE TABLE design_rules (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    title TEXT NOT NULL,
+    statement TEXT NOT NULL,
+    rationale TEXT NOT NULL DEFAULT '',
+    authority TEXT NOT NULL,
+    scope_entity_ids_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    supersedes_rule_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(id, project_id),
+    FOREIGN KEY(supersedes_rule_id, project_id)
+        REFERENCES design_rules(id, project_id) ON DELETE RESTRICT,
+    CHECK(supersedes_rule_id IS NULL OR supersedes_rule_id != id)
+);
+
+CREATE INDEX idx_entities_project_kind_status
+ON entities(project_id, kind, status, name, id);
+
+CREATE INDEX idx_entity_relations_outbound
+ON entity_relations(project_id, source_entity_id, status, relation_type, target_entity_id);
+
+CREATE INDEX idx_entity_relations_inbound
+ON entity_relations(project_id, target_entity_id, status, relation_type, source_entity_id);
+
+CREATE UNIQUE INDEX idx_entity_relations_active_unique
+ON entity_relations(project_id, source_entity_id, relation_type, target_entity_id)
+WHERE status = 'ACTIVE';
+
+CREATE INDEX idx_entity_bindings_entity
+ON entity_bindings(project_id, entity_id, status, binding_type, target_ref);
+
+CREATE UNIQUE INDEX idx_entity_bindings_active_unique
+ON entity_bindings(project_id, entity_id, binding_type, target_ref)
+WHERE status = 'ACTIVE';
+
+CREATE INDEX idx_design_rules_project_status_category
+ON design_rules(project_id, status, category, title, id);
+"""
+
 MIGRATIONS = (
     Migration(1, MIGRATION_001),
     Migration(2, MIGRATION_002),
     Migration(3, MIGRATION_003),
     Migration(4, MIGRATION_004),
+    Migration(5, MIGRATION_005),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version
