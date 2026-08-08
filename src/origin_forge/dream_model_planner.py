@@ -21,6 +21,7 @@ from .state import RunStatus, TaskStatus
 class ModelDreamPlanResult:
     plan: DreamPlanResult
     model_analysis: DreamModelAnalysisResult
+    trace_verification_id: str
 
     def __post_init__(self) -> None:
         plan_hashes = {item.content_hash for item in self.plan.candidates}
@@ -31,11 +32,16 @@ class ModelDreamPlanResult:
             raise DreamPlanningError(
                 "model analysis contains a candidate that is not part of the audited Dream plan"
             )
+        if not isinstance(self.trace_verification_id, str) or not self.trace_verification_id.startswith(
+            "VERIFY-"
+        ):
+            raise DreamPlanningError("model Dream plan must bind a durable trace Verification")
 
     def to_dict(self) -> dict[str, object]:
         return {
             "plan": self.plan.to_dict(),
             "model_analysis": self.model_analysis.to_dict(),
+            "trace_verification_id": self.trace_verification_id,
             "memory_generation_created": False,
             "canonical_project_state_changed": False,
         }
@@ -128,6 +134,60 @@ class ModelDreamPlanningCoordinator(DreamPlanningCoordinator):
                 "Dream model analysis exceeded frozen token budget "
                 f"({observed} > {budget.max_analysis_tokens})"
             )
+
+    def _record_trace(
+        self,
+        *,
+        model_run_id: str,
+        manifest_hash: str,
+        manifest_id: str,
+        parent_generation_id: str | None,
+        result: DreamModelAnalysisResult,
+        candidates: tuple[DreamCandidate, ...],
+        audits,
+    ) -> str:
+        run = self.runtime.get_run(model_run_id)
+        return self.runtime.record_verification(
+            "RUN",
+            model_run_id,
+            verification_type="dream-model-structural-capture",
+            verifier="origin-forge-dream-model-planner",
+            status="PASS",
+            evidence={
+                "manifest_id": manifest_id,
+                "manifest_hash": manifest_hash,
+                "parent_memory_generation_id": parent_generation_id,
+                "model_profile": run["model_profile"],
+                "model_id": result.model_id,
+                "model_hash": result.model_hash,
+                "context_hash": result.context_hash,
+                "response_hash": result.response_hash,
+                "candidate_refs": [
+                    {"candidate_id": item.candidate_id, "content_hash": item.content_hash}
+                    for item in candidates
+                ],
+                "audit_refs": [
+                    {
+                        "candidate_id": item.candidate_id,
+                        "audit_hash": item.content_hash,
+                        "status": item.status.value,
+                    }
+                    for item in audits
+                ],
+                "semantic_claims_verified": False,
+                "memory_generation_created": False,
+                "canonical_project_state_changed": False,
+            },
+            metrics={
+                "input_tokens": result.input_tokens,
+                "output_tokens": result.output_tokens,
+                "observed_analysis_tokens": result.input_tokens + result.output_tokens,
+                "model_candidate_count": len(result.candidates),
+                "persisted_candidate_count": len(candidates),
+                "audit_count": len(audits),
+            },
+            run_id=model_run_id,
+        )
 
     def plan(
         self,
@@ -238,4 +298,17 @@ class ModelDreamPlanningCoordinator(DreamPlanningCoordinator):
             context_hash=model_result.context_hash,
             response_hash=model_result.response_hash,
         )
-        return ModelDreamPlanResult(plan=plan, model_analysis=filtered_model_result)
+        trace_verification_id = self._record_trace(
+            model_run_id=model_run_id,
+            manifest_hash=manifest.content_hash,
+            manifest_id=manifest.manifest_id,
+            parent_generation_id=parent_generation_id,
+            result=filtered_model_result,
+            candidates=candidates,
+            audits=audits,
+        )
+        return ModelDreamPlanResult(
+            plan=plan,
+            model_analysis=filtered_model_result,
+            trace_verification_id=trace_verification_id,
+        )
