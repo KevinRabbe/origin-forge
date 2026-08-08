@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
 from typing import Any
 
+from .path_policy import portable_path_key, portable_relative_path
 from .repository import RepositoryReader
 
 
@@ -79,16 +79,12 @@ PATCH_PROPOSAL_SCHEMA: dict[str, Any] = {
 
 
 def _validate_path(raw: Any) -> str:
-    if not isinstance(raw, str) or not raw.strip():
+    if not isinstance(raw, str):
         raise PatchValidationError("change path must be a non-empty string")
-    path = Path(raw)
-    if path.is_absolute() or not path.parts:
-        raise PatchValidationError("change path must be project-relative")
-    if any(part in {"", ".", ".."} for part in path.parts):
-        raise PatchValidationError("change path is invalid")
-    if path.parts[0] in {".git", ".origin-forge"}:
-        raise PatchValidationError("patches may not modify protected Origin Forge state")
-    return path.as_posix()
+    try:
+        return portable_relative_path(raw).as_posix()
+    except ValueError as exc:
+        raise PatchValidationError(str(exc)) from exc
 
 
 def parse_patch_proposal(
@@ -124,7 +120,7 @@ def parse_patch_proposal(
         raise PatchValidationError("patch proposal notes must be an array of strings")
 
     changes: list[FileChange] = []
-    seen_paths: set[str] = set()
+    seen_paths: dict[str, str] = {}
     total_content = 0
     for item in changes_raw:
         if not isinstance(item, dict):
@@ -139,9 +135,13 @@ def parse_patch_proposal(
         except (ValueError, TypeError) as exc:
             raise PatchValidationError(f"invalid file operation: {item.get('operation')}") from exc
         path = _validate_path(item["path"])
-        if path in seen_paths:
-            raise PatchValidationError(f"duplicate file change: {path}")
-        seen_paths.add(path)
+        key = portable_path_key(path)
+        previous = seen_paths.get(key)
+        if previous is not None:
+            raise PatchValidationError(
+                f"duplicate/case-colliding file change: {previous} and {path}"
+            )
+        seen_paths[key] = path
 
         expected_hash = item["expected_hash"]
         content = item["content"]
