@@ -50,6 +50,16 @@ class DreamCycleService:
             raise ValueError("DreamStore and runtime must belong to the same project")
         self.planner = DreamPlanningCoordinator(runtime, self.store)
 
+    @staticmethod
+    def _metrics(plan: DreamPlanResult) -> dict[str, int]:
+        return {
+            "evidence_record_count": len(plan.evidence_records),
+            "active_memory_entry_count": len(plan.active_memory_entries),
+            "preprocess_finding_count": len(plan.preprocess_report.findings),
+            "candidate_count": len(plan.candidates),
+            "audit_count": len(plan.audits),
+        }
+
     def _record_success(self, run_id: str, task_id: str, plan: DreamPlanResult) -> tuple[str, str]:
         evidence = {
             "manifest_id": plan.manifest.manifest_id,
@@ -71,13 +81,7 @@ class DreamCycleService:
             "memory_generation_created": False,
             "canonical_project_state_changed_by_dream_output": False,
         }
-        metrics = {
-            "evidence_record_count": len(plan.evidence_records),
-            "active_memory_entry_count": len(plan.active_memory_entries),
-            "preprocess_finding_count": len(plan.preprocess_report.findings),
-            "candidate_count": len(plan.candidates),
-            "audit_count": len(plan.audits),
-        }
+        metrics = self._metrics(plan)
         run_verification = self.runtime.record_verification(
             "RUN",
             run_id,
@@ -104,6 +108,38 @@ class DreamCycleService:
             run_id=run_id,
         )
         return run_verification, task_verification
+
+    def _record_goal_success(
+        self,
+        *,
+        goal_id: str,
+        flow_id: str,
+        task_id: str,
+        run_id: str,
+        run_verification_id: str,
+        plan: DreamPlanResult,
+    ) -> str:
+        return self.runtime.record_verification(
+            "GOAL",
+            goal_id,
+            verification_type="dream-cycle-plan",
+            verifier="origin-forge-dream-cycle",
+            status="PASS",
+            evidence={
+                "flow_id": flow_id,
+                "task_id": task_id,
+                "run_id": run_id,
+                "run_verification_id": run_verification_id,
+                "manifest_id": plan.manifest.manifest_id,
+                "manifest_hash": plan.manifest.content_hash,
+                "plan_hash": plan.content_hash,
+                "model_invoked": False,
+                "memory_generation_created": False,
+                "canonical_project_state_changed_by_dream_output": False,
+            },
+            metrics=self._metrics(plan),
+            run_id=run_id,
+        )
 
     def _record_failure(self, run_id: str, exc: Exception) -> None:
         try:
@@ -199,6 +235,14 @@ class DreamCycleService:
                 flow_id,
                 FlowStatus.SUCCEEDED,
                 expected_revision=flow_revision,
+            )
+            self._record_goal_success(
+                goal_id=goal_id,
+                flow_id=flow_id,
+                task_id=task_id,
+                run_id=run_id,
+                run_verification_id=run_verification,
+                plan=plan,
             )
             self.runtime.transition_goal(
                 goal_id,
