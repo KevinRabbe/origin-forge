@@ -1,14 +1,12 @@
-# Phase 11 — Code Intelligence and LSP Notes
+# Phase 11 — Code Intelligence and Sandboxed LSP
 
 Status: **stacked development branch; depends on Phase 10**
 
-Phase 11 extends Origin Forge from lexical/structural context selection toward a provider-neutral code-intelligence layer.
+Phase 11 extends Origin Forge from lexical/structural context selection into a provider-neutral code-intelligence layer while keeping code intelligence as evidence rather than authority.
 
 ## Design rule
 
-Code intelligence is evidence, not authority.
-
-A language server or parser may report definitions, references, symbols and diagnostics. It does not receive permission to mutate project state, change policy, merge work, or decide Task completion.
+A language server, parser, or static analyzer may report symbols, definitions, references, and diagnostics. It does not receive permission to mutate project state, change policy, merge work, decide Task completion, or bypass compiler/test/runtime verification.
 
 ## Provider boundary
 
@@ -22,9 +20,7 @@ CodeIntelligenceProvider
 └── diagnostics
 ```
 
-Normalized values use Origin Forge types rather than raw LSP structures.
-
-This allows providers to be replaced or combined:
+Normalized values use Origin Forge types rather than raw LSP structures. Providers can therefore be replaced or combined without changing Manager/Executor semantics:
 
 ```text
 Python AST
@@ -33,26 +29,15 @@ LSP
 future static-analysis provider
 ```
 
-without changing Manager/Executor semantics.
-
 ## Internal positions
 
-Origin Forge uses:
+Origin Forge uses zero-based lines and zero-based Unicode-codepoint character positions. Provider adapters convert their native representation at the boundary.
 
-```text
-line       zero-based
-character  zero-based Unicode codepoint index
-```
-
-Provider adapters are responsible for converting their native representation.
-
-This matters for LSP because a language server can use negotiated position encodings such as UTF-8, UTF-16 or UTF-32 code units. Protocol-specific encoding semantics stay inside the LSP adapter.
+For LSP this matters because character offsets may use UTF-8, UTF-16, or UTF-32 code units. Protocol-specific encoding semantics stay inside the LSP adapter.
 
 ## Deterministic Python provider
 
-`PythonAstCodeIntelligence` is the first provider.
-
-It:
+`PythonAstCodeIntelligence` is the first provider. It:
 
 - executes no project code
 - scans only tracked Python files
@@ -61,16 +46,14 @@ It:
 - applies scan-file and scan-byte budgets
 - returns bounded deterministic results
 - extracts class/function/method symbols
-- supports simple definition/reference lookup
+- supports conservative definition/reference lookup
 - reports Python syntax diagnostics
 
-It is intentionally conservative. It does not pretend to have full semantic knowledge of dynamic Python.
+It intentionally does not pretend to provide complete semantic knowledge for dynamic Python.
 
 ## LSP protocol codec
 
-The first LSP layer is deliberately process-free.
-
-`lsp_protocol.py` implements:
+`lsp_protocol.py` implements the process-neutral wire layer:
 
 - header-delimited JSON-RPC framing
 - mandatory byte-count `Content-Length`
@@ -78,7 +61,7 @@ The first LSP layer is deliberately process-free.
 - header/message size bounds
 - JSON object validation
 - UTF-8 / UTF-16 / UTF-32 position conversion
-- rejection of code-unit offsets that split Unicode characters
+- rejection of offsets that split Unicode characters
 
 ## Bounded JSON-RPC session
 
@@ -88,42 +71,53 @@ Current rules:
 
 - exactly one outstanding client request
 - exact response-ID correlation
-- request timeout
+- bounded request timeout
 - timeout makes the session terminal
 - bounded pending notifications
-- wrong/missing JSON-RPC 2.0 protocol state fails closed
-- server-to-client requests are rejected with `MethodNotFound` until a specific safe handler exists
-- protocol/message size limits remain active for every read/write
+- wrong/missing JSON-RPC 2.0 state fails closed
+- server-to-client requests are rejected by default
+- protocol/message limits apply to every read/write
 
-The one-outstanding-request rule is intentional. Origin Forge does not need multiplexing complexity before it has evidence that concurrent LSP requests improve throughput.
+One outstanding request is deliberate. Origin Forge does not need multiplexing complexity before benchmarks show a useful throughput gain.
 
 ## Workspace URI containment
 
-`LspWorkspaceMapper` is the trust boundary for file locations.
+`LspWorkspaceMapper` separates the local filesystem tree Origin Forge reads from the root URI visible to the server.
 
-It converts between relative Workspace paths and `file://` URIs while enforcing:
+Example sandbox mapping:
 
-- Workspace-root containment after resolution
-- `.git` protection
-- `.origin-forge` protection
-- symlink-escape rejection
-- non-file URI rejection
-- remote-host file URI rejection
-- query/fragment rejection
+```text
+local copy: .../.origin-forge/lsp-jobs/<id>/workspace
+server root: file:///workspace
+```
 
-A language server returning one unsafe location causes the query to fail rather than silently adding that path to model context.
+Every returned server URI is translated through a relative path and then revalidated against the local Workspace.
+
+The mapper rejects:
+
+- paths outside the Workspace after resolution
+- protected `.git` / `.origin-forge` roots
+- symlink escapes
+- non-file URIs
+- remote-host file URIs
+- query/fragment-bearing file URIs
+- mismatched server-visible roots
+
+Spaces and Unicode round-trip through percent-encoded file URIs.
 
 ## Initialization and capability negotiation
 
-`initialize_lsp_session` advertises the small code-intelligence capabilities Origin Forge intends to use and parses the server response into `LspServerCapabilities`.
+`initialize_lsp_session` advertises only the read-only intelligence capabilities Origin Forge consumes and parses the response into `LspServerCapabilities`.
 
-Position encoding is explicit:
+Position encoding is negotiated from:
 
 - `utf-8`
 - `utf-16`
 - `utf-32`
 
-If the server omits position-encoding negotiation, the compatibility fallback is UTF-16.
+If the server omits the negotiated encoding, UTF-16 is the compatibility fallback.
+
+Origin Forge currently models one immutable Workspace root. `rootUri` is authoritative and `workspaceFolders` is sent as `null`; dynamic workspace-folder support is not advertised.
 
 Normalized capability flags currently cover:
 
@@ -132,9 +126,9 @@ Normalized capability flags currently cover:
 - references
 - pull diagnostics
 
-## Process-neutral LSP provider
+## Normalized LSP provider
 
-`LspCodeIntelligenceProvider` connects an already-initialized bounded LSP session to the same `CodeIntelligenceProvider` interface as the Python AST implementation.
+`LspCodeIntelligenceProvider` connects an initialized bounded LSP session to the common `CodeIntelligenceProvider` interface.
 
 It supports:
 
@@ -143,46 +137,123 @@ It supports:
 - `textDocument/references`
 - `textDocument/diagnostic`
 
-All raw results are normalized into Origin Forge data types. Returned URIs are revalidated through `LspWorkspaceMapper`, and LSP character offsets are converted from the negotiated encoding back to Origin Forge Unicode-codepoint positions.
+Raw LSP results never go directly to the model. Returned URIs are contained first, source files are re-read through `RepositoryReader`, and character offsets are converted from the negotiated encoding back to Origin Forge Unicode-codepoint positions.
 
-The model never receives a raw LSP session or arbitrary LSP method surface.
+## Config v4 trusted server registry
 
-## Why process execution is still separate
+Project config v4 adds an empty-by-default registry of operator-approved LSP servers under protected Origin Forge state.
 
-Phase 11 can now speak and normalize LSP without deciding how the server process is hosted.
+A server descriptor owns:
 
-That separation is deliberate. Starting a language server is a security boundary because some servers can invoke compilers, build systems, plugins, proc macros, project interpreters, or network-dependent tooling depending on configuration.
+- stable server ID
+- backend (`podman` only in Phase 11)
+- local/preloaded image reference
+- exact server argv
+- Podman executable
+- network policy
+- memory / CPU / PID limits
+- probe / initialize / request / shutdown timeouts
+- protocol-message limit
+- notification limit
+- stderr limit
 
-Origin Forge should not accidentally turn "code intelligence" into general project-code execution.
+Configs v1–v3 remain readable. Configuring a server does not start it.
 
-## Future trusted-server boundary
+`create_configured_lsp_backend(runtime, server_id)` accepts only a configured ID. Image, argv, backend, and resource policy come from protected project configuration rather than model input.
 
-Before Origin Forge itself launches an LSP server, the process layer must define at least:
+## Sandboxed Podman LSP backend
 
-- exact trusted executable/argv policy
-- Workspace root passed explicitly
-- `shell=False`
-- clean/bounded environment
-- startup and request timeouts
-- stdout protocol message bounds
-- independently bounded stderr drain
-- capability negotiation
-- request-ID correlation
-- explicit safe server-request handlers only
-- graceful shutdown plus forced termination fallback
-- URI/path containment on every returned location
-- enforceable network policy
-- no model control over server executable or arguments
+`PodmanLspBackend` treats language-server startup as sandboxed code execution rather than harmless metadata access.
 
-For language servers that can execute project code, a persistent isolated/sandboxed hosting backend is preferable to a native-host process.
+The configured image must already exist locally. Origin Forge resolves it to a local image ID and runs with `--pull=never`.
+
+Each session receives a disposable source copy under:
+
+```text
+.origin-forge/lsp-jobs/<id>/workspace
+```
+
+The copy:
+
+- excludes protected roots case-insensitively
+- omits all symlinks
+- is mounted read-only at `/workspace`
+
+The container uses:
+
+- read-only root filesystem
+- read-only `/workspace`
+- dropped capabilities
+- `no-new-privileges`
+- bounded CPU / memory / PID count
+- tmpfs writable areas for `/tmp` and `/run`
+- HOME/cache redirected to `/tmp`
+- network disabled by default
+
+Lifecycle is bounded:
+
+```text
+resolve local image
+→ copy Workspace
+→ start container
+→ initialize bounded LSP session
+→ normalized provider
+→ shutdown
+→ exit
+→ wait / terminate / kill fallback
+→ CID cleanup
+→ remove disposable copy
+```
+
+Initialization failure follows the same cleanup discipline.
+
+There is deliberately no native-host language-server backend in Phase 11.
+
+## Safe operator surface
+
+The Phase-11 CLI exposes only configured identity/status operations:
+
+```text
+python -m origin_forge.code_intelligence_cli list
+python -m origin_forge.code_intelligence_cli status <configured-server-id>
+```
+
+There is no command-line or model surface for arbitrary image names, server argv, raw LSP methods, code actions, or host executables.
+
+## Semantic context expansion
+
+`CodeIntelligenceContextExpander` takes an existing bounded seed context and:
+
+- derives a small deterministic Task query set
+- performs bounded workspace-symbol queries
+- accepts only tracked result files
+- re-reads candidates through `RepositoryReader`
+- preserves seed paths
+- enforces final file/byte budgets
+- fails explicitly when requested semantic evidence is unavailable
+
+It remains separate from Phase-10 orchestration until the lower branch lands. After Phase 10 merges it can plug into the shared `WorkspaceContextSelector` rather than creating a second context state machine.
+
+## Diagnostics evidence
+
+`CodeDiagnosticsEvaluator` converts provider diagnostics into bounded, sorted evidence.
+
+Important rules:
+
+- diagnostics are evidence, not the final correctness oracle
+- errors may fail this evidence check
+- warnings/information remain visible without automatically failing the Task
+- diagnostic messages are length-bounded
+- total diagnostic count is bounded
+- the number of diagnostic paths is bounded
+- the total provider request budget is partitioned across files before the provider call, rather than slicing only after an oversized request
+- an excessive path set fails before any provider request is made
+
+Compiler, tests, runtime observation, sandbox verification, and other deterministic checks remain higher-authority evidence.
 
 ## Relationship to Phase 10
 
-Phase 10 decides **which files are relevant** using lexical and structural evidence.
-
-Phase 11 supplies richer evidence about those files and their relationships.
-
-Expected direction:
+Phase 10 decides which files are relevant using lexical and structural evidence. Phase 11 can add richer semantic evidence without replacing that selection state machine.
 
 ```text
 Task
@@ -191,14 +262,20 @@ WorkspaceContextSelector
  ↓
 lexical + structural candidates
  ↓
-CodeIntelligenceProvider
+optional CodeIntelligenceContextExpander
  ↓
-definition/reference/diagnostic evidence
+final bounded ContextPackage
  ↓
-final bounded ContextPackage / Auditor evidence
+Executor
+
+Workspace / changed files
+ ↓
+CodeDiagnosticsEvaluator
+ ↓
+bounded Auditor evidence
 ```
 
-The implementation should be benchmarked before structural/LSP expansion becomes a default behavior.
+Semantic expansion and LSP use should be benchmarked before becoming default behavior.
 
 ## Current regression surface
 
@@ -211,7 +288,7 @@ Phase-11 tests cover:
 - tracked-only and symlink-safe indexing
 - scan budgets/determinism
 - byte-accurate LSP framing
-- LSP message/header bounds
+- message/header bounds
 - UTF-8 content enforcement
 - UTF-8/UTF-16/UTF-32 position conversion
 - split-codepoint rejection
@@ -222,20 +299,30 @@ Phase-11 tests cover:
 - bounded notification queues
 - JSON-RPC version enforcement
 - Workspace URI round-trip and containment
+- host ↔ container server-root mapping
 - external/non-file/symlink URI rejection
 - capability negotiation and UTF-16 fallback
-- process-neutral workspace-symbol/definition/reference/diagnostic normalization
-- external result location rejection
+- single-Workspace initialization contract
+- process-neutral symbol/definition/reference/diagnostic normalization
+- config-v4 server registry validation and backward compatibility
+- configured-server factory behavior
+- safe operator CLI behavior
+- Podman command hardening and local image resolution
+- symlink-free disposable copies
+- lifecycle and initialization-failure cleanup
+- semantic context query/file/byte budgets
+- diagnostics sorting, message limits, path limits, and provider-request budgets
 
 ## Deferred
 
-Not included in the current substrate:
+Phase 11 intentionally does not include:
 
-- spawning a language server
-- arbitrary host shell execution
-- project-controlled LSP executable selection
+- native-host LSP execution
+- arbitrary shell execution
+- model-controlled server executable/image/argv
+- model-controlled raw LSP requests
 - language-server plugins downloaded from the internet
-- model-controlled raw LSP queries
-- unbounded workspace symbol/reference requests
-- automatic file mutation from code-action/edit responses
-- trusting diagnostics as the only verification oracle
+- automatic code-action/edit application
+- unbounded workspace symbol/reference/diagnostic requests
+- dynamic multi-root workspace management
+- diagnostics as the only verification oracle
