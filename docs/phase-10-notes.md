@@ -4,6 +4,20 @@ Status: **completion candidate; CI required before merge**
 
 Phase 10 extends Phase 8's deterministic lexical discovery with bounded Python structural evidence and moves all one-shot/retry context mode handling behind one Workspace-local selector.
 
+## Inherited boundaries
+
+Phase 10 is intentionally layered on the hardened repository boundary and Phase-9 governed Skills.
+
+That means:
+
+- repository paths already use the portable cross-platform identity policy
+- protected `.git` / `.origin-forge` roots remain inaccessible to model patch/context paths
+- case-colliding path identities fail closed
+- Skills may augment Executor procedure but do not alter context-selection, repository, sandbox, retry, verification, or merge authority
+- structural context selection remains independent deterministic infrastructure
+
+Phase 10 therefore improves **which evidence is shown** without granting either the model or a Skill new actions.
+
 ## Core invariant
 
 Context is selected only after the isolated Git Workspace exists.
