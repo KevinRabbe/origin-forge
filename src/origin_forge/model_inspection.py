@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .model_scheduler import (
+    ModelProfileError,
     ModelProfileRegistry,
     ModelResourceProfile,
     ModelRole,
@@ -102,7 +103,7 @@ def inspect_model_policy(
     )
     mismatched = [profile.profile_id for profile in profiles if profile.role != policy.role]
     if mismatched:
-        raise ValueError(
+        raise ModelProfileError(
             f"model selection policy role {policy.role.value} does not match profiles: {', '.join(mismatched)}"
         )
 
