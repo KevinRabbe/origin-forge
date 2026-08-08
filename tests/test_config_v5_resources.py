@@ -47,7 +47,7 @@ test = []
 enabled = false
 ''',
             )
-            with self.assertRaisesRegex(ValueError, "require config version 5"):
+            with self.assertRaisesRegex(ValueError, "requires config version 5"):
                 load_config(root)
 
     def test_v5_parses_enabled_capacity_profiles_and_explicit_policy(self) -> None:
