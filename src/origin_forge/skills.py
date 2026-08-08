@@ -146,14 +146,38 @@ class SkillRegistry:
         if max_selected_instruction_bytes <= 0:
             raise ValueError("max_selected_instruction_bytes must be positive")
         self.runtime = runtime
-        self.root = Path(root).resolve() if root is not None else (runtime.state_dir / "skills").resolve()
+        raw_root = Path(root) if root is not None else runtime.state_dir / "skills"
+        if not raw_root.is_absolute():
+            raw_root = runtime.project_root / raw_root
+        self.root = raw_root.absolute()
+        state_root = runtime.state_dir.absolute()
+        try:
+            self.root.relative_to(state_root)
+        except ValueError as exc:
+            raise SkillFormatError("Skill registry root must stay inside .origin-forge") from exc
         self.max_skill_bytes = max_skill_bytes
         self.max_selected_skills = max_selected_skills
         self.max_selected_instruction_bytes = max_selected_instruction_bytes
 
+    def _validated_root(self, *, create: bool = False) -> Path:
+        if self.root.is_symlink():
+            raise SkillFormatError("Skill registry root may not be a symlink")
+        if create:
+            self.root.mkdir(parents=True, exist_ok=True)
+        if not self.root.exists():
+            return self.root
+        if not self.root.is_dir():
+            raise SkillFormatError("Skill registry root must be a real directory")
+        resolved = self.root.resolve()
+        state_resolved = self.runtime.state_dir.resolve()
+        try:
+            resolved.relative_to(state_resolved)
+        except ValueError as exc:
+            raise SkillFormatError("Skill registry root escapes .origin-forge") from exc
+        return resolved
+
     def ensure_root(self) -> Path:
-        self.root.mkdir(parents=True, exist_ok=True)
-        return self.root
+        return self._validated_root(create=True)
 
     @staticmethod
     def _read_utf8(path: Path, *, max_bytes: int) -> tuple[str, bytes]:
@@ -225,12 +249,13 @@ class SkillRegistry:
     def _skill_dir(self, name: str) -> Path:
         if not _NAME_RE.fullmatch(name):
             raise SkillFormatError(f"invalid Skill name: {name!r}")
-        candidate = self.root / name
+        root = self._validated_root()
+        candidate = root / name
         if candidate.is_symlink():
             raise SkillFormatError(f"Skill directory may not be a symlink: {name}")
         resolved = candidate.resolve()
         try:
-            resolved.relative_to(self.root)
+            resolved.relative_to(root.resolve())
         except ValueError as exc:
             raise SkillFormatError(f"Skill directory escapes registry root: {name}") from exc
         return resolved
@@ -286,12 +311,11 @@ class SkillRegistry:
         return Skill(metadata, instructions)
 
     def catalog(self) -> tuple[SkillMetadata, ...]:
-        if not self.root.exists():
+        root = self._validated_root()
+        if not root.exists():
             return ()
-        if self.root.is_symlink() or not self.root.is_dir():
-            raise SkillFormatError("Skill registry root must be a real directory")
         skills: list[SkillMetadata] = []
-        for directory in sorted(self.root.iterdir(), key=lambda item: item.name):
+        for directory in sorted(root.iterdir(), key=lambda item: item.name):
             if directory.name.startswith("."):
                 continue
             if not directory.is_dir() or directory.is_symlink():
