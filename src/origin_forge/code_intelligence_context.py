@@ -4,7 +4,6 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Iterable
 
 from .code_intelligence import CodeIntelligenceError, CodeIntelligenceProvider, CodeSymbol
@@ -27,6 +26,7 @@ class CodeIntelligenceContextSettings:
     max_files: int = 16
     max_total_bytes: int = 768 * 1024
     git_timeout_seconds: float = 10.0
+    max_git_output_bytes: int = 512 * 1024
 
     def __post_init__(self) -> None:
         if self.max_queries <= 0:
@@ -39,6 +39,8 @@ class CodeIntelligenceContextSettings:
             raise ValueError("max_total_bytes must be positive")
         if self.git_timeout_seconds <= 0:
             raise ValueError("git_timeout_seconds must be positive")
+        if self.max_git_output_bytes <= 0:
+            raise ValueError("max_git_output_bytes must be positive")
 
 
 @dataclass(frozen=True)
@@ -118,10 +120,25 @@ class CodeIntelligenceContextExpander:
         unique = sorted(set(_tokens(text)), key=lambda term: (-len(term), term))
         return tuple(unique[: self.settings.max_queries])
 
-    def _tracked_paths(self) -> frozenset[str]:
+    def _tracked_subset(self, paths: Iterable[str]) -> frozenset[str]:
+        unique = tuple(dict.fromkeys(paths))
+        if not unique:
+            return frozenset()
+        maximum = self.settings.max_files + (
+            self.settings.max_queries * self.settings.max_symbols_per_query
+        )
+        if len(unique) > maximum:
+            raise CodeIntelligenceContextError(
+                f"semantic tracked-path check exceeds limit ({len(unique)} > {maximum})"
+            )
+
+        # Every path is already repository-contained before reaching this
+        # helper. Git's literal pathspec magic prevents wildcard-like filename
+        # characters from widening one candidate into a repository scan.
+        pathspecs = [f":(literal){path}" for path in unique]
         try:
             result = subprocess.run(
-                ["git", "ls-files", "-z", "--cached", "--"],
+                ["git", "ls-files", "-z", "--cached", "--", *pathspecs],
                 cwd=self.repository.project_root,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
@@ -131,20 +148,34 @@ class CodeIntelligenceContextExpander:
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise CodeIntelligenceContextError(
-                f"cannot enumerate tracked files: {exc}"
+                f"cannot verify tracked semantic paths: {exc}"
             ) from exc
+        if len(result.stdout) > self.settings.max_git_output_bytes:
+            raise CodeIntelligenceContextError(
+                "tracked semantic path output exceeds byte limit "
+                f"({len(result.stdout)} > {self.settings.max_git_output_bytes})"
+            )
         if result.returncode != 0:
             detail = result.stderr.decode("utf-8", errors="replace")
             raise CodeIntelligenceContextError(
                 f"git ls-files failed ({result.returncode}): {detail[:1000]}"
             )
         try:
-            paths = [item.decode("utf-8") for item in result.stdout.split(b"\0") if item]
+            tracked = frozenset(
+                item.decode("utf-8")
+                for item in result.stdout.split(b"\0")
+                if item
+            )
         except UnicodeDecodeError as exc:
             raise CodeIntelligenceContextError(
-                "tracked repository path is not UTF-8"
+                "tracked semantic path is not UTF-8"
             ) from exc
-        return frozenset(paths)
+        unexpected = tracked.difference(unique)
+        if unexpected:
+            raise CodeIntelligenceContextError(
+                f"Git returned unexpected semantic paths: {sorted(unexpected)[:3]}"
+            )
+        return tracked
 
     @staticmethod
     def _symbol_score(term: str, symbol: CodeSymbol) -> int:
@@ -177,7 +208,6 @@ class CodeIntelligenceContextExpander:
                 f"provider {self.provider.provider_id} does not support workspace symbols"
             )
 
-        tracked = self._tracked_paths()
         seeds: list[str] = []
         selected_bytes = 0
         for raw in seed_paths:
@@ -187,10 +217,6 @@ class CodeIntelligenceContextExpander:
                 raise CodeIntelligenceContextError(
                     f"invalid semantic context seed {raw}: {exc}"
                 ) from exc
-            if source.path not in tracked:
-                raise CodeIntelligenceContextError(
-                    f"semantic context seed is not tracked: {source.path}"
-                )
             if source.path in seeds:
                 continue
             if len(seeds) >= self.settings.max_files:
@@ -208,6 +234,12 @@ class CodeIntelligenceContextExpander:
             raise CodeIntelligenceContextError(
                 "semantic context expansion requires at least one seed path"
             )
+        tracked_seeds = self._tracked_subset(seeds)
+        missing_seeds = set(seeds).difference(tracked_seeds)
+        if missing_seeds:
+            raise CodeIntelligenceContextError(
+                f"semantic context seed is not tracked: {sorted(missing_seeds)[0]}"
+            )
 
         query_terms = self._query_terms(task_id)
         seed_set = set(seeds)
@@ -224,10 +256,19 @@ class CodeIntelligenceContextExpander:
                 raise CodeIntelligenceContextError(
                     f"code-intelligence query failed for {term!r}: {exc}"
                 ) from exc
-            for symbol in symbols:
+            for index, symbol in enumerate(symbols):
+                if index >= self.settings.max_symbols_per_query:
+                    break
                 path = symbol.location.path
-                if path in seed_set or path not in tracked:
+                if path in seed_set:
                     continue
+                try:
+                    if not self.repository.exists(path):
+                        continue
+                except RepositoryAccessError as exc:
+                    raise CodeIntelligenceContextError(
+                        f"unsafe semantic symbol path {path!r}: {exc}"
+                    ) from exc
                 score = self._symbol_score(term, symbol)
                 if score <= 0:
                     continue
@@ -236,7 +277,11 @@ class CodeIntelligenceContextExpander:
                     f"symbol:{term}:{symbol.name}"
                 )
 
-        ranked = sorted(scores, key=lambda path: (-scores[path], path))
+        tracked_candidates = self._tracked_subset(scores)
+        ranked = sorted(
+            (path for path in scores if path in tracked_candidates),
+            key=lambda path: (-scores[path], path),
+        )
         selected = list(seeds)
         added: list[SemanticContextCandidate] = []
         for path in ranked:
