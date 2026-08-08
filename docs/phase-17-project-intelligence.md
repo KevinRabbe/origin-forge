@@ -1,6 +1,6 @@
 # Phase 17 — Project Intelligence
 
-Status: **implementation starting after Phase 16**
+Status: **DONE — semantic project intelligence substrate complete; automatic model-context integration remains deliberately disabled**
 
 Phase 17 gives Origin Forge a durable semantic model of the product it is building. The goal is not to add more conversational memory or another model-facing retrieval trick. The goal is to make project structure, cross-media relationships, design rules, and change impact explicit, queryable, versioned project truth.
 
