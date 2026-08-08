@@ -38,7 +38,6 @@ class DreamEvidenceTests(unittest.TestCase):
             objective,
             acceptance_criteria=("verification passes",),
             required_capabilities=("code",),
-            budget={"attempts": 2},
         )
         revision = self.runtime.transition_task(task, TaskStatus.READY, expected_revision=0)
         self.runtime.transition_task(task, TaskStatus.RUNNING, expected_revision=revision)
