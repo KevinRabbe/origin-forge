@@ -246,7 +246,7 @@ class ReviewerTests(unittest.TestCase):
             budget=SpecialistBudget(max_report_bytes=16),
         )
         small_package = SpecialistEvidencePackage(small, (self.record,))
-        with self.assertRaisesRegex(ReviewerError, "response exceeds frozen report byte budget"):
+        with self.assertRaisesRegex(ReviewerError, "normalized report exceeds frozen report byte budget"):
             IsolatedReviewer(FakeReviewerModel({"findings": []})).review(
                 small_package,
                 run_id=self.run_id,
