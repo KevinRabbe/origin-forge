@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import queue
 import threading
 import time
@@ -45,10 +46,10 @@ class _Failure:
 class LspJsonRpcSession:
     """Bounded synchronous JSON-RPC session over existing LSP byte streams.
 
-    Exactly one client request may be outstanding. Server notifications are
-    buffered under a hard count limit. Server-to-client requests are rejected
-    with JSON-RPC MethodNotFound until Origin Forge explicitly implements a
-    safe handler for a specific method.
+    Exactly one client request may be outstanding, so at most one response may
+    be pending. Server notifications are bounded by both count and cumulative
+    compact-JSON bytes. Server-to-client requests are rejected with JSON-RPC
+    MethodNotFound until Origin Forge explicitly implements a safe handler.
 
     A request timeout makes the session terminal. Once response correlation is
     uncertain, the owner must replace the session rather than risk consuming a
@@ -62,17 +63,26 @@ class LspJsonRpcSession:
         *,
         max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
         max_pending_notifications: int = 256,
+        max_pending_notification_bytes: int | None = None,
     ):
         if max_message_bytes <= 0:
             raise ValueError("max_message_bytes must be positive")
         if max_pending_notifications <= 0:
             raise ValueError("max_pending_notifications must be positive")
+        if max_pending_notification_bytes is None:
+            max_pending_notification_bytes = max_message_bytes * 2
+        if max_pending_notification_bytes <= 0:
+            raise ValueError("max_pending_notification_bytes must be positive")
         self.reader = reader
         self.writer = writer
         self.max_message_bytes = max_message_bytes
         self.max_pending_notifications = max_pending_notifications
-        self._responses: queue.Queue[dict | _Failure] = queue.Queue()
+        self.max_pending_notification_bytes = max_pending_notification_bytes
+        # Exactly one client request is allowed, so a second pending response is
+        # always a protocol violation and must never become an unbounded queue.
+        self._responses: queue.Queue[dict | _Failure] = queue.Queue(maxsize=1)
         self._notifications: deque[LspNotification] = deque()
+        self._pending_notification_bytes = 0
         self._notification_lock = threading.Lock()
         self._write_lock = threading.Lock()
         self._request_lock = threading.Lock()
@@ -110,12 +120,35 @@ class LspJsonRpcSession:
             if self._fatal is not None:
                 return
             self._fatal = error
-        self._responses.put(_Failure(error))
+        try:
+            self._responses.put_nowait(_Failure(error))
+        except queue.Full:
+            # A pending response already exists. The waiter will observe the
+            # fatal state immediately after dequeuing it and fail closed.
+            pass
 
     def _raise_if_fatal(self) -> None:
         error = self._fatal_error()
         if error is not None:
             raise error
+
+    def _queue_response(self, message: dict) -> None:
+        try:
+            self._responses.put_nowait(message)
+        except queue.Full as exc:
+            raise LspProtocolError(
+                "LSP pending response limit exceeded"
+            ) from exc
+
+    @staticmethod
+    def _notification_size(message: dict) -> int:
+        return len(
+            json.dumps(
+                message,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
 
     def _reject_server_request(self, message: dict) -> None:
         request_id = message.get("id")
@@ -146,20 +179,29 @@ class LspJsonRpcSession:
                     if "id" in message:
                         self._reject_server_request(message)
                         continue
+                    notification_size = self._notification_size(message)
                     with self._notification_lock:
                         if len(self._notifications) >= self.max_pending_notifications:
                             raise LspProtocolError(
                                 "LSP pending notification limit exceeded"
                             )
+                        if (
+                            self._pending_notification_bytes + notification_size
+                            > self.max_pending_notification_bytes
+                        ):
+                            raise LspProtocolError(
+                                "LSP pending notification byte limit exceeded"
+                            )
                         self._notifications.append(
                             LspNotification(method, message.get("params"))
                         )
+                        self._pending_notification_bytes += notification_size
                     continue
                 if "id" not in message:
                     raise LspProtocolError(
                         "LSP response is missing both method and id"
                     )
-                self._responses.put(message)
+                self._queue_response(message)
         except EOFError as exc:
             if not self._closed:
                 self._set_fatal(LspSessionClosed(str(exc)))
@@ -208,6 +250,9 @@ class LspJsonRpcSession:
                     raise error from exc
                 if isinstance(response, _Failure):
                     raise response.error
+                # If the reader detected a protocol violation while this
+                # response was pending, do not accept stale/ambiguous evidence.
+                self._raise_if_fatal()
                 if response.get("id") != request_id:
                     error = LspProtocolError(
                         f"unexpected LSP response id {response.get('id')!r}; expected {request_id!r}"
@@ -238,6 +283,7 @@ class LspJsonRpcSession:
         with self._notification_lock:
             values = tuple(self._notifications)
             self._notifications.clear()
+            self._pending_notification_bytes = 0
         return values
 
     def close(self) -> None:
