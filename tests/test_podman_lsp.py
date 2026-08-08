@@ -32,6 +32,14 @@ class PodmanLspBackendTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
+    def _isolated_workspace(self) -> Path:
+        root = self.state / "workspaces"
+        root.mkdir(exist_ok=True)
+        workspace = root / "WSPACE-test"
+        workspace.mkdir(exist_ok=True)
+        workspace.joinpath("main.py").write_text("VALUE = 1\n", encoding="utf-8")
+        return workspace
+
     def test_command_uses_content_addressed_image_and_read_only_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch(
             "origin_forge.podman_lsp.shutil.which", return_value="/usr/bin/podman"
@@ -94,9 +102,16 @@ class PodmanLspBackendTests(unittest.TestCase):
         self.assertIn("inspect", run.call_args.args[0])
 
     def test_start_refuses_missing_local_image_without_pulling(self) -> None:
+        workspace = self._isolated_workspace()
         with patch.object(self.backend, "_probe_image_id", return_value=None):
             with self.assertRaises(PodmanLspUnavailable):
+                self.backend.start(workspace)
+
+    def test_start_rejects_arbitrary_host_path_before_image_probe(self) -> None:
+        with patch.object(self.backend, "_probe_image_id") as probe:
+            with self.assertRaisesRegex(PodmanLspUnavailable, "isolated Origin Forge workspace"):
                 self.backend.start(self.workspace)
+        probe.assert_not_called()
 
 
 if __name__ == "__main__":
