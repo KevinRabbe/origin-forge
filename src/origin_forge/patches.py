@@ -87,6 +87,23 @@ def _validate_path(raw: Any) -> str:
         raise PatchValidationError(str(exc)) from exc
 
 
+def _validate_proposal_path_identity(proposal: PatchProposal) -> None:
+    seen: dict[str, str] = {}
+    for change in proposal.changes:
+        canonical = _validate_path(change.path)
+        if canonical != change.path:
+            raise PatchValidationError(
+                f"patch path is not canonical: {change.path!r} != {canonical!r}"
+            )
+        key = portable_path_key(canonical)
+        previous = seen.get(key)
+        if previous is not None:
+            raise PatchValidationError(
+                f"duplicate/case-colliding file change: {previous} and {canonical}"
+            )
+        seen[key] = canonical
+
+
 def parse_patch_proposal(
     raw: str,
     *,
@@ -182,6 +199,7 @@ def parse_patch_proposal(
 def validate_patch_preconditions(
     proposal: PatchProposal, repository: RepositoryReader
 ) -> None:
+    _validate_proposal_path_identity(proposal)
     for change in proposal.changes:
         exists = repository.exists(change.path)
         if change.operation == FileOperation.CREATE:
