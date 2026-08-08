@@ -143,6 +143,8 @@ class BoundedModelDreamAnalyzer:
         max_context_bytes: int = 1024 * 1024,
         max_response_bytes: int = 256 * 1024,
     ):
+        if not isinstance(model, ModelAdapter):
+            raise TypeError("model must implement ModelAdapter")
         if not isinstance(max_context_bytes, int) or isinstance(max_context_bytes, bool) or max_context_bytes <= 0:
             raise ValueError("max_context_bytes must be a positive integer")
         if not isinstance(max_response_bytes, int) or isinstance(max_response_bytes, bool) or max_response_bytes <= 0:
