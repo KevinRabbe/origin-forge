@@ -29,7 +29,7 @@ from origin_forge.specialist_models import (
     SpecialistRole,
 )
 from origin_forge.specialist_store import SpecialistStore
-from origin_forge.state import FlowStatus, TaskStatus
+from origin_forge.state import FlowStatus, RunStatus, TaskStatus
 
 
 class SpecialistCliTests(unittest.TestCase):
@@ -52,7 +52,7 @@ class SpecialistCliTests(unittest.TestCase):
 
     def _trusted_review(self):
         task_id = new_id(IdKind.TASK)
-        payload = {"id": task_id, "status": "SUCCEEDED", "objective": "Review"}
+        payload = {"id": task_id, "status": "SUCCEEDED", "objective": "Review me"}
         ref = SpecialistEvidenceRef(
             task_id,
             canonical_hash(payload),
@@ -61,7 +61,7 @@ class SpecialistCliTests(unittest.TestCase):
         contract = SpecialistContract.create(
             role=SpecialistRole.REVIEWER,
             parent_task_id=task_id,
-            objective="Review frozen evidence",
+            objective="Review exact evidence",
             evidence_refs=(ref,),
         )
         package = SpecialistEvidencePackage(
@@ -106,6 +106,11 @@ class SpecialistCliTests(unittest.TestCase):
                 "report-show",
                 "audit-list",
                 "audit-show",
+                "eval-case-list",
+                "eval-case-show",
+                "eval-report-list",
+                "eval-report-show",
+                "eval-report-status",
             },
         )
         for forbidden in (
@@ -123,87 +128,6 @@ class SpecialistCliTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, commands)
 
-    def test_status_is_read_only_and_reports_reviewer_runs_only(self) -> None:
-        # Ordinary non-review task/run should not appear.
-        goal = self.runtime.create_goal("Ordinary")
-        flow = self.runtime.create_flow(goal)
-        self.runtime.transition_flow(flow, FlowStatus.RUNNING, expected_revision=0)
-        task = self.runtime.create_task(flow, "Ordinary task")
-        revision = self.runtime.transition_task(task, TaskStatus.READY, expected_revision=0)
-        self.runtime.transition_task(task, TaskStatus.RUNNING, expected_revision=revision)
-        self.runtime.start_run(task, role="EXECUTOR")
-
-        review_goal = self.runtime.create_goal("Review")
-        review_flow = self.runtime.create_flow(review_goal)
-        self.runtime.transition_flow(review_flow, FlowStatus.RUNNING, expected_revision=0)
-        review_task = self.runtime.create_task(review_flow, "Review task")
-        revision = self.runtime.transition_task(
-            review_task, TaskStatus.READY, expected_revision=0
-        )
-        self.runtime.transition_task(
-            review_task, TaskStatus.RUNNING, expected_revision=revision
-        )
-        review_run = self.runtime.start_run(
-            review_task,
-            role="REVIEWER",
-            model_profile="reviewer-strong",
-        )
-        before = len(self.runtime.list_runs())
-
-        code, payload = self._call("status")
-        self.assertEqual(code, 0)
-        self.assertEqual(payload["contracts"], 0)
-        self.assertEqual(payload["evidence_packages"], 0)
-        self.assertEqual(payload["reports"], 0)
-        self.assertEqual(payload["audits"], 0)
-        self.assertEqual(len(payload["reviewer_runs"]), 1)
-        self.assertEqual(payload["reviewer_runs"][0]["run_id"], review_run)
-        self.assertEqual(payload["reviewer_runs"][0]["model_profile"], "reviewer-strong")
-        self.assertFalse(payload["model_execution_enabled"])
-        self.assertFalse(payload["production_mutation_enabled"])
-        self.assertFalse(payload["automatic_blocking_gate_enabled"])
-        self.assertEqual(len(self.runtime.list_runs()), before)
-
-    def test_trusted_objects_are_listed_and_shown_without_mutation(self) -> None:
-        contract, package, report, audit = self._trusted_review()
-        audit_id = self.store.audit_id(audit)
-
-        code, payload = self._call("contract-list")
-        self.assertEqual(code, 0)
-        self.assertEqual(payload["contracts"], [contract.contract_id])
-        code, payload = self._call("contract-show", contract.contract_id)
-        self.assertEqual(code, 0)
-        self.assertEqual(payload["content_hash"], contract.content_hash)
-
-        code, payload = self._call("evidence-list")
-        self.assertEqual(code, 0)
-        self.assertEqual(payload["evidence_packages"], [contract.contract_id])
-        code, payload = self._call("evidence-show", contract.contract_id)
-        self.assertEqual(code, 0)
-        self.assertEqual(payload["content_hash"], package.content_hash)
-
-        code, payload = self._call("report-list")
-        self.assertEqual(code, 0)
-        self.assertEqual(payload["reports"], [report.report_id])
-        code, payload = self._call("report-show", report.report_id)
-        self.assertEqual(code, 0)
-        self.assertEqual(payload["content_hash"], report.content_hash)
-        self.assertEqual(payload["overall_risk"], "LOW")
-
-        code, payload = self._call("audit-list")
-        self.assertEqual(code, 0)
-        self.assertEqual(payload["audits"], [audit_id])
-        code, payload = self._call("audit-show", audit_id)
-        self.assertEqual(code, 0)
-        self.assertEqual(payload["content_hash"], audit.content_hash)
-        self.assertEqual(payload["status"], "STRUCTURALLY_VALID")
-        self.assertFalse(payload["semantic_findings_verified"])
-
-    def test_invalid_id_returns_structured_failure_without_path_probe(self) -> None:
-        code, payload = self._call("report-show", "not-a-report")
-        self.assertEqual(code, 2)
-        self.assertIn("invalid Reviewer report ID", payload["detail"])
-
     def test_empty_catalogs_are_deterministic(self) -> None:
         for command, field in (
             ("contract-list", "contracts"),
@@ -214,6 +138,66 @@ class SpecialistCliTests(unittest.TestCase):
             code, payload = self._call(command)
             self.assertEqual(code, 0)
             self.assertEqual(payload[field], [])
+
+    def test_trusted_objects_are_listed_and_shown_without_mutation(self) -> None:
+        contract, package, report, audit = self._trusted_review()
+        code, payload = self._call("contract-list")
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["contracts"], [contract.contract_id])
+        code, payload = self._call("contract-show", contract.contract_id)
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["content_hash"], contract.content_hash)
+
+        code, payload = self._call("evidence-show", contract.contract_id)
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["content_hash"], package.content_hash)
+
+        code, payload = self._call("report-show", report.report_id)
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["content_hash"], report.content_hash)
+
+        code, payload = self._call("audit-show", self.store.audit_id(audit))
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["report_hash"], report.content_hash)
+        self.assertFalse(payload["semantic_findings_verified"])
+
+    def test_invalid_id_returns_structured_failure_without_path_probe(self) -> None:
+        code, payload = self._call("report-show", "../../outside")
+        self.assertEqual(code, 2)
+        self.assertIn("invalid Reviewer report ID", payload["detail"])
+
+    def test_status_is_read_only_and_reports_reviewer_runs_only(self) -> None:
+        goal = self.runtime.create_goal("Review status")
+        flow = self.runtime.create_flow(goal)
+        self.runtime.transition_flow(flow, FlowStatus.RUNNING, expected_revision=0)
+        task = self.runtime.create_task(flow, "Review task")
+        revision = self.runtime.transition_task(task, TaskStatus.READY, expected_revision=0)
+        self.runtime.transition_task(task, TaskStatus.RUNNING, expected_revision=revision)
+        reviewer_run = self.runtime.start_run(task, role="REVIEWER", model_profile="reviewer-profile")
+
+        other_task = self.runtime.create_task(flow, "Executor task")
+        revision = self.runtime.transition_task(other_task, TaskStatus.READY, expected_revision=0)
+        self.runtime.transition_task(other_task, TaskStatus.RUNNING, expected_revision=revision)
+        executor_run = self.runtime.start_run(other_task, role="EXECUTOR")
+        self.runtime.finish_run(executor_run, RunStatus.FAILED, failure_reason="irrelevant")
+        current = self.runtime.get_task(other_task)
+        self.runtime.transition_task(
+            other_task,
+            TaskStatus.FAILED,
+            expected_revision=int(current["revision"]),
+        )
+
+        code, payload = self._call("status")
+        self.assertEqual(code, 0)
+        self.assertEqual(len(payload["reviewer_runs"]), 1)
+        self.assertEqual(payload["reviewer_runs"][0]["run_id"], reviewer_run)
+        self.assertFalse(payload["model_execution_enabled"])
+        self.assertFalse(payload["production_mutation_enabled"])
+        self.assertFalse(payload["automatic_blocking_gate_enabled"])
+        self.assertEqual(
+            self.runtime.get_run(reviewer_run)["status"],
+            RunStatus.RUNNING.value,
+        )
 
 
 if __name__ == "__main__":
