@@ -92,6 +92,16 @@ class _BoundedStderr:
         return bytes(self.data).decode("utf-8", errors="replace")
 
 
+def _close_process_pipes(process: subprocess.Popen) -> None:
+    for stream in (process.stdin, process.stdout, process.stderr):
+        if stream is None:
+            continue
+        try:
+            stream.close()
+        except (OSError, ValueError):
+            pass
+
+
 class PodmanLspHandle:
     """One initialized language-server container and normalized provider."""
 
@@ -177,17 +187,8 @@ class PodmanLspHandle:
                         pass
         finally:
             self.backend._cleanup_container(self.cidfile)
-            try:
-                if self.process.stdout is not None:
-                    self.process.stdout.close()
-            except (OSError, ValueError):
-                pass
-            try:
-                if self.process.stderr is not None:
-                    self.process.stderr.close()
-            except (OSError, ValueError):
-                pass
             self.stderr_thread.join(timeout=1.0)
+            _close_process_pipes(self.process)
             shutil.rmtree(self.job_root, ignore_errors=True)
 
     def __enter__(self) -> "PodmanLspHandle":
@@ -277,10 +278,20 @@ class PodmanLspBackend:
         protected = {".git", ".origin-forge"}
 
         def ignore(directory: str, names: list[str]) -> set[str]:
-            del directory
-            return {name for name in names if name.casefold() in protected}
+            root = Path(directory)
+            ignored: set[str] = set()
+            for name in names:
+                if name.casefold() in protected:
+                    ignored.add(name)
+                    continue
+                try:
+                    if (root / name).is_symlink():
+                        ignored.add(name)
+                except OSError:
+                    ignored.add(name)
+            return ignored
 
-        shutil.copytree(source, destination, symlinks=True, ignore=ignore)
+        shutil.copytree(source, destination, symlinks=False, ignore=ignore)
 
     def _build_command(
         self,
@@ -365,6 +376,7 @@ class PodmanLspBackend:
         cidfile = job_root / "container.cid"
         job_root.mkdir(parents=True, exist_ok=False)
         process: subprocess.Popen | None = None
+        session: LspRequestSession | None = None
         stderr_capture = _BoundedStderr(self.spec.max_stderr_bytes)
         stderr_thread: threading.Thread | None = None
         try:
@@ -429,7 +441,19 @@ class PodmanLspBackend:
                 stderr_thread=stderr_thread,
             )
         except Exception:
+            if session is not None:
+                close_session = getattr(session, "close", None)
+                if callable(close_session):
+                    try:
+                        close_session()
+                    except Exception:
+                        pass
             if process is not None:
+                try:
+                    if process.stdin is not None:
+                        process.stdin.close()
+                except (OSError, ValueError):
+                    pass
                 try:
                     process.terminate()
                 except OSError:
@@ -441,8 +465,14 @@ class PodmanLspBackend:
                         process.kill()
                     except OSError:
                         pass
-            self._cleanup_container(cidfile)
+                    try:
+                        process.wait(timeout=self.spec.shutdown_timeout_seconds)
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
             if stderr_thread is not None:
                 stderr_thread.join(timeout=1.0)
+            if process is not None:
+                _close_process_pipes(process)
+            self._cleanup_container(cidfile)
             shutil.rmtree(job_root, ignore_errors=True)
             raise
