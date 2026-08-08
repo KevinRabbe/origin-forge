@@ -48,11 +48,21 @@ _DIAGNOSTIC_SEVERITIES = {
     4: DiagnosticSeverity.HINT,
 }
 
+_MAX_DIAGNOSTIC_MESSAGE_CHARS = 16 * 1024
+_MAX_DIAGNOSTIC_SOURCE_CHARS = 512
+_MAX_DIAGNOSTIC_CODE_CHARS = 512
+
 
 def _limit(value: int, *, maximum: int = 1000) -> int:
     if value <= 0:
         raise ValueError("limit must be positive")
     return min(value, maximum)
+
+
+def _bounded_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[:limit] + "…"
 
 
 class LspCodeIntelligenceProvider:
@@ -321,8 +331,17 @@ class LspCodeIntelligenceProvider:
                 if not isinstance(severity, int) or isinstance(severity, bool):
                     raise CodeIntelligenceError("LSP diagnostic severity must be an integer")
                 raw_code = item.get("code")
-                code = str(raw_code) if isinstance(raw_code, (str, int)) and not isinstance(raw_code, bool) else None
+                code = (
+                    str(raw_code)
+                    if isinstance(raw_code, (str, int)) and not isinstance(raw_code, bool)
+                    else None
+                )
                 source = item.get("source")
+                bounded_source = (
+                    _bounded_text(source, _MAX_DIAGNOSTIC_SOURCE_CHARS)
+                    if isinstance(source, str)
+                    else self.provider_id
+                )
                 result.append(
                     CodeDiagnostic(
                         path,
@@ -331,9 +350,11 @@ class LspCodeIntelligenceProvider:
                             severity,
                             DiagnosticSeverity.INFORMATION,
                         ),
-                        message,
-                        source if isinstance(source, str) else self.provider_id,
-                        code,
+                        _bounded_text(message, _MAX_DIAGNOSTIC_MESSAGE_CHARS),
+                        bounded_source,
+                        _bounded_text(code, _MAX_DIAGNOSTIC_CODE_CHARS)
+                        if code is not None
+                        else None,
                     )
                 )
         return tuple(result)
