@@ -268,6 +268,35 @@ class PodmanLspBackend:
         self._resolved_image_id = self._probe_image_id()
         return self._resolved_image_id is not None
 
+    def _validated_workspace_source(self, workspace_path: str | Path) -> Path:
+        """Require a direct canonical Phase-3 isolated workspace root.
+
+        Language-server execution must never be pointed at the user's live
+        checkout or an arbitrary host directory. GitWorkspaceManager stores
+        disposable worktrees as direct children of `.origin-forge/workspaces`.
+        """
+
+        raw = Path(workspace_path)
+        try:
+            if raw.is_symlink():
+                raise PodmanLspUnavailable(
+                    "LSP source must be an isolated Origin Forge workspace, not a symlink"
+                )
+            source = raw.resolve(strict=True)
+            workspace_root = (self.state_dir / "workspaces").resolve()
+        except PodmanLspUnavailable:
+            raise
+        except (OSError, RuntimeError) as exc:
+            raise PodmanLspUnavailable(
+                f"Workspace path is unavailable: {workspace_path}"
+            ) from exc
+
+        if not source.is_dir() or source.parent != workspace_root:
+            raise PodmanLspUnavailable(
+                "LSP source must be a direct isolated Origin Forge workspace under .origin-forge/workspaces"
+            )
+        return source
+
     @staticmethod
     def _copy_workspace(source: Path, destination: Path) -> None:
         def ignore(directory: str, names: list[str]) -> set[str]:
@@ -353,16 +382,16 @@ class PodmanLspBackend:
             pass
 
     def start(self, workspace_path: str | Path) -> PodmanLspHandle:
+        # Validate the host path before probing/starting Podman. Invalid callers
+        # must not cause any runtime/tool side effect.
+        source = self._validated_workspace_source(workspace_path)
+
         image_id = self._resolved_image_id or self._probe_image_id()
         if image_id is None:
             raise PodmanLspUnavailable(
                 f"Podman or configured local LSP image is unavailable: {self.spec.image}"
             )
         self._resolved_image_id = image_id
-
-        source = Path(workspace_path).resolve()
-        if not source.is_dir():
-            raise PodmanLspUnavailable(f"Workspace path is unavailable: {source}")
 
         job_root = self.state_dir / "lsp-jobs" / str(uuid4())
         workspace_copy = job_root / "workspace"
