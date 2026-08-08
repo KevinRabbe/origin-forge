@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from typing import Iterable
 
+from .dream_evidence import verification_evidence_ref
 from .dream_models import (
     DreamCandidate,
     DreamInputManifest,
@@ -20,17 +20,6 @@ from .runtime import OriginForgeRuntime
 
 class DreamGenerationError(RuntimeError):
     pass
-
-
-def _canonical_hash(value: object) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 def _manifest_ref_map(manifest: DreamInputManifest) -> dict[tuple[str, str, str, int | None], EvidenceRef]:
@@ -111,16 +100,23 @@ class ActiveMemorySnapshot:
 
     @property
     def content_hash(self) -> str:
-        return _canonical_hash(
+        import hashlib
+
+        encoded = json.dumps(
             {
                 "parent_generation_id": self.parent_generation_id,
                 "entries": [item.to_dict() for item in self.entries],
-            }
-        )
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 class DreamGenerationBuilder:
-    """Construct an immutable generation only from persisted, audit-bound inputs."""
+    """Construct and revalidate immutable generations from audit-bound inputs."""
 
     def __init__(self, runtime: OriginForgeRuntime, store: DreamStore):
         if not isinstance(runtime, OriginForgeRuntime):
@@ -131,60 +127,6 @@ class DreamGenerationBuilder:
             raise DreamGenerationError("DreamStore and runtime must belong to the same project")
         self.runtime = runtime
         self.store = store
-
-    def _active_memory(self, parent_generation_id: str | None) -> ActiveMemorySnapshot:
-        if parent_generation_id is None:
-            return ActiveMemorySnapshot(None, ())
-        if not validate_id(parent_generation_id, IdKind.MEMORY_GENERATION):
-            raise DreamGenerationError("parent_generation_id must be a MEMGEN ID or null")
-
-        chain: list[MemoryGeneration] = []
-        seen: set[str] = set()
-        current_id: str | None = parent_generation_id
-        while current_id is not None:
-            if current_id in seen:
-                raise DreamGenerationError("memory generation parent chain contains a cycle")
-            seen.add(current_id)
-            if len(chain) >= self.store.max_generations:
-                raise DreamGenerationError("memory generation parent chain exceeds store limit")
-            try:
-                generation = self.store.load_generation(current_id)
-            except (KeyError, DreamStoreError) as exc:
-                raise DreamGenerationError(
-                    f"memory generation parent is unavailable or invalid: {current_id}"
-                ) from exc
-            chain.append(generation)
-            current_id = generation.parent_generation_id
-
-        active: dict[str, EvidenceRef] = {}
-        for generation in reversed(chain):
-            for entry_id in generation.superseded_entry_ids:
-                if entry_id not in active:
-                    raise DreamGenerationError(
-                        f"generation {generation.generation_id} supersedes inactive memory {entry_id}"
-                    )
-                del active[entry_id]
-            for pinned in generation.accepted_entry_refs:
-                try:
-                    stored = self.store.load_memory_entry(pinned.ref_id)
-                except (KeyError, DreamStoreError) as exc:
-                    raise DreamGenerationError(
-                        f"generation references unavailable memory entry: {pinned.ref_id}"
-                    ) from exc
-                if stored.content_hash != pinned.content_hash:
-                    raise DreamGenerationError(
-                        f"generation memory entry hash mismatch: {pinned.ref_id}"
-                    )
-                if pinned.ref_id in active:
-                    raise DreamGenerationError(
-                        f"generation re-accepts already active memory entry: {pinned.ref_id}"
-                    )
-                active[pinned.ref_id] = pinned
-
-        return ActiveMemorySnapshot(parent_generation_id, tuple(active.values()))
-
-    def active_memory(self, parent_generation_id: str | None) -> ActiveMemorySnapshot:
-        return self._active_memory(parent_generation_id)
 
     def _verification_ref(
         self,
@@ -211,30 +153,117 @@ class DreamGenerationBuilder:
             raise DreamGenerationError("audit Verification must have PASS status")
         try:
             evidence = json.loads(value["evidence_json"])
-            metrics = json.loads(value["metrics_json"])
         except (TypeError, json.JSONDecodeError) as exc:
             raise DreamGenerationError("audit Verification contains invalid JSON evidence") from exc
         if evidence != expected_evidence:
             raise DreamGenerationError(
                 "audit Verification evidence does not bind the exact generation inputs"
             )
-        canonical_record = {
-            "id": value["id"],
-            "target_type": value["target_type"],
-            "target_id": value["target_id"],
-            "verification_type": value["verification_type"],
-            "verifier": value["verifier"],
-            "status": value["status"],
-            "evidence": evidence,
-            "metrics": metrics,
-            "run_id": value["run_id"],
-            "created_at": value["created_at"],
-        }
-        return EvidenceRef(
-            verification_id,
-            _canonical_hash(canonical_record),
-            EvidenceClass.VERIFICATION,
+        try:
+            return verification_evidence_ref(value)
+        except Exception as exc:
+            raise DreamGenerationError("audit Verification canonical record is invalid") from exc
+
+    def _validate_stored_generation(self, generation: MemoryGeneration) -> None:
+        try:
+            manifest = self.store.load_manifest(generation.input_manifest_id)
+        except (KeyError, DreamStoreError) as exc:
+            raise DreamGenerationError(
+                f"stored generation manifest is unavailable or invalid: {generation.input_manifest_id}"
+            ) from exc
+        if manifest.content_hash != generation.input_manifest_hash:
+            raise DreamGenerationError(
+                f"stored generation manifest hash mismatch: {generation.generation_id}"
+            )
+        if manifest.parent_memory_generation_id != generation.parent_generation_id:
+            raise DreamGenerationError(
+                f"stored generation manifest parent mismatch: {generation.generation_id}"
+            )
+
+        entries: list[MemoryEntry] = []
+        for pinned in generation.accepted_entry_refs:
+            try:
+                entry = self.store.load_memory_entry(pinned.ref_id)
+            except (KeyError, DreamStoreError) as exc:
+                raise DreamGenerationError(
+                    f"stored generation memory entry is unavailable or invalid: {pinned.ref_id}"
+                ) from exc
+            if entry.content_hash != pinned.content_hash:
+                raise DreamGenerationError(
+                    f"stored generation memory entry hash mismatch: {pinned.ref_id}"
+                )
+            entries.append(entry)
+
+        candidates: list[DreamCandidate] = []
+        for candidate_id in generation.deferred_candidate_ids:
+            try:
+                candidate = self.store.load_candidate(candidate_id)
+            except (KeyError, DreamStoreError) as exc:
+                raise DreamGenerationError(
+                    f"stored generation deferred candidate is unavailable or invalid: {candidate_id}"
+                ) from exc
+            candidates.append(candidate)
+
+        expected_evidence = generation_audit_evidence(
+            manifest,
+            accepted_entries=entries,
+            superseded_entry_ids=generation.superseded_entry_ids,
+            deferred_candidates=candidates,
         )
+        current_ref = self._verification_ref(
+            generation.audit_verification_ref.ref_id,
+            dream_run_id=generation.dream_run_id,
+            expected_evidence=expected_evidence,
+        )
+        if current_ref != generation.audit_verification_ref:
+            raise DreamGenerationError(
+                f"stored generation audit Verification changed after generation creation: {generation.generation_id}"
+            )
+
+    def _active_memory(self, parent_generation_id: str | None) -> ActiveMemorySnapshot:
+        if parent_generation_id is None:
+            return ActiveMemorySnapshot(None, ())
+        if not validate_id(parent_generation_id, IdKind.MEMORY_GENERATION):
+            raise DreamGenerationError("parent_generation_id must be a MEMGEN ID or null")
+
+        chain: list[MemoryGeneration] = []
+        seen: set[str] = set()
+        current_id: str | None = parent_generation_id
+        while current_id is not None:
+            if current_id in seen:
+                raise DreamGenerationError("memory generation parent chain contains a cycle")
+            seen.add(current_id)
+            if len(chain) >= self.store.max_generations:
+                raise DreamGenerationError("memory generation parent chain exceeds store limit")
+            try:
+                generation = self.store.load_generation(current_id)
+            except (KeyError, DreamStoreError) as exc:
+                raise DreamGenerationError(
+                    f"memory generation parent is unavailable or invalid: {current_id}"
+                ) from exc
+            self._validate_stored_generation(generation)
+            chain.append(generation)
+            current_id = generation.parent_generation_id
+
+        active: dict[str, EvidenceRef] = {}
+        for generation in reversed(chain):
+            for entry_id in generation.superseded_entry_ids:
+                if entry_id not in active:
+                    raise DreamGenerationError(
+                        f"generation {generation.generation_id} supersedes inactive memory {entry_id}"
+                    )
+                del active[entry_id]
+            for pinned in generation.accepted_entry_refs:
+                if pinned.ref_id in active:
+                    raise DreamGenerationError(
+                        f"generation re-accepts already active memory entry: {pinned.ref_id}"
+                    )
+                active[pinned.ref_id] = pinned
+
+        return ActiveMemorySnapshot(parent_generation_id, tuple(active.values()))
+
+    def active_memory(self, parent_generation_id: str | None) -> ActiveMemorySnapshot:
+        return self._active_memory(parent_generation_id)
 
     def build(
         self,
