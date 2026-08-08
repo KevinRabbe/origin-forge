@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Sequence
 from uuid import uuid4
 
+from .path_policy import is_protected_root
 from .sandbox import (
     SandboxGuarantees,
     SandboxJob,
@@ -164,12 +165,8 @@ class PodmanSandboxBackend:
     @staticmethod
     def _copy_workspace(source: Path, destination: Path) -> None:
         def ignore(directory: str, names: list[str]) -> set[str]:
-            ignored: set[str] = set()
-            if ".git" in names:
-                ignored.add(".git")
-            if ".origin-forge" in names:
-                ignored.add(".origin-forge")
-            return ignored
+            del directory
+            return {name for name in names if is_protected_root(name)}
 
         shutil.copytree(source, destination, symlinks=True, ignore=ignore)
 
