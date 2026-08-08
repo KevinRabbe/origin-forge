@@ -214,6 +214,42 @@ class LspCodeIntelligenceTests(unittest.TestCase):
         self.assertEqual(result[0].range.start, TextPosition(0, 2))
         self.assertEqual(result[0].code, "42")
 
+    def test_pull_diagnostic_text_fields_are_bounded_during_normalization(self) -> None:
+        session = FakeSession(
+            {
+                "textDocument/diagnostic": {
+                    "kind": "full",
+                    "items": [
+                        {
+                            "range": {
+                                "start": {"line": 0, "character": 0},
+                                "end": {"line": 0, "character": 1},
+                            },
+                            "severity": 1,
+                            "message": "m" * 20000,
+                            "source": "s" * 1000,
+                            "code": "c" * 1000,
+                        }
+                    ],
+                }
+            }
+        )
+        provider = LspCodeIntelligenceProvider(
+            self.reader,
+            session,
+            self._capabilities(),
+            mapper=self.mapper,
+        )
+
+        result = provider.diagnostics(["src/b.py"])
+
+        self.assertEqual(len(result[0].message), 16 * 1024 + 1)
+        self.assertEqual(len(result[0].source), 513)
+        self.assertEqual(len(result[0].code or ""), 513)
+        self.assertTrue(result[0].message.endswith("…"))
+        self.assertTrue(result[0].source.endswith("…"))
+        self.assertTrue((result[0].code or "").endswith("…"))
+
     def test_unadvertised_capability_is_not_queried(self) -> None:
         session = FakeSession({})
         provider = LspCodeIntelligenceProvider(
