@@ -25,6 +25,10 @@ class ModelProfileError(ModelSchedulingError):
     pass
 
 
+class ModelRequestInvalid(ModelSchedulingError):
+    pass
+
+
 class ModelCapacityUnavailable(ModelSchedulingError):
     pass
 
@@ -220,11 +224,17 @@ class ModelScheduler:
             )
         return profiles
 
+    @staticmethod
+    def _validate_owner(owner_id: str) -> None:
+        if not isinstance(owner_id, str) or not _PROFILE_ID_RE.fullmatch(owner_id):
+            raise ModelRequestInvalid(f"invalid model scheduling owner_id: {owner_id!r}")
+
     def try_acquire(
         self,
         owner_id: str,
         policy: ModelSelectionPolicy,
     ) -> ScheduledModel | None:
+        self._validate_owner(owner_id)
         profiles = self._validated_chain(policy)
         attempted: list[str] = []
         for profile in profiles:
@@ -232,9 +242,9 @@ class ModelScheduler:
             try:
                 lease = self.resources.try_acquire(owner_id, profile.resources)
             except ResourceRequestInvalid:
-                # A profile may legitimately describe hardware not present on
-                # this machine. Continue only because every later profile was
-                # explicitly authorized by the caller's fallback chain.
+                # A governed profile may legitimately describe hardware that is
+                # not present on this machine. Continue only because every later
+                # profile is explicitly authorized by the caller's fallback chain.
                 lease = None
             if lease is not None:
                 return ScheduledModel(
