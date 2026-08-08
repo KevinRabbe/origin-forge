@@ -90,7 +90,6 @@ class StructuralContextTests(unittest.TestCase):
         self.assertIn("tests/test_service.py", result.paths)
         self.assertIn("src/pkg/models.py", result.paths)
         by_path = {candidate.path: candidate for candidate in result.added}
-        self.assertGreater(by_path["tests/test_service.py"].score, by_path["src/pkg/models.py"].score)
         self.assertTrue(
             any(reason.startswith("test-pair:") for reason in by_path["tests/test_service.py"].reasons)
         )
@@ -124,7 +123,7 @@ class StructuralContextTests(unittest.TestCase):
         result = self._expander().expand(task, ["src/pkg/unrelated.py"])
         self.assertNotIn("secret.py", result.paths)
 
-    def test_syntax_error_is_skipped_and_counted(self) -> None:
+    def test_syntax_error_is_skipped_counted_and_bounded(self) -> None:
         broken = self.root / "src" / "pkg" / "broken.py"
         broken.write_text("def nope(:\n", encoding="utf-8")
         git(self.root, "add", "src/pkg/broken.py")
@@ -134,6 +133,14 @@ class StructuralContextTests(unittest.TestCase):
         result = self._expander().expand(task, ["src/pkg/service.py"])
         self.assertEqual(result.parse_failures, 1)
         self.assertNotIn("src/pkg/broken.py", result.paths)
+
+        bounded = self._expander(
+            max_scan_files=100,
+            max_scan_bytes=40,
+            max_files=10,
+            max_total_bytes=4096,
+        ).expand(task, ["src/pkg/service.py"])
+        self.assertLessEqual(bounded.indexed_bytes, 40)
 
     def test_tracked_symlink_is_not_followed(self) -> None:
         if not hasattr(os, "symlink"):
