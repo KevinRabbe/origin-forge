@@ -23,6 +23,10 @@ class IdKind(StrEnum):
     SPECIALIST_CONTRACT = "SPCON"
     SPECIALIST_REPORT = "SPREP"
     SPECIALIST_FINDING = "SPFIND"
+    ENTITY = "ENTITY"
+    ENTITY_RELATION = "REL"
+    ENTITY_BINDING = "BIND"
+    DESIGN_RULE = "RULE"
 
 
 def new_id(kind: IdKind) -> str:
