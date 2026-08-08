@@ -161,7 +161,7 @@ class PythonCodeIntelligenceTests(unittest.TestCase):
         provider = PythonAstCodeIntelligence(
             self.reader,
             settings=PythonIntelligenceSettings(
-                max_scan_files=1,
+                max_scan_files=2,
                 max_scan_bytes=1024 * 1024,
             ),
         )
@@ -169,7 +169,10 @@ class PythonCodeIntelligenceTests(unittest.TestCase):
         second = provider.workspace_symbols("")
         self.assertEqual(first, second)
         self.assertTrue(first)
-        self.assertEqual({symbol.location.path for symbol in first}, {"src/pkg/__init__.py"}) if first else None
+        self.assertEqual(
+            {symbol.location.path for symbol in first},
+            {"src/pkg/models.py"},
+        )
 
 
 if __name__ == "__main__":
