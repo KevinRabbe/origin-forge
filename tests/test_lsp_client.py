@@ -171,6 +171,8 @@ class LspInitializationTests(unittest.TestCase):
                 ["utf-8", "utf-16", "utf-32"],
             )
             self.assertEqual(params["rootUri"], mapper.server_root_uri)
+            self.assertIsNone(params["workspaceFolders"])
+            self.assertNotIn("workspaceFolders", params["capabilities"]["workspace"])
             self.assertEqual(session.notifications, [("initialized", {})])
 
     def test_initialize_uses_container_visible_root_uri(self) -> None:
@@ -185,10 +187,7 @@ class LspInitializationTests(unittest.TestCase):
 
             params = session.requests[0][1]
             self.assertEqual(params["rootUri"], "file:///workspace")
-            self.assertEqual(
-                params["workspaceFolders"],
-                [{"uri": "file:///workspace", "name": mapper.workspace_root.name}],
-            )
+            self.assertIsNone(params["workspaceFolders"])
 
 
 if __name__ == "__main__":
