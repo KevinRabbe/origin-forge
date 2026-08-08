@@ -323,14 +323,22 @@ class DreamGenerationTests(unittest.TestCase):
             )
 
     def test_deferred_candidate_must_match_frozen_parent_and_manifest_evidence(self) -> None:
-        parent = new_id(IdKind.MEMORY_GENERATION)
-        manifest = self._manifest(parent=parent)
+        root_manifest = self._manifest()
+        root_audit = self._audit(root_manifest)
+        parent = self.builder.build(
+            parent_generation_id=None,
+            dream_run_id=self.run_id,
+            manifest_id=root_manifest.manifest_id,
+            audit_verification_id=root_audit,
+        )
+
+        manifest = self._manifest(parent=parent.generation_id)
         wrong_target = new_id(IdKind.MEMORY_GENERATION)
         candidate = self._candidate(manifest, target=wrong_target)
         verification_id = self._audit(manifest, candidates=(candidate,))
         with self.assertRaisesRegex(DreamGenerationError, "targets a different memory generation"):
             self.builder.build(
-                parent_generation_id=parent,
+                parent_generation_id=parent.generation_id,
                 dream_run_id=self.run_id,
                 manifest_id=manifest.manifest_id,
                 deferred_candidate_ids=(candidate.candidate_id,),
