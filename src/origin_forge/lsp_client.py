@@ -44,29 +44,38 @@ class LspWorkspaceMapper:
     _BLOCKED_ROOTS = frozenset({".git", ".origin-forge"})
 
     def __init__(self, workspace_root: str | Path):
-        self.workspace_root = Path(workspace_root).resolve()
+        try:
+            self.workspace_root = Path(workspace_root).resolve()
+        except (OSError, RuntimeError) as exc:
+            raise LspWorkspaceError("cannot resolve LSP Workspace root") from exc
         if not self.workspace_root.is_dir():
             raise LspWorkspaceError("LSP Workspace root must be an existing directory")
 
     def _contained(self, candidate: Path) -> Path:
-        resolved = candidate.resolve()
+        try:
+            resolved = candidate.resolve()
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise LspWorkspaceError("cannot resolve LSP location") from exc
         try:
             relative = resolved.relative_to(self.workspace_root)
         except ValueError as exc:
             raise LspWorkspaceError("LSP location escapes Workspace root") from exc
-        if relative.parts and relative.parts[0] in self._BLOCKED_ROOTS:
+        if relative.parts and relative.parts[0].casefold() in self._BLOCKED_ROOTS:
             raise LspWorkspaceError(
                 f"LSP location enters protected root: {relative.parts[0]}"
             )
         return resolved
 
     def path_to_uri(self, path: str | Path) -> str:
-        candidate = Path(path)
+        try:
+            candidate = Path(path)
+        except (TypeError, ValueError) as exc:
+            raise LspWorkspaceError("LSP repository path is invalid") from exc
         if candidate.is_absolute():
             raise LspWorkspaceError("LSP repository paths must be relative")
         if not candidate.parts or any(part in {"", ".", ".."} for part in candidate.parts):
             raise LspWorkspaceError("LSP repository path is invalid")
-        if candidate.parts[0] in self._BLOCKED_ROOTS:
+        if candidate.parts[0].casefold() in self._BLOCKED_ROOTS:
             raise LspWorkspaceError(
                 f"LSP repository path enters protected root: {candidate.parts[0]}"
             )
@@ -81,7 +90,7 @@ class LspWorkspaceMapper:
             raise LspWorkspaceError(
                 f"unsupported LSP location URI scheme: {parsed.scheme or '<none>'}"
             )
-        if parsed.netloc not in {"", "localhost"}:
+        if parsed.netloc.casefold() not in {"", "localhost"}:
             raise LspWorkspaceError("remote-host file URIs are not allowed")
         if parsed.params or parsed.query or parsed.fragment:
             raise LspWorkspaceError("LSP file URI may not contain params, query, or fragment")
