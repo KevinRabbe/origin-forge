@@ -48,15 +48,19 @@ class PodmanBackendTests(unittest.TestCase):
         (self.workspace / ".git").write_text("gitdir: hidden\n", encoding="utf-8")
         (self.workspace / ".origin-forge").mkdir()
         (self.workspace / ".origin-forge" / "secret").write_text("secret", encoding="utf-8")
-        # These are distinct on Linux CI but can alias the protected roots on
-        # case-insensitive filesystems. The sandbox copy policy excludes them
-        # conservatively on every host.
-        (self.workspace / ".GIT").mkdir()
-        (self.workspace / ".GIT" / "alias-secret").write_text("secret", encoding="utf-8")
-        (self.workspace / ".ORIGIN-FORGE").mkdir()
-        (self.workspace / ".ORIGIN-FORGE" / "alias-secret").write_text(
-            "secret", encoding="utf-8"
-        )
+
+        # Case-sensitive filesystems can represent these aliases separately;
+        # case-insensitive filesystems resolve them to the protected entries
+        # above, so no second object can or should be created.
+        git_alias = self.workspace / ".GIT"
+        if not git_alias.exists():
+            git_alias.mkdir()
+            (git_alias / "alias-secret").write_text("secret", encoding="utf-8")
+        state_alias = self.workspace / ".ORIGIN-FORGE"
+        if not state_alias.exists():
+            state_alias.mkdir()
+            (state_alias / "alias-secret").write_text("secret", encoding="utf-8")
+
         self.backend = PodmanSandboxBackend(
             self.state,
             PodmanSandboxSettings(
