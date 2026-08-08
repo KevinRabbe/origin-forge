@@ -136,6 +136,17 @@ class GovernedSkillTests(unittest.TestCase):
         with self.assertRaises(SkillFormatError):
             SkillRegistry(self.runtime).catalog()
 
+    def test_skill_registry_root_symlink_is_rejected(self) -> None:
+        target = self.root / "external-skill-root"
+        target.mkdir()
+        registry_root = self.runtime.state_dir / "skills"
+        try:
+            registry_root.symlink_to(target, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"symlink creation unavailable: {exc}")
+        with self.assertRaisesRegex(SkillFormatError, "root may not be a symlink"):
+            SkillRegistry(self.runtime).catalog()
+
     def test_skill_directory_symlink_is_rejected(self) -> None:
         target = self.root / "real-skill"
         target.mkdir()
