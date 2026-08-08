@@ -7,6 +7,7 @@ from origin_forge.model_inspection import (
     inspect_model_registry,
 )
 from origin_forge.model_scheduler import (
+    ModelProfileError,
     ModelProfileRegistry,
     ModelResourceProfile,
     ModelRole,
@@ -134,7 +135,7 @@ class ModelInspectionTests(unittest.TestCase):
 
     def test_policy_role_mismatch_fails_before_allocation(self) -> None:
         registry, resources = self._setup()
-        with self.assertRaisesRegex(ValueError, "does not match"):
+        with self.assertRaisesRegex(ModelProfileError, "does not match"):
             inspect_model_policy(
                 registry,
                 resources,
