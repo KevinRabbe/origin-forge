@@ -47,6 +47,44 @@ class LspWorkspaceMapperTests(unittest.TestCase):
             self.assertTrue(uri.startswith("file:"))
             self.assertEqual(mapper.uri_to_path(uri), "src/hello world.py")
 
+    def test_server_visible_root_can_differ_from_local_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "src" / "hello world.py"
+            source.parent.mkdir()
+            source.write_text("VALUE = 1\n", encoding="utf-8")
+            mapper = LspWorkspaceMapper(
+                root,
+                server_root_uri="file:///workspace",
+            )
+
+            self.assertEqual(mapper.server_root_uri, "file:///workspace")
+            self.assertEqual(
+                mapper.path_to_uri("src/hello world.py"),
+                "file:///workspace/src/hello%20world.py",
+            )
+            self.assertEqual(
+                mapper.uri_to_path("file:///workspace/src/hello%20world.py"),
+                "src/hello world.py",
+            )
+            with self.assertRaises(LspWorkspaceError):
+                mapper.uri_to_path("file:///other/src/hello%20world.py")
+
+    def test_server_visible_root_round_trips_unicode_percent_encoding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "src" / "Grüße 猫.py"
+            source.parent.mkdir()
+            source.write_text("VALUE = 1\n", encoding="utf-8")
+            mapper = LspWorkspaceMapper(root, server_root_uri="file:///workspace")
+
+            uri = mapper.path_to_uri("src/Grüße 猫.py")
+            self.assertEqual(
+                uri,
+                "file:///workspace/src/Gr%C3%BC%C3%9Fe%20%E7%8C%AB.py",
+            )
+            self.assertEqual(mapper.uri_to_path(uri), "src/Grüße 猫.py")
+
     def test_non_file_and_external_file_uris_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp, tempfile.TemporaryDirectory() as outside:
             mapper = LspWorkspaceMapper(temp)
@@ -132,8 +170,25 @@ class LspInitializationTests(unittest.TestCase):
                 params["capabilities"]["general"]["positionEncodings"],
                 ["utf-8", "utf-16", "utf-32"],
             )
-            self.assertEqual(params["rootUri"], mapper.workspace_root.as_uri())
+            self.assertEqual(params["rootUri"], mapper.server_root_uri)
             self.assertEqual(session.notifications, [("initialized", {})])
+
+    def test_initialize_uses_container_visible_root_uri(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            mapper = LspWorkspaceMapper(
+                temp,
+                server_root_uri="file:///workspace",
+            )
+            session = FakeSession({"capabilities": {}})
+
+            initialize_lsp_session(session, mapper)
+
+            params = session.requests[0][1]
+            self.assertEqual(params["rootUri"], "file:///workspace")
+            self.assertEqual(
+                params["workspaceFolders"],
+                [{"uri": "file:///workspace", "name": mapper.workspace_root.name}],
+            )
 
 
 if __name__ == "__main__":
