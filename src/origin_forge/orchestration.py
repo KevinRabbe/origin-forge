@@ -54,8 +54,8 @@ class BoundedTaskOrchestrator:
 
     The Workspace is created before the Executor sees repository content. The
     model therefore reads and proposes against the exact snapshot that the
-    deterministic applier later mutates. Manual, lexical, and structural
-    context selection all execute inside that same Workspace snapshot.
+    deterministic applier later mutates. Manual, lexical, structural, and
+    semantic context selection all execute inside that same Workspace snapshot.
     """
 
     def __init__(
@@ -195,6 +195,7 @@ class BoundedTaskOrchestrator:
         auto_context: bool = False,
         context_seed_paths: Iterable[str] = (),
         structural_context: bool = False,
+        semantic_context: bool = False,
         model_profile: str | None = None,
         require_changes: bool = True,
     ) -> OrchestrationResult:
@@ -274,6 +275,7 @@ class BoundedTaskOrchestrator:
                 auto_context=auto_context,
                 seed_paths=seeds,
                 structural_context=structural_context,
+                semantic_context=semantic_context,
             )
             context_paths = selection.paths
         except Exception as exc:
