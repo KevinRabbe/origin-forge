@@ -470,11 +470,21 @@ class BoundedRetryPolicy:
         self,
         task_id: str,
         *,
-        selected_paths: Iterable[str],
+        selected_paths: Iterable[str] | None = None,
+        auto_context: bool = False,
+        context_seed_paths: Iterable[str] = (),
+        structural_context: bool = False,
     ) -> PolicyResult:
-        selected = tuple(selected_paths)
-        if not selected:
-            raise ValueError("bounded retry policy requires explicit context files")
+        selected = tuple(selected_paths or ())
+        seeds = tuple(context_seed_paths)
+        if auto_context and selected:
+            raise ValueError("auto_context cannot be combined with selected_paths")
+        if not auto_context and not selected:
+            raise ValueError(
+                "bounded retry policy requires selected context files or auto_context=True"
+            )
+        if seeds and not auto_context:
+            raise ValueError("context_seed_paths require auto_context=True")
 
         attempts_started = 0
         last_attempt: OrchestrationResult | None = None
@@ -571,6 +581,9 @@ class BoundedRetryPolicy:
             ).execute(
                 task_id,
                 selected_paths=selected,
+                auto_context=auto_context,
+                context_seed_paths=seeds,
+                structural_context=structural_context,
                 model_profile=model.model_id,
             )
             attempts_started += 1
@@ -601,6 +614,7 @@ class BoundedRetryPolicy:
 
             if last_attempt.outcome == AttemptOutcome.BLOCKED and last_attempt.stage in {
                 AttemptStage.PREFLIGHT,
+                AttemptStage.CONTEXT,
                 AttemptStage.SANDBOX,
             }:
                 return PolicyResult(
