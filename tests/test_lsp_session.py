@@ -4,10 +4,9 @@ import os
 import threading
 import unittest
 
-from origin_forge.lsp_protocol import encode_lsp_message, read_lsp_message
+from origin_forge.lsp_protocol import LspProtocolError, encode_lsp_message, read_lsp_message
 from origin_forge.lsp_session import (
     LspJsonRpcSession,
-    LspProtocolError,
     LspRemoteError,
     LspRequestTimeout,
 )
@@ -152,12 +151,14 @@ class LspSessionTests(unittest.TestCase):
             pipes.close()
             thread.join(timeout=1)
 
-    def test_request_timeout_is_bounded(self) -> None:
+    def test_request_timeout_is_bounded_and_terminal(self) -> None:
         pipes = _PipePair()
         session = LspJsonRpcSession(pipes.client_reader, pipes.client_writer)
         try:
             with self.assertRaises(LspRequestTimeout):
                 session.request("workspace/symbol", {"query": ""}, timeout_seconds=0.02)
+            with self.assertRaises(LspRequestTimeout):
+                session.request("workspace/symbol", {"query": "second"}, timeout_seconds=1.0)
         finally:
             session.close()
             pipes.close()
