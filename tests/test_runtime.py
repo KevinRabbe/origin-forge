@@ -28,13 +28,17 @@ class RuntimeFacadeTests(unittest.TestCase):
         config_path = self.root / ".origin-forge" / "config.toml"
         self.assertTrue(config_path.exists())
         config = load_config(self.root)
-        self.assertEqual(config.version, 4)
+        self.assertEqual(config.version, 5)
         self.assertEqual(config.policy_profile, "local-default")
         self.assertEqual(config.max_strategy_retries, 2)
         self.assertEqual(config.max_verification_failures, 3)
         self.assertEqual(config.approved_build_commands, ())
         self.assertEqual(config.approved_test_commands, ())
         self.assertEqual(config.lsp_servers, ())
+        self.assertFalse(config.resource_models.enabled)
+        self.assertIsNone(config.resource_models.capacity)
+        self.assertEqual(config.resource_models.profiles, ())
+        self.assertEqual(config.resource_models.policies, ())
 
     def test_parent_task_must_belong_to_same_flow(self) -> None:
         goal = self.runtime.create_goal("goal")

@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-CONFIG_VERSION = 4
+from .resource_model_config import ResourceModelConfig, parse_resource_model_config
+
+CONFIG_VERSION = 5
 DEFAULT_CONFIG = '''# Origin Forge project configuration
-version = 4
+version = 5
 policy_profile = "local-default"
 
 [limits]
@@ -29,6 +31,14 @@ test = []
 
 [code_intelligence]
 lsp_servers = []
+
+[resources]
+enabled = false
+gpus = []
+
+[models]
+profiles = []
+policies = []
 '''
 
 _SERVER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -78,6 +88,7 @@ class ProjectConfig:
     approved_build_commands: tuple[CommandSpec, ...]
     approved_test_commands: tuple[CommandSpec, ...]
     lsp_servers: tuple[LspServerConfig, ...] = ()
+    resource_models: ResourceModelConfig = field(default_factory=ResourceModelConfig.disabled)
 
     def command(self, category: Literal["build", "test"], name: str) -> CommandSpec:
         commands = (
@@ -251,9 +262,9 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         raw = tomllib.load(handle)
 
     version = int(raw.get("version", 0))
-    if version not in {1, 2, 3, CONFIG_VERSION}:
+    if version not in {1, 2, 3, 4, CONFIG_VERSION}:
         raise ValueError(
-            f"unsupported config version {version}; expected 1, 2, 3, or {CONFIG_VERSION}"
+            f"unsupported config version {version}; expected 1, 2, 3, 4, or {CONFIG_VERSION}"
         )
 
     limits = raw.get("limits", {})
@@ -295,6 +306,18 @@ def load_config(project_root: str | Path) -> ProjectConfig:
     if version < 4 and code_intelligence.get("lsp_servers"):
         raise ValueError("configured LSP servers require config version 4")
 
+    resources_raw = raw.get("resources")
+    models_raw = raw.get("models")
+    if version < 5 and (
+        resources_raw not in (None, {}) or models_raw not in (None, {})
+    ):
+        raise ValueError("resource/model scheduling requires config version 5")
+    resource_models = (
+        parse_resource_model_config(resources_raw, models_raw)
+        if version >= 5
+        else ResourceModelConfig.disabled()
+    )
+
     parser = _legacy_commands if version == 1 else _structured_commands
     return ProjectConfig(
         version=version,
@@ -310,4 +333,5 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         approved_build_commands=parser(commands.get("build"), "build"),
         approved_test_commands=parser(commands.get("test"), "test"),
         lsp_servers=_lsp_servers(code_intelligence.get("lsp_servers")),
+        resource_models=resource_models,
     )

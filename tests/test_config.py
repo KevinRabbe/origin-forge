@@ -8,10 +8,10 @@ from origin_forge.config import load_config
 
 
 class ConfigTests(unittest.TestCase):
-    def test_default_config_is_v4_network_off_and_has_no_lsp_servers(self) -> None:
+    def test_default_config_is_v5_network_off_and_resource_scheduling_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = load_config(Path(temp))
-            self.assertEqual(config.version, 4)
+            self.assertEqual(config.version, 5)
             self.assertFalse(config.sandbox_network)
             self.assertEqual(config.sandbox_backend, "unconfigured")
             self.assertIsNone(config.sandbox_image)
@@ -21,6 +21,10 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.approved_build_commands, ())
             self.assertEqual(config.approved_test_commands, ())
             self.assertEqual(config.lsp_servers, ())
+            self.assertFalse(config.resource_models.enabled)
+            self.assertIsNone(config.resource_models.capacity)
+            self.assertEqual(config.resource_models.profiles, ())
+            self.assertEqual(config.resource_models.policies, ())
 
     def test_v1_empty_command_config_remains_readable(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -36,6 +40,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.policy_profile, "legacy")
             self.assertFalse(config.sandbox_network)
             self.assertEqual(config.lsp_servers, ())
+            self.assertFalse(config.resource_models.enabled)
 
     def test_v1_shell_command_strings_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -65,6 +70,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(command.max_output_bytes, 4096)
             self.assertFalse(config.sandbox_network)
             self.assertEqual(config.lsp_servers, ())
+            self.assertFalse(config.resource_models.enabled)
 
     def test_v3_config_remains_readable_without_lsp_servers(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -79,6 +85,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.version, 3)
             self.assertEqual(config.sandbox_backend, "podman")
             self.assertEqual(config.lsp_servers, ())
+            self.assertFalse(config.resource_models.enabled)
 
     def test_duplicate_command_names_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -123,6 +130,7 @@ lsp_servers = [
             self.assertEqual(server.max_protocol_message_bytes, 65536)
             self.assertEqual(server.max_pending_notifications, 32)
             self.assertEqual(server.max_stderr_bytes, 4096)
+            self.assertFalse(config.resource_models.enabled)
 
     def test_lsp_server_ids_must_be_unique(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
