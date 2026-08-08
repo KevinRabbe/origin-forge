@@ -134,6 +134,22 @@ class ContextDiscoveryTests(unittest.TestCase):
         ).discover(task)
         self.assertLessEqual(result.scanned_bytes, 130)
 
+    def test_path_matches_are_prioritized_before_scan_file_cap(self) -> None:
+        (self.root / "aaa_unrelated.txt").write_text("nothing useful\n", encoding="utf-8")
+        (self.root / "zzz_needlewidget.py").write_text("VALUE = 1\n", encoding="utf-8")
+        git(self.root, "add", "aaa_unrelated.txt", "zzz_needlewidget.py")
+        git(self.root, "commit", "-qm", "add scan priority fixtures")
+
+        task = self._task("Fix needlewidget behavior")
+        result = self._discoverer(
+            max_scan_files=1,
+            max_scan_bytes=1000,
+            max_files=3,
+            max_total_bytes=1000,
+        ).discover(task)
+        self.assertEqual(result.scanned_files, 1)
+        self.assertEqual(result.paths, ("zzz_needlewidget.py",))
+
     def test_seed_paths_are_included_even_without_query_match(self) -> None:
         task = self._task("payment refund invoice")
         result = self._discoverer(max_files=3, max_total_bytes=1000).discover(
