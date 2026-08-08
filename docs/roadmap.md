@@ -196,13 +196,41 @@ See `docs/phase-15-dream-cycle.md` for the detailed architecture and acceptance 
 
 **Exit condition met:** Origin Forge can inspect bounded completed work including failed attempts, discover cross-session and stale-derived-memory patterns, independently audit findings, construct immutable audit-bound memory generations without mutating parents, and emit improvement candidates into existing governance gates without self-modification authority.
 
-## Phase 16 — Isolated Specialist Roles — NEXT
+## Phase 16 — Isolated Specialist Roles — DONE
 
-Introduce only specialist roles that measurably improve outcomes, such as Reviewer, Researcher, Tester, and Visual Critic. Each receives isolated context and restricted capabilities.
+Implemented the first isolated specialist role, Reviewer, as an advisory sidecar rather than a new production authority path.
 
-**Exit condition:** specialist isolation improves selected benchmarks without creating an uncontrolled agent swarm.
+Implemented components:
 
-## Phase 17 — Project Intelligence — PLANNED
+- separate specialist authority roles from Phase-14 model capability/resource roles
+- immutable bounded `SpecialistContract` objects and typed exact evidence references
+- exact frozen evidence packages persisted for replay
+- fresh one-shot `IsolatedReviewer` using the normal `ModelAdapter` contract
+- strict Reviewer JSON output limited to findings, with infrastructure-owned finding/report IDs and computed risk
+- independent structural `ReviewerReportAuditor`
+- explicit structural-vs-semantic separation: a structurally valid report does not verify its semantic findings
+- protected immutable specialist contract/evidence/report/audit persistence
+- symlink/root containment, byte/count limits, tamper detection, and atomic no-overwrite publication
+- dedicated existing RUNNING `REVIEWER` Run/Task requirement and Run-level model/context/response/report/audit provenance
+- read-only specialist and Reviewer-evaluation inspection surfaces
+- repeatable paired Reviewer evaluation with exact labeled issue signatures, true/false positives, critical misses, precision/recall/F1, token/time/context/resource metrics, optional downstream repair outcomes, regression-dominant verdicts, and replayability checks
+- explicit fresh-context isolation proving Reviewer input contains only the frozen specialist package rather than Executor scratch/session state
+- no default production blocking gate, model-execution CLI, repair authority, Task status authority, merge authority, peer-agent messaging, or recursive delegation
+
+Core rule:
+
+```text
+specialist insight = evidence
+infrastructure verification = authority
+```
+
+Researcher, Test Planner, and Visual Critic remain deferred until a measured need and relevant evidence surface exist. Reviewer findings can inform a human/Manager or a later governed repair Task, but they cannot directly change production state.
+
+See `docs/phase-16-specialist-roles.md` for the detailed architecture and acceptance tests.
+
+**Exit condition met:** Origin Forge can invoke a fresh isolated Reviewer over exact bounded evidence, persist and independently structurally audit the report, prove the specialist has no production mutation or verification authority, and measure Reviewer value with a replayable evaluation protocol before any default integration is enabled.
+
+## Phase 17 — Project Intelligence — NEXT
 
 Add Entity graph, Design Bible, dependency edges, implementation/artifact/test relationships, impact analysis, and structured project rules.
 
