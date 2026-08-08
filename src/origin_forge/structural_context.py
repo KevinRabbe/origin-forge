@@ -4,6 +4,7 @@ import ast
 import json
 import re
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -27,6 +28,8 @@ class StructuralSettings:
     max_files: int = 16
     max_total_bytes: int = 768 * 1024
     git_timeout_seconds: float = 10.0
+    max_git_output_bytes: int = 2 * 1024 * 1024
+    max_git_stderr_bytes: int = 64 * 1024
 
     def __post_init__(self) -> None:
         if self.max_scan_files <= 0:
@@ -39,6 +42,10 @@ class StructuralSettings:
             raise ValueError("max_total_bytes must be positive")
         if self.git_timeout_seconds <= 0:
             raise ValueError("git_timeout_seconds must be positive")
+        if self.max_git_output_bytes <= 0:
+            raise ValueError("max_git_output_bytes must be positive")
+        if self.max_git_stderr_bytes <= 0:
+            raise ValueError("max_git_stderr_bytes must be positive")
 
 
 @dataclass(frozen=True)
@@ -66,6 +73,30 @@ class _PythonFile:
     byte_count: int
     definitions: frozenset[str]
     imports: frozenset[str]
+
+
+class _BoundedCapture:
+    def __init__(self, limit: int, *, kill_on_overflow: bool = False):
+        self.limit = limit
+        self.kill_on_overflow = kill_on_overflow
+        self.data = bytearray()
+        self.overflow = False
+
+    def consume(self, stream, process: subprocess.Popen) -> None:
+        while True:
+            chunk = stream.read(64 * 1024)
+            if not chunk:
+                return
+            remaining = self.limit - len(self.data)
+            if remaining > 0:
+                self.data.extend(chunk[:remaining])
+            if len(chunk) > max(remaining, 0):
+                self.overflow = True
+                if self.kill_on_overflow:
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
 
 
 def _tokens(value: str) -> tuple[str, ...]:
@@ -151,31 +182,81 @@ class PythonStructuralContext:
 
     def _tracked_python_paths(self) -> tuple[str, ...]:
         try:
-            result = subprocess.run(
-                ["git", "ls-files", "-z", "--cached", "--"],
+            process = subprocess.Popen(
+                ["git", "ls-files", "-z", "--cached", "--", "*.py"],
                 cwd=self.repository.project_root,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=self.settings.git_timeout_seconds,
-                check=False,
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise StructuralContextError(f"cannot enumerate tracked repository files: {exc}") from exc
-        if result.returncode != 0:
-            detail = result.stderr.decode("utf-8", errors="replace")
+        except OSError as exc:
             raise StructuralContextError(
-                f"git ls-files failed ({result.returncode}): {detail[:1000]}"
-            )
-        try:
-            paths = [item.decode("utf-8") for item in result.stdout.split(b"\0") if item]
-        except UnicodeDecodeError as exc:
-            raise StructuralContextError("tracked repository path is not UTF-8") from exc
-        return tuple(
-            path
-            for path in sorted(dict.fromkeys(paths))
-            if path.casefold().endswith(".py")
+                f"cannot enumerate tracked repository files: {exc}"
+            ) from exc
+        assert process.stdout is not None and process.stderr is not None
+
+        stdout = _BoundedCapture(
+            self.settings.max_git_output_bytes,
+            kill_on_overflow=True,
         )
+        stderr = _BoundedCapture(self.settings.max_git_stderr_bytes)
+        stdout_thread = threading.Thread(
+            target=stdout.consume,
+            args=(process.stdout, process),
+            daemon=True,
+        )
+        stderr_thread = threading.Thread(
+            target=stderr.consume,
+            args=(process.stderr, process),
+            daemon=True,
+        )
+        stdout_thread.start()
+        stderr_thread.start()
+        try:
+            try:
+                returncode = process.wait(timeout=self.settings.git_timeout_seconds)
+            except subprocess.TimeoutExpired as exc:
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+                process.wait()
+                raise StructuralContextError(
+                    "git ls-files exceeded structural enumeration timeout"
+                ) from exc
+        finally:
+            stdout_thread.join(timeout=1.0)
+            stderr_thread.join(timeout=1.0)
+            process.stdout.close()
+            process.stderr.close()
+
+        if stdout.overflow:
+            raise StructuralContextError(
+                "git ls-files output exceeds structural enumeration byte limit "
+                f"({self.settings.max_git_output_bytes} bytes)"
+            )
+        if returncode != 0:
+            detail = bytes(stderr.data).decode("utf-8", errors="replace")
+            if stderr.overflow:
+                detail += "…"
+            raise StructuralContextError(
+                f"git ls-files failed ({returncode}): {detail[:1000]}"
+            )
+
+        paths: list[str] = []
+        for item in bytes(stdout.data).split(b"\0"):
+            if not item:
+                continue
+            try:
+                path = item.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise StructuralContextError("tracked repository path is not UTF-8") from exc
+            if not path.casefold().endswith(".py"):
+                continue
+            paths.append(path)
+            if len(paths) >= self.settings.max_scan_files:
+                break
+        return tuple(sorted(dict.fromkeys(paths)))
 
     @staticmethod
     def _definitions(tree: ast.AST) -> frozenset[str]:
