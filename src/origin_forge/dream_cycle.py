@@ -239,7 +239,6 @@ class DreamCycleService:
                                 flow_id,
                                 FlowStatus.FAILED,
                                 expected_revision=int(current_flow["revision"]),
-                                reason="Dream cycle planning failed",
                             )
                     finally:
                         current_goal = self.runtime.get_goal(goal_id)
