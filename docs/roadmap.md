@@ -230,13 +230,41 @@ See `docs/phase-16-specialist-roles.md` for the detailed architecture and accept
 
 **Exit condition met:** Origin Forge can invoke a fresh isolated Reviewer over exact bounded evidence, persist and independently structurally audit the report, prove the specialist has no production mutation or verification authority, and measure Reviewer value with a replayable evaluation protocol before any default integration is enabled.
 
-## Phase 17 — Project Intelligence — NEXT
+## Phase 17 — Project Intelligence — DONE
 
-Add Entity graph, Design Bible, dependency edges, implementation/artifact/test relationships, impact analysis, and structured project rules.
+Implemented the first durable semantic project layer in the existing protected SQLite truth store.
 
-**Exit condition:** Origin Forge can reason about a feature/entity across files and media and identify affected dependencies before modification.
+Implemented components:
 
-## Phase 18 — Cryptographic Provenance — PLANNED
+- stable infrastructure-owned Entity identity across implementation changes
+- software/media-neutral Entity kinds and governed lifecycle status/revisions
+- typed directional Entity relations with same-project composite foreign keys
+- explicit self-relation rejection and duplicate-active-edge prevention
+- Entity bindings to files, symbols, Tasks, Decisions, Artifacts, Verifications, and inert external references
+- portable/protected file-binding path validation and optional pinned SHA-256 hashes
+- structured Design Bible `DesignRule` records with category, authority, global/scoped applicability, retirement, and append-only supersession
+- project-scoped validation for durable binding targets, relation evidence, and Design Rule scopes
+- optimistic revisions and state-event history for governed semantic changes
+- deterministic bounded impact analysis with inbound/outbound/bidirectional traversal, relation filtering, cycle detection, stable ordering, content hashes, and explicit truncation flags
+- active global/scoped Design Rules and implementation bindings included in impact evidence
+- read-only stale file-binding inspection reporting CURRENT/STALE/MISSING/UNPINNED/INVALID/TOO_LARGE without rewriting canonical bindings
+- read-only Project Intelligence CLI for status/list/show/binding-inspect/impact
+- no automatic model-context integration, graph auto-discovery promotion, source mutation, Task verification, or merge authority
+
+Core rule:
+
+```text
+semantic project structure = canonical infrastructure state
+model inference             = proposal/evidence only
+```
+
+AST/LSP intelligence remains a live code-structure signal; Project Intelligence represents stable product meaning. Later controlled context integration can compose the two after separate measurement rather than making the model traverse or rewrite the semantic graph directly.
+
+See `docs/phase-17-project-intelligence.md` for the detailed architecture and acceptance tests.
+
+**Exit condition met:** Origin Forge can represent stable product/project Entities, typed cross-media relationships and implementation bindings, enforce/query structured Design Bible rules, detect stale file bindings, and deterministically identify bounded change impact without relying on a model to rediscover project meaning or granting model-generated graph claims canonical authority.
+
+## Phase 18 — Cryptographic Provenance — NEXT
 
 Add signed manifests, operational signing keys, company-root identity hierarchy, model/Skill/Tool lineage, key rotation/revocation, and release/build provenance.
 
