@@ -23,12 +23,19 @@ from origin_forge.resource_scheduler import (
 
 
 class ModelInspectionTests(unittest.TestCase):
-    def _setup(self, *, gpu_vram: int = 8192):
+    def _setup(self, *, gpu_vram: int = 8192, gpu_compute_slots: int = 1):
         resources = ResourceScheduler(
             ResourceCapacity(
                 cpu_slots=8,
                 ram_mib=32768,
-                gpus=(GpuCapacity("gpu0", gpu_vram, reserve_vram_mib=1024),),
+                gpus=(
+                    GpuCapacity(
+                        "gpu0",
+                        gpu_vram,
+                        reserve_vram_mib=1024,
+                        compute_slots=gpu_compute_slots,
+                    ),
+                ),
             )
         )
         registry = ModelProfileRegistry(
@@ -92,7 +99,10 @@ class ModelInspectionTests(unittest.TestCase):
         self.assertEqual(resources.status().active_leases, ())
 
     def test_policy_inspection_predicts_dynamic_fallback_without_leasing(self) -> None:
-        registry, resources = self._setup(gpu_vram=16384)
+        # The busy lease is intended to consume VRAM, not all GPU compute
+        # capacity. Two compute slots keep the smaller explicit fallback
+        # runnable while the larger primary no longer fits free VRAM.
+        registry, resources = self._setup(gpu_vram=16384, gpu_compute_slots=2)
         busy = resources.acquire(
             "busy",
             ResourceRequest(gpu=GpuResourceRequest(vram_mib=10000)),
@@ -106,6 +116,7 @@ class ModelInspectionTests(unittest.TestCase):
         self.assertTrue(result.fallback_would_be_used)
         self.assertTrue(result.profiles[0].resource.static_compatible)
         self.assertFalse(result.profiles[0].resource.currently_available)
+        self.assertTrue(result.profiles[1].resource.currently_available)
         self.assertEqual(len(resources.status().active_leases), 1)
         resources.release(busy.lease_id)
 
