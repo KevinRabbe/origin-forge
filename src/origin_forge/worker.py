@@ -197,7 +197,8 @@ class LocalPatchWorker:
             model_parent_artifact_id = skill_bundle_artifact_id or context_artifact_id
 
             context_payload = context.to_dict()
-            context_payload["selected_skills"] = selection.metadata_dicts()
+            if selection.skills:
+                context_payload["selected_skills"] = selection.metadata_dicts()
             instructions = EXECUTOR_INSTRUCTIONS
             rendered_skills = selection.render_instructions()
             if rendered_skills:
