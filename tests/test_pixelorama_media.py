@@ -8,6 +8,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from origin_forge.lineage import OriginForgeLineage
 from origin_forge.pixelorama_bridge import PixeloramaBridgeProfile
 from origin_forge.pixelorama_media import (
     PixeloramaMediaError,
@@ -114,6 +115,7 @@ class PixeloramaMediaTests(unittest.TestCase):
         self.root = Path(self.tempdir.name)
         self.runtime = OriginForgeRuntime(self.root)
         self.runtime.initialize("pixelorama-media-test")
+        self.lineage = OriginForgeLineage(self.runtime)
         self.goal = self.runtime.create_goal("Create a 2D asset")
         self.flow = self.runtime.create_flow(self.goal)
         self.runtime.transition_flow(self.flow, FlowStatus.RUNNING, expected_revision=0)
@@ -144,7 +146,7 @@ class PixeloramaMediaTests(unittest.TestCase):
             bridge_id="origin-forge-pixelorama-test",
             bridge_version="test-bridge-1",
             bridge_fingerprint=self._fingerprint(script),
-            pixelorama_executable=Path(sys.executable),
+            pixelorama_executable=Path(sys.executable).resolve(),
             bridge_package=script,
             allowed_operations=(BridgeOperation.CREATE_SPRITE_PROJECT,),
             launcher_args=(str(script),),
@@ -186,7 +188,7 @@ class PixeloramaMediaTests(unittest.TestCase):
             {BridgeOutputType.PNG, BridgeOutputType.PIXELORAMA_PROJECT},
         )
         for output in result.output_evidence:
-            verifications = self.runtime.list_verifications("ARTIFACT", output.artifact_id)
+            verifications = self.lineage.list_artifact_verifications(output.artifact_id)
             self.assertEqual(len(verifications), 1)
             self.assertEqual(verifications[0]["status"], "PASS")
             self.assertEqual(
@@ -226,8 +228,8 @@ class PixeloramaMediaTests(unittest.TestCase):
                 (adopted.adopted_artifact_id,),
             ).fetchone()
         self.assertEqual(artifact["parent_artifact_id"], source.artifact_id)
-        verifications = self.runtime.list_verifications(
-            "ARTIFACT", adopted.adopted_artifact_id
+        verifications = self.lineage.list_artifact_verifications(
+            adopted.adopted_artifact_id
         )
         self.assertEqual(len(verifications), 1)
         self.assertEqual(
@@ -258,7 +260,7 @@ class PixeloramaMediaTests(unittest.TestCase):
                 "SELECT path_or_uri FROM artifacts WHERE id = ?",
                 (source.artifact_id,),
             ).fetchone()
-        Path(row["path_or_uri"]).write_bytes(b"tampered")
+        (self.root / row["path_or_uri"]).write_bytes(b"tampered")
         with self.assertRaisesRegex(PixeloramaMediaError, "drifted"):
             PixeloramaOutputAdopter(self.runtime).adopt_new(
                 source.artifact_id,
