@@ -362,7 +362,12 @@ class PixeloramaOutputAdopter:
             raise PixeloramaMediaError(
                 "source Artifact lacks PASS pixelorama-output-integrity evidence"
             )
-        source = Path(str(artifact["path_or_uri"]))
+        raw = artifact.get("path_or_uri")
+        if not isinstance(raw, str) or not raw or "://" in raw:
+            raise PixeloramaMediaError("source Artifact file is missing or unsafe")
+        source = Path(raw)
+        if not source.is_absolute():
+            source = self.runtime.project_root / source
         if source.is_symlink() or not source.is_file():
             raise PixeloramaMediaError("source Artifact file is missing or unsafe")
         try:
