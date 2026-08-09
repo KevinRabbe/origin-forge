@@ -25,6 +25,7 @@ from origin_forge.runtime import OriginForgeRuntime
 FAKE_PIXELORAMA = r'''#!/usr/bin/env python3
 import binascii
 import json
+import os
 import struct
 import sys
 import time
@@ -50,7 +51,7 @@ def png():
 
 args = sys.argv[1:]
 if "--pixelorama-version" in args:
-    print("Pixelorama v1.2")
+    print("v1.2-stable")
     raise SystemExit(0)
 mode = Path(__file__).stem
 if "timeout" in mode:
@@ -64,6 +65,12 @@ source = Path(args[6])
 if not source.is_file():
     print("missing source", file=sys.stderr)
     raise SystemExit(8)
+if "parent_symlink" in mode:
+    runtime = Path("runtime")
+    runtime.mkdir(exist_ok=True)
+    exports = Path("exports")
+    exports.rmdir()
+    exports.symlink_to(runtime.resolve(), target_is_directory=True)
 output.parent.mkdir(parents=True, exist_ok=True)
 if "invalid" in mode:
     output.write_bytes(b"not a png")
@@ -110,7 +117,7 @@ class PixeloramaCliExportTests(unittest.TestCase):
         values = dict(
             pixelorama_executable=executable,
             pixelorama_fingerprint=self._hash(executable),
-            expected_pixelorama_version="v1.2",
+            expected_pixelorama_version="v1.2-stable",
             timeout_seconds=3,
         )
         values.update(overrides)
@@ -154,7 +161,7 @@ class PixeloramaCliExportTests(unittest.TestCase):
         )
         before_runs = self.runtime.list_runs()
         result = adapter.execute(self._request(), source_path=self.source)
-        self.assertEqual(result.pixelorama_version, "v1.2")
+        self.assertEqual(result.pixelorama_version, "v1.2-stable")
         self.assertEqual((result.width, result.height), (4, 2))
         self.assertEqual(result.process_exit_code, 0)
         self.assertTrue(result.output_hash.startswith("sha256:"))
@@ -198,6 +205,17 @@ class PixeloramaCliExportTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(PixeloramaCliIntegrityError, "version does not match"):
             PixeloramaCliExportAdapter(self.runtime, bad_version).probe_version()
+        release_tag_only = self._profile(
+            executable,
+            expected_pixelorama_version="v1.2",
+        )
+        with self.assertRaisesRegex(PixeloramaCliIntegrityError, "exactly"):
+            PixeloramaCliExportAdapter(self.runtime, release_tag_only).probe_version()
+        with self.assertRaisesRegex(ValueError, "one bounded non-empty line"):
+            self._profile(
+                executable,
+                expected_pixelorama_version="v1.2-stable\nspoofed",
+            )
 
     @unittest.skipIf(os.name == "nt", "fake shebang executable is POSIX-only")
     def test_source_hash_drift_and_undeclared_exports_fail_closed(self) -> None:
@@ -212,6 +230,20 @@ class PixeloramaCliExportTests(unittest.TestCase):
         runtime.initialize("extra")
         with self.assertRaisesRegex(PixeloramaCliIntegrityError, "undeclared export"):
             PixeloramaCliExportAdapter(runtime, self._profile(extra)).execute(
+                self._request(),
+                source_path=self.source,
+            )
+
+    @unittest.skipIf(os.name == "nt", "fake shebang executable is POSIX-only")
+    def test_replaced_workspace_root_fails_closed(self) -> None:
+        executable = self._executable("parent_symlink_pixelorama")
+        runtime = OriginForgeRuntime(self.root / "parent-symlink-case")
+        runtime.initialize("parent-symlink")
+        with self.assertRaisesRegex(
+            PixeloramaCliIntegrityError,
+            "exports workspace root may not be a symlink",
+        ):
+            PixeloramaCliExportAdapter(runtime, self._profile(executable)).execute(
                 self._request(),
                 source_path=self.source,
             )
@@ -258,18 +290,26 @@ class PixeloramaCliExportTests(unittest.TestCase):
             self.assertFalse(hasattr(adapter, forbidden))
 
 
+_REAL_GATE_ENV = (
+    "ORIGIN_FORGE_PIXELORAMA_EXECUTABLE",
+    "ORIGIN_FORGE_PIXELORAMA_EXECUTABLE_SHA256",
+    "ORIGIN_FORGE_PIXELORAMA_FIXTURE_PXO",
+    "ORIGIN_FORGE_PIXELORAMA_FIXTURE_SHA256",
+    "ORIGIN_FORGE_PIXELORAMA_VERSION",
+)
+
+
 @unittest.skipUnless(
-    os.environ.get("ORIGIN_FORGE_PIXELORAMA_EXECUTABLE")
-    and os.environ.get("ORIGIN_FORGE_PIXELORAMA_FIXTURE_PXO"),
-    "real Pixelorama CLI fixture not configured",
+    all(os.environ.get(name) for name in _REAL_GATE_ENV),
+    "real Pixelorama CLI fixture and external pins not configured",
 )
 class RealPixeloramaCliExportIntegrationTests(unittest.TestCase):
     def test_real_installed_pixelorama_exports_frozen_pxo_through_documented_cli(self) -> None:
         executable = Path(os.environ["ORIGIN_FORGE_PIXELORAMA_EXECUTABLE"])
         source = Path(os.environ["ORIGIN_FORGE_PIXELORAMA_FIXTURE_PXO"])
-        expected_version = os.environ.get("ORIGIN_FORGE_PIXELORAMA_VERSION", "v1.2")
-        executable_hash = "sha256:" + hashlib.sha256(executable.read_bytes()).hexdigest()
-        source_hash = "sha256:" + hashlib.sha256(source.read_bytes()).hexdigest()
+        expected_version = os.environ["ORIGIN_FORGE_PIXELORAMA_VERSION"]
+        executable_hash = os.environ["ORIGIN_FORGE_PIXELORAMA_EXECUTABLE_SHA256"]
+        source_hash = os.environ["ORIGIN_FORGE_PIXELORAMA_FIXTURE_SHA256"]
         with tempfile.TemporaryDirectory() as tempdir:
             runtime = OriginForgeRuntime(Path(tempdir))
             runtime.initialize("real-pixelorama-cli-export")
