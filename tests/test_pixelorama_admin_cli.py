@@ -34,8 +34,7 @@ class PixeloramaAdminCliTests(unittest.TestCase):
             tool_versions=("pixelorama:test",),
             status="PRODUCED",
         )
-        self.runtime.record_verification(
-            "ARTIFACT",
+        self.lineage.record_artifact_verification(
             self.source_artifact,
             verification_type="pixelorama-output-integrity",
             verifier="OriginForge.PixeloramaMediaService",
