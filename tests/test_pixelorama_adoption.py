@@ -37,8 +37,7 @@ class PixeloramaAdoptionTests(unittest.TestCase):
             tool_versions=("pixelorama:test", "origin-forge-pixelorama-bridge:test"),
             status="PRODUCED",
         )
-        self.runtime.record_verification(
-            "ARTIFACT",
+        self.lineage.record_artifact_verification(
             self.source_artifact,
             verification_type="pixelorama-output-integrity",
             verifier="OriginForge.PixeloramaMediaService",
@@ -81,8 +80,7 @@ class PixeloramaAdoptionTests(unittest.TestCase):
             path_or_uri=str(outside),
             status="PRODUCED",
         )
-        self.runtime.record_verification(
-            "ARTIFACT",
+        self.lineage.record_artifact_verification(
             artifact,
             verification_type="pixelorama-output-integrity",
             verifier="OriginForge.PixeloramaMediaService",
@@ -108,8 +106,7 @@ class PixeloramaAdoptionTests(unittest.TestCase):
             path_or_uri=str(bad_workspace),
             status="PRODUCED",
         )
-        self.runtime.record_verification(
-            "ARTIFACT",
+        self.lineage.record_artifact_verification(
             artifact,
             verification_type="pixelorama-output-integrity",
             verifier="OriginForge.PixeloramaMediaService",
@@ -189,13 +186,13 @@ class PixeloramaAdoptionTests(unittest.TestCase):
                 "UPDATE artifacts SET tool_versions_json = ? WHERE id = ?",
                 ('{"not":"an array"}', self.source_artifact),
             )
-        before = self.runtime.list_artifacts()
+        before = self.lineage.list_artifacts()
         with self.assertRaisesRegex(PixeloramaAdoptionError, "tool_versions_json"):
             GovernedPixeloramaOutputAdopter(self.runtime).adopt_new(
                 self.source_artifact,
                 "assets/tool-corrupt.png",
             )
-        self.assertEqual(self.runtime.list_artifacts(), before)
+        self.assertEqual(self.lineage.list_artifacts(), before)
 
     def test_adopter_has_no_model_editor_task_merge_release_or_signing_surface(self) -> None:
         adopter = GovernedPixeloramaOutputAdopter(self.runtime)
