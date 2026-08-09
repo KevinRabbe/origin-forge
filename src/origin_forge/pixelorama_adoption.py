@@ -280,8 +280,7 @@ class GovernedPixeloramaOutputAdopter:
             tool_versions=self._tool_versions(artifact),
             status="ADOPTED",
         )
-        verification_id = self.runtime.record_verification(
-            "ARTIFACT",
+        verification_id = self.lineage.record_artifact_verification(
             adopted_artifact_id,
             verification_type="pixelorama-adoption-integrity",
             verifier="OriginForge.GovernedPixeloramaOutputAdopter",
