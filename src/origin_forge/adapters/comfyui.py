@@ -14,6 +14,7 @@ from typing import Mapping
 from urllib.parse import urlparse
 from uuid import UUID
 
+from ..image_png import decode_truecolor8_png
 from ..image_vision_models import (
     ImageOperation,
     ImageOperationRequest,
@@ -24,7 +25,7 @@ from ..image_vision_models import (
     canonical_hash,
     validate_sha256,
 )
-from ..pixelorama_png import PngError, inspect_rgba8_png
+from ..pixelorama_png import PngError, encode_rgba8_png, inspect_rgba8_png
 from ..runtime import OriginForgeRuntime
 
 
@@ -495,25 +496,33 @@ class ComfyUiAdapter:
         if len(images) != len(request.output_relative_paths):
             raise ComfyUiIntegrityError("ComfyUI output count does not match request")
         evidence: list[ImageOutputEvidence] = []
-        total = 0
+        retrieved_total = 0
+        normalized_total = 0
         exports_root = (workspace / "exports").resolve(strict=True)
         for metadata, relative_path in zip(images, request.output_relative_paths, strict=True):
             query = urllib.parse.urlencode(metadata)
             maximum = min(self.profile.max_image_bytes, request.budget.max_output_bytes)
-            data = self._request_bytes(f"/view?{query}", maximum)
-            total += len(data)
-            if total > request.budget.max_output_bytes:
-                raise ComfyUiIntegrityError("ComfyUI outputs exceed operation byte budget")
+            backend_data = self._request_bytes(f"/view?{query}", maximum)
+            retrieved_total += len(backend_data)
+            if retrieved_total > request.budget.max_output_bytes:
+                raise ComfyUiIntegrityError("ComfyUI outputs exceed retrieval byte budget")
             try:
-                inspection = inspect_rgba8_png(data)
+                decoded = decode_truecolor8_png(backend_data)
             except PngError as exc:
                 raise ComfyUiIntegrityError(
-                    f"ComfyUI returned invalid RGBA8 PNG output: {exc}"
+                    f"ComfyUI returned invalid RGB/RGBA truecolor PNG output: {exc}"
                 ) from exc
-            if inspection.width != request.width or inspection.height != request.height:
+            if decoded.plane.width != request.width or decoded.plane.height != request.height:
                 raise ComfyUiIntegrityError(
                     "ComfyUI output dimensions do not match frozen request"
                 )
+            data = encode_rgba8_png(decoded.plane)
+            normalized_total += len(data)
+            if normalized_total > request.budget.max_output_bytes:
+                raise ComfyUiIntegrityError(
+                    "normalized ComfyUI outputs exceed operation byte budget"
+                )
+            inspection = inspect_rgba8_png(data)
             target = workspace / Path(relative_path)
             if target.exists() or target.is_symlink():
                 raise ComfyUiIntegrityError("declared image output already exists")
