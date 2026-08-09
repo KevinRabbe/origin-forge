@@ -12,6 +12,7 @@ from origin_forge.pixelorama_bridge import (
     PixeloramaBridgeProfile,
 )
 from origin_forge.pixelorama_models import (
+    BridgeBudget,
     BridgeOperation,
     BridgeOutputType,
     ExportSpec,
@@ -88,6 +89,7 @@ outputs = [
         "height": spec["height"],
     },
 ]
+outputs.sort(key=lambda value: value["relative_path"])
 result = {
     "protocol_version": 1,
     "operation_id": request["operation_id"],
@@ -153,6 +155,7 @@ class PixeloramaTrustedInstallationTests(unittest.TestCase):
                 output_basename="trusted-test",
             ),
             export_specs=(ExportSpec(BridgeOutputType.PNG, "exports/frame.png"),),
+            budget=BridgeBudget(timeout_seconds=5),
         )
 
     def _installation(self, **overrides) -> TrustedPixeloramaInstallation:
