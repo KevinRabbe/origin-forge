@@ -29,10 +29,12 @@ class LlamaCppVisionError(RuntimeError):
 # The pinned llama.cpp grammar parser rejects large finite repetitions. The
 # canonical Origin Forge schema intentionally remains provider-neutral and the
 # deterministic parser remains the final acceptance authority. For this
-# backend, use a stricter transport-only subset that preserves the exact field
-# structure while keeping generated string repetitions comfortably below the
-# runtime grammar ceiling.
-_LLAMA_CPP_TRANSPORT_TEXT_LIMIT = 1024
+# backend, use a stricter transport-only subset whose entire practical shape is
+# compatible with a bounded completion budget rather than allowing the model to
+# consume the budget inside one very large field or finding list.
+_LLAMA_CPP_TRANSPORT_TEXT_LIMIT = 256
+_LLAMA_CPP_TRANSPORT_FINDING_LIMIT = 4
+_LLAMA_CPP_MIN_OUTPUT_TOKENS = 1024
 
 
 def _llamacpp_transport_schema() -> dict[str, object]:
@@ -45,6 +47,7 @@ def _llamacpp_transport_schema() -> dict[str, object]:
     if not isinstance(summary, dict) or not isinstance(findings, dict):
         raise RuntimeError("VISION_REPORT_SCHEMA fields are invalid")
     summary["maxLength"] = _LLAMA_CPP_TRANSPORT_TEXT_LIMIT
+    findings["maxItems"] = _LLAMA_CPP_TRANSPORT_FINDING_LIMIT
     items = findings.get("items")
     if not isinstance(items, dict):
         raise RuntimeError("VISION_REPORT_SCHEMA finding items are invalid")
@@ -250,6 +253,11 @@ class LlamaCppVisionAdapter:
             raise LlamaCppVisionError("vision request model_id does not match configured model")
         if request.expected_model_hash != self.settings.model_hash:
             raise LlamaCppVisionError("vision request model_hash does not match configured model")
+        if request.max_output_tokens < _LLAMA_CPP_MIN_OUTPUT_TOKENS:
+            raise LlamaCppVisionError(
+                "llama.cpp vision requires max_output_tokens >= "
+                f"{_LLAMA_CPP_MIN_OUTPUT_TOKENS} for its bounded transport schema"
+            )
         images = self._validate_image_bytes(
             request,
             image_bytes_by_id,
@@ -291,13 +299,23 @@ class LlamaCppVisionAdapter:
 
         try:
             value = json.loads(raw)
-            content = value["choices"][0]["message"]["content"]
+            choice = value["choices"][0]
+            content = choice["message"]["content"]
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
             raise LlamaCppVisionError(
                 "llama.cpp vision returned an invalid chat completion response"
             ) from exc
         if not isinstance(content, str):
             raise LlamaCppVisionError("llama.cpp vision completion content is not text")
+        finish_reason = choice.get("finish_reason")
+        if finish_reason == "length":
+            raise LlamaCppVisionError(
+                "llama.cpp vision completion exhausted the frozen output-token budget"
+            )
+        if finish_reason not in {None, "stop"}:
+            raise LlamaCppVisionError(
+                f"llama.cpp vision returned unsupported finish_reason: {finish_reason!r}"
+            )
         returned_model = value.get("model") or self.settings.model
         if returned_model != self.settings.model:
             raise LlamaCppVisionError("llama.cpp vision returned unexpected model identity")
