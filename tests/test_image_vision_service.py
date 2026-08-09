@@ -36,9 +36,16 @@ VISION_HASH = "sha256:" + "c" * 64
 
 
 class _FakeImageAdapter:
-    def __init__(self, runtime: OriginForgeRuntime, *, corrupt: bool = False):
+    def __init__(
+        self,
+        runtime: OriginForgeRuntime,
+        *,
+        corrupt: bool = False,
+        reported_workspace: Path | None = None,
+    ):
         self.runtime = runtime
         self.corrupt = corrupt
+        self.reported_workspace = reported_workspace
 
     def execute(self, request: ImageOperationRequest):
         workspace = (
@@ -87,7 +94,11 @@ class _FakeImageAdapter:
         return SimpleNamespace(
             request=request,
             result=result,
-            workspace_path=workspace,
+            workspace_path=(
+                self.reported_workspace
+                if self.reported_workspace is not None
+                else workspace
+            ),
         )
 
 
@@ -192,6 +203,29 @@ class ImageVisionServiceTests(unittest.TestCase):
         )
         self.assertFalse(result.to_dict()["semantic_visual_quality_verified"])
         self.assertFalse(result.to_dict()["canonical_asset_adopted"])
+
+    def test_generation_rejects_backend_reported_workspace_outside_frozen_id(self) -> None:
+        before = self.runtime.get_task(self.task)
+        with self.assertRaisesRegex(
+            ImageVisionServiceError,
+            "outside the exact frozen workspace ID",
+        ):
+            ImageGenerationService(
+                self.runtime,
+                _FakeImageAdapter(
+                    self.runtime,
+                    reported_workspace=self.runtime.state_dir,
+                ),
+            ).execute(self.task, self._request())
+        self._assert_task_not_completed(before, self.runtime.get_task(self.task))
+        runs = [
+            run
+            for run in self.runtime.list_runs(self.task)
+            if run["role"] == ImageGenerationService.RUN_ROLE
+        ]
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], RunStatus.FAILED.value)
+        self.assertEqual(self.runtime.list_verifications("TASK", self.task), [])
 
     def test_generation_detects_post_backend_output_drift_and_fails_run_only(self) -> None:
         before = self.runtime.get_task(self.task)
