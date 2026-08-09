@@ -1,0 +1,158 @@
+name: Phase 21 real vision evidence
+
+on:
+  pull_request:
+    types: [edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  real-vision-gate:
+    if: >-
+      github.event.pull_request.number == 30 &&
+      contains(github.event.pull_request.body, '<!-- phase21-real-vision-evidence -->')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Origin Forge
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Checkout pinned llama.cpp source
+        uses: actions/checkout@v4
+        with:
+          repository: ggml-org/llama.cpp
+          ref: aedb2a5e9ca3d4064148bbb919e0ddc0c1b70ab3
+          path: .external/llama.cpp
+          persist-credentials: false
+
+      - name: Verify and build pinned llama.cpp runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_commit="aedb2a5e9ca3d4064148bbb919e0ddc0c1b70ab3"
+          actual_commit="$(git -C .external/llama.cpp rev-parse HEAD)"
+          test "$actual_commit" = "$expected_commit"
+          cmake -S .external/llama.cpp -B .external/llama.cpp/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF \
+            -DLLAMA_CURL=OFF \
+            -DLLAMA_BUILD_UI=OFF \
+            -DLLAMA_USE_PREBUILT_UI=OFF
+          cmake --build .external/llama.cpp/build --config Release -j2 --target llama-server
+          server="$(pwd)/.external/llama.cpp/build/bin/llama-server"
+          test -x "$server"
+          "$server" --version
+          echo "ORIGIN_FORGE_VISION_SERVER=$server" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_VISION_RUNTIME_COMMIT=$expected_commit" >> "$GITHUB_ENV"
+
+      - name: Acquire and verify frozen SmolVLM Q8 model evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          hf_commit="b9e4379657e1450d04d02eec8e345667265b0a00"
+          model_name="SmolVLM-256M-Instruct-Q8_0.gguf"
+          projector_name="mmproj-SmolVLM-256M-Instruct-Q8_0.gguf"
+          model_sha="2a31195d3769c0b0fd0a4906201666108834848db768af11de1d2cef7cd35e65"
+          projector_sha="7e943f7c53f0382a6fc41b6ee0c2def63ba4fded9ab8ed039cc9e2ab905e0edd"
+          model_bytes="175054528"
+          projector_bytes="103769856"
+          evidence_dir="$RUNNER_TEMP/origin-forge-phase21-vision"
+          mkdir -p "$evidence_dir"
+          model="$evidence_dir/$model_name"
+          projector="$evidence_dir/$projector_name"
+
+          curl -L --fail --silent --show-error \
+            "https://huggingface.co/ggml-org/SmolVLM-256M-Instruct-GGUF/resolve/$hf_commit/$model_name?download=true" \
+            -o "$model"
+          curl -L --fail --silent --show-error \
+            "https://huggingface.co/ggml-org/SmolVLM-256M-Instruct-GGUF/resolve/$hf_commit/$projector_name?download=true" \
+            -o "$projector"
+
+          echo "$model_sha  $model" | sha256sum -c -
+          echo "$projector_sha  $projector" | sha256sum -c -
+          test "$(stat -c %s "$model")" = "$model_bytes"
+          test "$(stat -c %s "$projector")" = "$projector_bytes"
+
+          echo "PIN_VISION_HF_COMMIT=$hf_commit"
+          echo "PIN_VISION_MODEL_SHA256=sha256:$model_sha"
+          echo "PIN_VISION_MODEL_BYTES=$model_bytes"
+          echo "PIN_VISION_PROJECTOR_SHA256=sha256:$projector_sha"
+          echo "PIN_VISION_PROJECTOR_BYTES=$projector_bytes"
+
+          echo "ORIGIN_FORGE_VISION_MODEL_FILE=$model" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_VISION_MODEL_SHA256=sha256:$model_sha" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_VISION_PROJECTOR_FILE=$projector" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_VISION_PROJECTOR_SHA256=sha256:$projector_sha" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_VISION_MODEL_ID=origin-forge-smolvlm-256m-q8" >> "$GITHUB_ENV"
+
+      - name: Start pinned offline llama.cpp multimodal server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/llama-vision-server.log"
+          "$ORIGIN_FORGE_VISION_SERVER" \
+            --model "$ORIGIN_FORGE_VISION_MODEL_FILE" \
+            --mmproj "$ORIGIN_FORGE_VISION_PROJECTOR_FILE" \
+            --alias "$ORIGIN_FORGE_VISION_MODEL_ID" \
+            --host 127.0.0.1 \
+            --port 8080 \
+            --offline \
+            --no-ui \
+            --device none \
+            --no-mmproj-offload \
+            --threads 2 \
+            --threads-batch 2 \
+            --ctx-size 2048 \
+            --predict 1024 \
+            >"$log" 2>&1 &
+          pid=$!
+          echo "ORIGIN_FORGE_VISION_SERVER_PID=$pid" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_VISION_SERVER_LOG=$log" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_VISION_REAL_URL=http://127.0.0.1:8080" >> "$GITHUB_ENV"
+
+          ready=0
+          for _ in $(seq 1 120); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "llama.cpp server exited during startup"
+              cat "$log"
+              exit 1
+            fi
+            if curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "llama.cpp server did not become healthy"
+            cat "$log"
+            exit 1
+          fi
+
+      - name: Run frozen real llama.cpp vision gate
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -W error::ResourceWarning -m unittest discover -s tests \
+            -p "test_llamacpp_vision_real.py" -v
+
+      - name: Stop llama.cpp server
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${ORIGIN_FORGE_VISION_SERVER_PID:-}" ]; then
+            kill "$ORIGIN_FORGE_VISION_SERVER_PID" 2>/dev/null || true
+          fi
+          if [ -n "${ORIGIN_FORGE_VISION_SERVER_LOG:-}" ] && [ -f "$ORIGIN_FORGE_VISION_SERVER_LOG" ]; then
+            tail -n 200 "$ORIGIN_FORGE_VISION_SERVER_LOG" || true
+          fi

@@ -1,0 +1,171 @@
+name: Phase 21 real generation evidence
+
+on:
+  pull_request:
+    types: [edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  real-generation-gate:
+    if: >-
+      github.event.pull_request.number == 30 &&
+      contains(github.event.pull_request.body, '<!-- phase21-real-generation-evidence -->')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout Origin Forge
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Checkout pinned ComfyUI source
+        uses: actions/checkout@v4
+        with:
+          repository: Comfy-Org/ComfyUI
+          ref: 700821e1364eaab0e8f21c538a2131719fec57bf
+          path: .external/ComfyUI
+          persist-credentials: false
+
+      - name: Verify pinned ComfyUI source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_commit="700821e1364eaab0e8f21c538a2131719fec57bf"
+          actual_commit="$(git -C .external/ComfyUI rev-parse HEAD)"
+          test "$actual_commit" = "$expected_commit"
+          grep -Fx '__version__ = "0.28.0"' .external/ComfyUI/comfyui_version.py
+          echo "ORIGIN_FORGE_COMFY_RUNTIME_COMMIT=$expected_commit" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_COMFY_VERSION=0.28.0" >> "$GITHUB_ENV"
+
+      - name: Install exact frozen ComfyUI Python environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock="evidence/phase21/comfyui-v0.28.0-python3.13.freeze.txt"
+          expected_lock_sha="a4d5a1700302a2651050576b691d175e3944def43d432b95a970d5046ada5eaa"
+          echo "$expected_lock_sha  $lock" | sha256sum -c -
+
+          venv="$RUNNER_TEMP/comfy-locked-venv"
+          python -m venv "$venv"
+          source "$venv/bin/activate"
+          python -m pip install --disable-pip-version-check -r "$lock"
+          python -m pip freeze | LC_ALL=C sort > "$RUNNER_TEMP/comfy-installed.freeze.txt"
+          cmp -s "$lock" "$RUNNER_TEMP/comfy-installed.freeze.txt"
+          sha256sum "$RUNNER_TEMP/comfy-installed.freeze.txt"
+
+          echo "$venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$venv" >> "$GITHUB_ENV"
+          echo "PIN_COMFY_DEPENDENCY_FREEZE_SHA256=sha256:$expected_lock_sha"
+
+      - name: Acquire and verify frozen SD1.5 fp16 model
+        shell: bash
+        run: |
+          set -euo pipefail
+          hf_commit="4fddeb7f9096623f1b77f4708feb96126a08a0cf"
+          model_name="v1-5-pruned-emaonly-fp16.safetensors"
+          model_sha="e9476a13728cd75d8279f6ec8bad753a66a1957ca375a1464dc63b37db6e3916"
+          model_bytes="2132696762"
+          evidence_dir="$RUNNER_TEMP/origin-forge-phase21-generation"
+          mkdir -p "$evidence_dir"
+          model="$evidence_dir/$model_name"
+
+          curl -L --fail --silent --show-error \
+            "https://huggingface.co/Comfy-Org/stable-diffusion-v1-5-archive/resolve/$hf_commit/$model_name?download=true" \
+            -o "$model"
+          echo "$model_sha  $model" | sha256sum -c -
+          test "$(stat -c %s "$model")" = "$model_bytes"
+
+          base="$RUNNER_TEMP/origin-forge-phase21-comfy-base"
+          mkdir -p "$base/models/checkpoints" "$base/output" "$base/temp" "$base/input" "$base/user"
+          ln "$model" "$base/models/checkpoints/$model_name"
+          test -f "$base/models/checkpoints/$model_name"
+          test ! -L "$base/models/checkpoints/$model_name"
+
+          echo "PIN_COMFY_HF_COMMIT=$hf_commit"
+          echo "PIN_COMFY_MODEL_SHA256=sha256:$model_sha"
+          echo "PIN_COMFY_MODEL_BYTES=$model_bytes"
+          echo "ORIGIN_FORGE_COMFY_MODEL_FILE=$model" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_COMFY_MODEL_SHA256=sha256:$model_sha" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_COMFY_MODEL_ID=origin-forge-sd15-fp16" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_COMFY_CHECKPOINT_NAME=$model_name" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_COMFY_BASE=$base" >> "$GITHUB_ENV"
+
+      - name: Start pinned isolated offline ComfyUI server
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/comfyui-phase21.log"
+          python .external/ComfyUI/main.py \
+            --listen 127.0.0.1 \
+            --port 8188 \
+            --base-directory "$ORIGIN_FORGE_COMFY_BASE" \
+            --output-directory "$ORIGIN_FORGE_COMFY_BASE/output" \
+            --temp-directory "$ORIGIN_FORGE_COMFY_BASE/temp" \
+            --input-directory "$ORIGIN_FORGE_COMFY_BASE/input" \
+            --user-directory "$ORIGIN_FORGE_COMFY_BASE/user" \
+            --database-url 'sqlite:///:memory:' \
+            --disable-auto-launch \
+            --cpu \
+            --cache-none \
+            --deterministic \
+            --disable-metadata \
+            --disable-all-custom-nodes \
+            --disable-api-nodes \
+            --dont-print-server \
+            >"$log" 2>&1 &
+          pid=$!
+          echo "ORIGIN_FORGE_COMFY_SERVER_PID=$pid" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_COMFY_SERVER_LOG=$log" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_COMFY_REAL_URL=http://127.0.0.1:8188" >> "$GITHUB_ENV"
+
+          ready=0
+          for _ in $(seq 1 180); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "ComfyUI exited during startup"
+              cat "$log"
+              exit 1
+            fi
+            if stats="$(curl --fail --silent --show-error http://127.0.0.1:8188/system_stats 2>/dev/null)"; then
+              if python - "$stats" <<'PY'
+          import json, sys
+          value = json.loads(sys.argv[1])
+          raise SystemExit(0 if value.get("system", {}).get("comfyui_version") == "0.28.0" else 1)
+          PY
+              then
+                ready=1
+                break
+              fi
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "ComfyUI did not become healthy with exact version"
+            cat "$log"
+            exit 1
+          fi
+
+      - name: Run frozen real ComfyUI generation gate
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -W error::ResourceWarning -m unittest discover -s tests \
+            -p "test_comfyui_real.py" -v
+
+      - name: Stop ComfyUI server
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${ORIGIN_FORGE_COMFY_SERVER_PID:-}" ]; then
+            kill "$ORIGIN_FORGE_COMFY_SERVER_PID" 2>/dev/null || true
+          fi
+          if [ -n "${ORIGIN_FORGE_COMFY_SERVER_LOG:-}" ] && [ -f "$ORIGIN_FORGE_COMFY_SERVER_LOG" ]; then
+            tail -n 250 "$ORIGIN_FORGE_COMFY_SERVER_LOG" || true
+          fi
