@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
-import urllib.request
 import unittest
 from pathlib import Path
 
@@ -74,45 +72,6 @@ class RealLlamaCppVisionIntegrationTests(unittest.TestCase):
         )
         return png, request
 
-    @staticmethod
-    def _capture_raw_completion(
-        adapter: LlamaCppVisionAdapter,
-        request: VisionInspectionRequest,
-        png: bytes,
-    ) -> str:
-        images = adapter._validate_image_bytes(
-            request,
-            {"synthetic": png},
-            max_total_image_bytes=adapter.settings.max_total_image_bytes,
-        )
-        body = json.dumps(
-            adapter._payload(request, images), separators=(",", ":")
-        ).encode("utf-8")
-        http_request = urllib.request.Request(
-            f"{adapter.settings.base_url}/v1/chat/completions",
-            data=body,
-            method="POST",
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(
-            http_request, timeout=adapter.settings.timeout_seconds
-        ) as response:
-            raw = response.read(adapter.settings.max_response_bytes + 1)
-        if len(raw) > adapter.settings.max_response_bytes:
-            raise AssertionError("diagnostic vision completion exceeded response bound")
-        value = json.loads(raw)
-        content = value["choices"][0]["message"]["content"]
-        if not isinstance(content, str):
-            raise AssertionError("diagnostic vision completion content is not text")
-        bounded = content.encode("utf-8")[:16384]
-        evidence_path = os.environ.get(
-            "ORIGIN_FORGE_VISION_RESPONSE_EVIDENCE", ""
-        ).strip()
-        if evidence_path:
-            Path(evidence_path).write_bytes(bounded)
-        print("ORIGIN_FORGE_VISION_RAW_RESPONSE=" + repr(bounded.decode("utf-8", errors="replace")))
-        return content
-
     def test_real_pinned_llamacpp_smolvlm_returns_advisory_structured_report(self) -> None:
         env = self._required_env()
         model_path = Path(env["ORIGIN_FORGE_VISION_MODEL_FILE"])
@@ -142,10 +101,6 @@ class RealLlamaCppVisionIntegrationTests(unittest.TestCase):
             max_response_bytes=1024 * 1024,
             max_total_image_bytes=1024 * 1024,
         )
-
-        # Synthetic-input-only diagnostic evidence. The strict adapter call below
-        # remains the actual integration gate and is not relaxed by this capture.
-        self._capture_raw_completion(adapter, request, png)
 
         report = adapter.inspect(request, {"synthetic": png})
         report.bind_request(request)
