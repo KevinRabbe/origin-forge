@@ -2,7 +2,7 @@ name: Pixelorama real-editor evidence
 
 on:
   pull_request:
-    types: [edited]
+    types: [edited, synchronize]
 
 permissions:
   contents: read
