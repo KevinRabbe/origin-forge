@@ -209,17 +209,20 @@ class PixeloramaBridgeAdapter:
     def _drain(stream: BinaryIO, maximum: int, sink: dict[str, object]) -> None:
         retained = bytearray()
         total = 0
-        while True:
-            chunk = stream.read(8192)
-            if not chunk:
-                break
-            total += len(chunk)
-            if len(retained) <= maximum:
-                keep = max(0, maximum + 1 - len(retained))
-                retained.extend(chunk[:keep])
-        sink["data"] = bytes(retained[:maximum])
-        sink["truncated"] = total > maximum
-        sink["total"] = total
+        try:
+            while True:
+                chunk = stream.read(8192)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if len(retained) <= maximum:
+                    keep = max(0, maximum + 1 - len(retained))
+                    retained.extend(chunk[:keep])
+        finally:
+            sink["data"] = bytes(retained[:maximum])
+            sink["truncated"] = total > maximum
+            sink["total"] = total
+            stream.close()
 
     def _workspace(self, request: PixeloramaBridgeRequest) -> Path:
         state = self.runtime.state_dir.resolve()
