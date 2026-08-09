@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  acquire-and-probe:
+  real-editor-gate:
     if: >-
       github.event.pull_request.number == 28 &&
       contains(github.event.pull_request.body, '<!-- phase19-real-editor-evidence -->')
@@ -24,20 +24,25 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Acquire externally anchored Pixelorama and upstream fixture
+      - name: Acquire and verify frozen Pixelorama evidence inputs
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
 
-          # Microsoft WinGet independently pins this exact official Pixelorama v1.2
-          # Windows x64 release archive. The probe refuses the archive before extraction
-          # unless its SHA-256 matches that external package-manifest value.
+          # External archive trust anchor: Microsoft WinGet's reviewed Pixelorama 1.2
+          # package manifest pins this exact official GitHub release archive.
           $pixeloramaUrl = "https://github.com/Orama-Interactive/Pixelorama/releases/download/v1.2/Pixelorama-Windows-64bit.zip"
-          $pixeloramaArchiveSha256 = "1DDC65930DDD435612519E293D1927849D4D4C18928A856B5BD4F058FE2F4A72"
+          $expectedArchiveSha256 = "1DDC65930DDD435612519E293D1927849D4D4C18928A856B5BD4F058FE2F4A72"
+
+          # Frozen identities learned in the successful compatibility probe and now
+          # committed as independent expected values for the authoritative rerun.
+          $expectedExecutableSha256 = "07EE2DEFDBF14F335B8F102F224926CC1EF1456BD09F3AF708E948CCADC3D904"
+          $expectedFixtureSha256 = "C9D3EB48002D0A68CE718717588B3B43D785171F57DBB85A04E194481CB65FB2"
+          $expectedFixtureBytes = 1906
 
           # Pixelorama issue #1368 supplies this real project as a minimal CLI-export
           # reproduction. GitHub required the reporter to append .zip; the attachment
-          # is used as opaque Pixelorama project bytes and renamed back to .pxo.
+          # is opaque Pixelorama project bytes and is renamed back to .pxo locally.
           $fixtureUrl = "https://github.com/user-attachments/files/23172167/layers-test.pxo.zip"
 
           $archive = Join-Path $env:RUNNER_TEMP "Pixelorama-Windows-64bit.zip"
@@ -46,7 +51,7 @@ jobs:
 
           curl.exe -L --fail --silent --show-error $pixeloramaUrl -o $archive
           $actualArchiveSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToUpperInvariant()
-          if ($actualArchiveSha256 -ne $pixeloramaArchiveSha256) {
+          if ($actualArchiveSha256 -ne $expectedArchiveSha256) {
             throw "Pixelorama archive SHA-256 mismatch: $actualArchiveSha256"
           }
 
@@ -55,28 +60,36 @@ jobs:
           if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
             throw "Pinned Pixelorama executable missing after verified archive extraction"
           }
+          $actualExecutableSha256 = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($actualExecutableSha256 -ne $expectedExecutableSha256) {
+            throw "Pixelorama executable SHA-256 mismatch: $actualExecutableSha256"
+          }
 
           curl.exe -L --fail --silent --show-error $fixtureUrl -o $fixture
           if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) {
             throw "Pixelorama issue fixture was not downloaded"
           }
-
-          $executableSha256 = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
-          $fixtureSha256 = (Get-FileHash -LiteralPath $fixture -Algorithm SHA256).Hash.ToLowerInvariant()
-          $fixtureBytes = (Get-Item -LiteralPath $fixture).Length
+          $actualFixtureSha256 = (Get-FileHash -LiteralPath $fixture -Algorithm SHA256).Hash.ToUpperInvariant()
+          $actualFixtureBytes = (Get-Item -LiteralPath $fixture).Length
+          if ($actualFixtureSha256 -ne $expectedFixtureSha256) {
+            throw "Pixelorama fixture SHA-256 mismatch: $actualFixtureSha256"
+          }
+          if ($actualFixtureBytes -ne $expectedFixtureBytes) {
+            throw "Pixelorama fixture byte-count mismatch: $actualFixtureBytes"
+          }
 
           Write-Host "PIN_PIXELORAMA_ARCHIVE_SHA256=sha256:$($actualArchiveSha256.ToLowerInvariant())"
-          Write-Host "PROBE_PIXELORAMA_EXECUTABLE_SHA256=sha256:$executableSha256"
-          Write-Host "PROBE_PIXELORAMA_FIXTURE_SHA256=sha256:$fixtureSha256"
-          Write-Host "PROBE_PIXELORAMA_FIXTURE_BYTES=$fixtureBytes"
+          Write-Host "PIN_PIXELORAMA_EXECUTABLE_SHA256=sha256:$($actualExecutableSha256.ToLowerInvariant())"
+          Write-Host "PIN_PIXELORAMA_FIXTURE_SHA256=sha256:$($actualFixtureSha256.ToLowerInvariant())"
+          Write-Host "PIN_PIXELORAMA_FIXTURE_BYTES=$actualFixtureBytes"
 
           "ORIGIN_FORGE_PIXELORAMA_EXECUTABLE=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "ORIGIN_FORGE_PIXELORAMA_EXECUTABLE_SHA256=sha256:$executableSha256" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ORIGIN_FORGE_PIXELORAMA_EXECUTABLE_SHA256=sha256:$($expectedExecutableSha256.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "ORIGIN_FORGE_PIXELORAMA_FIXTURE_PXO=$fixture" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "ORIGIN_FORGE_PIXELORAMA_FIXTURE_SHA256=sha256:$fixtureSha256" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ORIGIN_FORGE_PIXELORAMA_FIXTURE_SHA256=sha256:$($expectedFixtureSha256.ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "ORIGIN_FORGE_PIXELORAMA_VERSION=v1.2-stable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Probe real Pixelorama CLI export
+      - name: Run frozen real Pixelorama CLI gate
         env:
           PYTHONPATH: src
         run: >-
