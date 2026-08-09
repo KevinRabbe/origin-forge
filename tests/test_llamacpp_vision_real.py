@@ -104,11 +104,13 @@ class RealLlamaCppVisionIntegrationTests(unittest.TestCase):
         content = value["choices"][0]["message"]["content"]
         if not isinstance(content, str):
             raise AssertionError("diagnostic vision completion content is not text")
+        bounded = content.encode("utf-8")[:16384]
         evidence_path = os.environ.get(
             "ORIGIN_FORGE_VISION_RESPONSE_EVIDENCE", ""
         ).strip()
         if evidence_path:
-            Path(evidence_path).write_bytes(content.encode("utf-8")[:16384])
+            Path(evidence_path).write_bytes(bounded)
+        print("ORIGIN_FORGE_VISION_RAW_RESPONSE=" + repr(bounded.decode("utf-8", errors="replace")))
         return content
 
     def test_real_pinned_llamacpp_smolvlm_returns_advisory_structured_report(self) -> None:
