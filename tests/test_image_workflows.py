@@ -76,7 +76,7 @@ class ImageWorkflowTests(unittest.TestCase):
     def test_template_hash_covers_graph_bindings_output_and_model_identity(self) -> None:
         base = _template()
         graph_changed = _workflow()
-        graph_changed[3]["inputs"]["steps"] = 2
+        graph_changed["3"]["inputs"]["steps"] = 2
         variants = (
             GovernedComfyWorkflowTemplate(
                 workflow_id=base.workflow_id,
