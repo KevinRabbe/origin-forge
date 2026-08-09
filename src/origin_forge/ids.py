@@ -34,6 +34,8 @@ class IdKind(StrEnum):
     PROVENANCE_MANIFEST = "PROV"
     MEDIA_WORKSPACE = "MEDIA"
     PIXELORAMA_OPERATION = "PXOP"
+    MODEL3D_WORKSPACE = "MODEL3D"
+    BLOCKBENCH_OPERATION = "BBOP"
 
 
 def new_id(kind: IdKind) -> str:
