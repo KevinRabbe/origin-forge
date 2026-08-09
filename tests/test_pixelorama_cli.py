@@ -11,6 +11,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from origin_forge.lineage import OriginForgeLineage
 from origin_forge.pixelorama_cli import build_parser, main
 from origin_forge.runtime import OriginForgeRuntime
 
@@ -21,9 +22,11 @@ class PixeloramaCliTests(unittest.TestCase):
         self.root = Path(self.tempdir.name)
         self.runtime = OriginForgeRuntime(self.root)
         self.runtime.initialize("pixelorama-cli-test")
+        self.lineage = OriginForgeLineage(self.runtime)
         self.bridge = self.root / "trusted-bridge.gdextension"
         self.bridge.write_bytes(b"governed bridge package")
         self.fingerprint = "sha256:" + hashlib.sha256(self.bridge.read_bytes()).hexdigest()
+        self.executable = Path(sys.executable).resolve()
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()
@@ -46,7 +49,7 @@ class PixeloramaCliTests(unittest.TestCase):
 
     def test_status_verifies_profile_without_launch_or_state_mutation(self) -> None:
         before_runs = self.runtime.list_runs()
-        before_artifacts = self.runtime.list_artifacts()
+        before_artifacts = self.lineage.list_artifacts()
         with patch(
             "origin_forge.pixelorama_bridge.subprocess.Popen",
             side_effect=AssertionError("status must never launch Pixelorama"),
@@ -60,7 +63,7 @@ class PixeloramaCliTests(unittest.TestCase):
                 "--bridge-fingerprint",
                 self.fingerprint,
                 "--pixelorama-executable",
-                sys.executable,
+                str(self.executable),
                 "--bridge-package",
                 str(self.bridge),
                 "--allow-operation",
@@ -75,7 +78,7 @@ class PixeloramaCliTests(unittest.TestCase):
         self.assertFalse(payload["model_execution_enabled"])
         self.assertFalse(payload["plugin_install_enabled"])
         self.assertEqual(self.runtime.list_runs(), before_runs)
-        self.assertEqual(self.runtime.list_artifacts(), before_artifacts)
+        self.assertEqual(self.lineage.list_artifacts(), before_artifacts)
         self.assertFalse((self.runtime.state_dir / "media-workspaces").exists())
 
     def test_fingerprint_mismatch_is_structured_unavailable(self) -> None:
@@ -88,7 +91,7 @@ class PixeloramaCliTests(unittest.TestCase):
             "--bridge-fingerprint",
             "sha256:" + "0" * 64,
             "--pixelorama-executable",
-            sys.executable,
+            str(self.executable),
             "--bridge-package",
             str(self.bridge),
             "--allow-operation",
