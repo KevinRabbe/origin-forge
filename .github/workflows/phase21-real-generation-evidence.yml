@@ -108,6 +108,8 @@ jobs:
             --output-directory "$ORIGIN_FORGE_COMFY_BASE/output" \
             --temp-directory "$ORIGIN_FORGE_COMFY_BASE/temp" \
             --input-directory "$ORIGIN_FORGE_COMFY_BASE/input" \
+            --user-directory "$ORIGIN_FORGE_COMFY_BASE/user" \
+            --database-url 'sqlite:///:memory:' \
             --disable-auto-launch \
             --cpu \
             --cache-none \
