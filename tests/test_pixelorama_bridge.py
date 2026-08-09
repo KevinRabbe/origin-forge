@@ -159,7 +159,7 @@ class PixeloramaBridgeTests(unittest.TestCase):
             bridge_id="origin-forge-pixelorama-test",
             bridge_version="test-bridge-1",
             bridge_fingerprint=self._hash(script),
-            pixelorama_executable=Path(sys.executable),
+            pixelorama_executable=Path(sys.executable).resolve(),
             bridge_package=script,
             allowed_operations=(BridgeOperation.CREATE_SPRITE_PROJECT,),
             launcher_args=(str(script),),
