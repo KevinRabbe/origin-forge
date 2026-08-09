@@ -1,6 +1,6 @@
 # Phase 21 — Image and Vision
 
-Status: **IN PROGRESS**
+Status: **DONE**
 
 Phase 21 adds replaceable local image generation/editing and advisory vision inspection without allowing either capability to become a new production authority path.
 
@@ -42,7 +42,7 @@ Generation requests cannot carry edit inputs. Edit requests require at least one
 
 ### Independent raster evidence
 
-Every generated PNG is decoded by Origin Forge's existing strict RGBA8 PNG implementation. Origin Forge independently records:
+Every generated PNG is independently decoded by Origin Forge. The Phase 21 generation boundary accepts only bounded truecolor RGB8/RGBA8 PNG from the backend, normalizes it to deterministic RGBA8 bytes, and then records:
 
 - file SHA-256;
 - decoded pixel SHA-256;
@@ -50,11 +50,11 @@ Every generated PNG is decoded by Origin Forge's existing strict RGBA8 PNG imple
 - width/height;
 - structural raster PASS evidence.
 
-A backend-reported hash or successful process/HTTP response is never sufficient on its own.
+A backend-reported hash or successful process/HTTP response is never sufficient on its own. Phase 19's stricter Pixelorama RGBA8 contract remains unchanged.
 
 ### Governed ComfyUI workflow templates
 
-ComfyUI is the initial image-generation backend candidate because its core exposes a local workflow API rather than requiring GUI automation.
+ComfyUI is the initial image-generation backend because its core exposes a local workflow API rather than requiring GUI automation.
 
 Origin Forge does **not** accept arbitrary model-supplied ComfyUI graphs. A `GovernedComfyWorkflowTemplate` freezes and content-addresses:
 
@@ -85,7 +85,7 @@ It:
 8. reads images only from the approved output node;
 9. accepts only bounded safe output metadata;
 10. retrieves output bytes through `/view`;
-11. independently decodes/hashes/dimension-checks each PNG;
+11. independently decodes/hashes/dimension-checks each PNG and normalizes accepted RGB8/RGBA8 output to canonical RGBA8 PNG;
 12. writes only the exact declared `exports/*.png` files inside protected `IMAGE-*` workspace state.
 
 The adapter has no Task/Goal transition, merge/release, model-download, custom-node installation, arbitrary workflow execution, asset adoption, signing, or semantic verification surface.
@@ -101,10 +101,11 @@ Before the model call it requires:
 - successful Origin Forge RGBA8 PNG decode;
 - exact decoded pixel hash and dimensions;
 - exact configured model ID and model SHA-256;
+- exact configured multimodal projector hash when required by the frozen request/profile;
 - bounded total image bytes;
 - loopback by default and no redirect following.
 
-The multimodal request uses a fixed JSON schema. The returned report is parsed fail-closed. Unknown fields, authority claims, invalid severities, duplicate semantic findings, and findings referencing images outside the frozen request are rejected.
+The multimodal request uses a fixed strict transport schema. The llama.cpp transport schema is deliberately a stricter subset of the provider-neutral report contract so the pinned runtime can compile the grammar without weakening deterministic acceptance. The canonical returned report is still parsed fail-closed. Unknown fields, authority claims, invalid severities, duplicate semantic findings, and findings referencing images outside the frozen request are rejected.
 
 Every accepted `VisionReport` permanently carries:
 
@@ -124,6 +125,8 @@ A structural PASS means only that the report is well formed, exactly bound and r
 - generated PNG Artifacts;
 - deterministic `image-output-integrity` Artifact Verifications;
 - a Run-level `image-generation-structure` Verification.
+
+The service independently requires the backend-reported workspace to resolve to the exact protected `.origin-forge/image-workspaces/<workspace_id>` directory before it trusts any persisted request/result/output bytes.
 
 `VisionInspectionService` records a dedicated `VISION_INSPECTOR` Run over exact existing raster Artifacts and persists:
 
@@ -165,31 +168,48 @@ Phase 21 keeps these claims distinct:
 
 These levels may not be collapsed into one another.
 
-## Current external dependency
+## Completed real-model profiles
 
-The deterministic repository-side substrate does not require choosing a specific diffusion or vision model. A real model gate does.
+### Generation
 
-Before a real model proof can be called authoritative, Origin Forge needs a reviewed model profile that pins at minimum:
+The evidence workflow pins:
 
-- exact model ID and local file SHA-256;
-- any required multimodal projector/VAE/text encoder files and hashes;
-- model/license provenance acceptable for the intended project use;
-- supported backend/runtime version;
-- resource requirements compatible with the governed scheduler or evidence runner;
-- an immutable approved workflow/request profile;
-- an explicit source for the expected hashes independent of the execution result.
+- ComfyUI source commit `700821e1364eaab0e8f21c538a2131719fec57bf` / version `0.28.0`;
+- exact Python 3.13 installed-version freeze, content-addressed in the repository;
+- Stable Diffusion 1.5 fp16 checkpoint source commit, exact local file SHA-256 and exact byte size;
+- loopback-only CPU execution;
+- deterministic PyTorch mode;
+- no custom nodes;
+- no API nodes;
+- isolated base/input/output/temp/user directories;
+- explicit in-memory SQLite database state;
+- one infrastructure-approved core workflow and one exact output node.
 
-Phase 21 must not silently download whichever model a backend happens to resolve by name.
+The dependency evidence freezes exact installed package versions and the freeze file bytes. It does **not** claim individual downloaded wheel artifact hashes are pinned; that stronger supply-chain level remains a possible future hardening step and is not silently implied by this phase.
+
+### Vision
+
+The evidence workflow pins:
+
+- llama.cpp source commit `aedb2a5e9ca3d4064148bbb919e0ddc0c1b70ab3`;
+- a frozen SmolVLM 256M Q8 model file SHA-256 and byte size;
+- its frozen multimodal projector SHA-256 and byte size;
+- loopback-only offline server execution;
+- CPU-only model/projector execution;
+- embedded/prebuilt llama.cpp UI disabled at build time;
+- one strict production-adapter multimodal request and canonical advisory report parse.
+
+Exact CI run IDs and final closure head are maintained in the PR closure record so updating evidence metadata does not itself move the proven code head.
 
 ## Deferred/remaining work
 
-- real ComfyUI API transport evidence on a pinned runtime;
-- real generation model profile and output proof;
-- real llama.cpp multimodal model/profile proof;
-- governed ComfyUI edit workflow using exact frozen inputs and the supported image-upload path;
+The following are deliberately **not** Phase 21 completion requirements:
+
+- governed ComfyUI `EDIT` workflow using exact frozen inputs and the supported image-upload path;
 - repeatable image/vision quality benchmarks before any default workflow/model promotion;
 - broader raster formats only if independently validated;
-- any automatic relationship between vision findings and repair/generation remains deferred.
+- per-wheel/package artifact hash locking if a stronger external dependency provenance level is required;
+- any automatic relationship between vision findings and repair/generation.
 
 ## Authority exclusions
 
@@ -208,4 +228,6 @@ Phase 21 components may not:
 
 ## Exit condition
 
-Phase 21 is complete only when the repository-side contracts/evidence path is exact-head green and at least one real, pinned generation backend/model path plus one real, pinned vision backend/model path have executed through these boundaries with independently validated evidence. Quality promotion remains a separate measured decision.
+Phase 21 is complete when the repository-side contracts/evidence path is exact-head green and at least one real, pinned generation backend/model path plus one real, pinned vision backend/model path have executed through these boundaries with independently validated evidence. Quality promotion remains a separate measured decision.
+
+The Phase 21 implementation satisfies this condition. Final exact-head replay is recorded in PR #30 before merge.
