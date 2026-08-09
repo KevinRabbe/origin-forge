@@ -19,7 +19,7 @@ from origin_forge.pixelorama_png import encode_rgba8_png, inspect_rgba8_png
 MODEL_HASH = "sha256:" + "d" * 64
 
 
-def _fixture() -> tuple[bytes, VisionInspectionRequest]:
+def _fixture(*, max_output_tokens: int = 1024) -> tuple[bytes, VisionInspectionRequest]:
     png = encode_rgba8_png(PixelPlane(2, 2, bytes([255, 0, 0, 255] * 4)))
     inspection = inspect_rgba8_png(png)
     ref = VisionImageRef(
@@ -36,7 +36,7 @@ def _fixture() -> tuple[bytes, VisionInspectionRequest]:
         criteria=("readability", "artifacts"),
         expected_model_id="vision-model",
         expected_model_hash=MODEL_HASH,
-        max_output_tokens=512,
+        max_output_tokens=max_output_tokens,
     )
     return png, request
 
@@ -54,6 +54,7 @@ class _VisionHandler(BaseHTTPRequestHandler):
                 "model": "vision-model",
                 "choices": [
                     {
+                        "finish_reason": "stop",
                         "message": {
                             "role": "assistant",
                             "content": json.dumps(
@@ -69,7 +70,7 @@ class _VisionHandler(BaseHTTPRequestHandler):
                                     ],
                                 }
                             ),
-                        }
+                        },
                     }
                 ],
                 "usage": {"prompt_tokens": 40, "completion_tokens": 20},
@@ -125,19 +126,19 @@ class LlamaCppVisionAdapterTests(unittest.TestCase):
         self.assertEqual(
             payload["response_format"]["schema"], LLAMA_CPP_VISION_REPORT_SCHEMA
         )
+        transport = LLAMA_CPP_VISION_REPORT_SCHEMA["properties"]
+        self.assertEqual(transport["summary"]["maxLength"], 256)
+        self.assertEqual(transport["findings"]["maxItems"], 4)
         self.assertEqual(
-            LLAMA_CPP_VISION_REPORT_SCHEMA["properties"]["summary"]["maxLength"],
-            1024,
-        )
-        self.assertEqual(
-            LLAMA_CPP_VISION_REPORT_SCHEMA["properties"]["findings"]["items"]["properties"]["description"]["maxLength"],
-            1024,
+            transport["findings"]["items"]["properties"]["description"]["maxLength"],
+            256,
         )
         self.assertEqual(VISION_REPORT_SCHEMA["properties"]["summary"]["maxLength"], 8192)
         self.assertEqual(
             VISION_REPORT_SCHEMA["properties"]["findings"]["items"]["properties"]["description"]["maxLength"],
             4096,
         )
+        self.assertEqual(payload["max_tokens"], 1024)
         self.assertFalse(payload["stream"])
         user_content = payload["messages"][1]["content"]
         urls = [
@@ -147,6 +148,66 @@ class LlamaCppVisionAdapterTests(unittest.TestCase):
         ]
         self.assertEqual(len(urls), 1)
         self.assertTrue(urls[0].startswith("data:image/png;base64,"))
+
+    def test_too_small_output_budget_fails_before_model_request(self) -> None:
+        png, request = _fixture(max_output_tokens=512)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _VisionHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            adapter = LlamaCppVisionAdapter(
+                base_url=f"http://127.0.0.1:{server.server_port}",
+                model="vision-model",
+                model_hash=MODEL_HASH,
+                timeout_seconds=2,
+            )
+            with self.assertRaisesRegex(LlamaCppVisionError, "max_output_tokens >= 1024"):
+                adapter.inspect(request, {"concept": png})
+            self.assertEqual(_VisionHandler.hits, 0)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_length_finish_reason_is_rejected_even_with_parseable_prefix(self) -> None:
+        class LengthHandler(_VisionHandler):
+            def do_POST(self):
+                type(self).hits += 1
+                length = int(self.headers["Content-Length"])
+                self.rfile.read(length)
+                body = json.dumps(
+                    {
+                        "model": "vision-model",
+                        "choices": [
+                            {
+                                "finish_reason": "length",
+                                "message": {"content": '{"summary":"cut","findings":[]}'},
+                            }
+                        ],
+                    }
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        png, request = _fixture()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), LengthHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            adapter = LlamaCppVisionAdapter(
+                base_url=f"http://127.0.0.1:{server.server_port}",
+                model="vision-model",
+                model_hash=MODEL_HASH,
+                timeout_seconds=2,
+            )
+            with self.assertRaisesRegex(LlamaCppVisionError, "exhausted"):
+                adapter.inspect(request, {"concept": png})
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
     def test_image_drift_fails_before_model_request(self) -> None:
         png, request = _fixture()
