@@ -108,6 +108,7 @@ else:
     if "undeclared" in mode:
         Path("unexpected.txt").write_text("unexpected", encoding="utf-8")
 
+outputs.sort(key=lambda value: value["relative_path"])
 result = {
     "protocol_version": 1,
     "operation_id": request["operation_id"],
@@ -116,7 +117,7 @@ result = {
     "pixelorama_version": "fake-pixelorama",
     "bridge_version": "test-bridge-1",
     "bridge_fingerprint": fingerprint,
-    "outputs": outputs if status == "SUCCEEDED" else [],
+    "outputs": outputs,
     "diagnostics": [],
     "elapsed_ms": 1,
 }
