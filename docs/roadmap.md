@@ -264,17 +264,36 @@ See `docs/phase-17-project-intelligence.md` for the detailed architecture and ac
 
 **Exit condition met:** Origin Forge can represent stable product/project Entities, typed cross-media relationships and implementation bindings, enforce/query structured Design Bible rules, detect stale file bindings, and deterministically identify bounded change impact without relying on a model to rediscover project meaning or granting model-generated graph claims canonical authority.
 
-## Phase 18 — Cryptographic Provenance — NEXT
+## Phase 18 — Cryptographic Provenance — DONE
 
-Add signed manifests, operational signing keys, company-root identity hierarchy, model/Skill/Tool lineage, key rotation/revocation, and release/build provenance.
+Implemented company-root trust identity, Ed25519 operational certificates/signatures, revocation, signed provenance manifests, protected public provenance persistence, offline trust verification, and currentness/freshness inspection while keeping secret key material outside media/runtime authority.
 
-**Exit condition:** accepted Artifacts can be cryptographically traced to their Task, Run, parent state, model, Skills, tools, and Verification evidence.
+**Exit condition met:** accepted Artifacts can be cryptographically traced through signed immutable provenance to their causal Task/Run/artifact state and governed tool/model/Skill evidence without making signatures a substitute for current verification.
 
-## Phase 19 — Pixelorama Integration — PLANNED
+## Phase 19 — Pixelorama Integration — DONE
 
-Add deterministic 2D production for sprites, layers, palettes, frames, animations, tilesets, export, and validation.
+Implemented the first bounded deterministic 2D media integration layer:
 
-## Phase 20 — Blockbench Integration — PLANNED
+- canonical bounded sprite/project/layer/frame/animation/palette/pixel contracts
+- deterministic standard-library RGBA8 PNG encoding/inspection and structural validators
+- protected isolated `MEDIA-*` workspaces and `PXOP-*` operations
+- strict bridge protocol and one-shot no-shell bounded process execution
+- post-editor symlink/root/path containment revalidation and undeclared-output rejection
+- media Run/Artifact/Verification evidence without production Task completion authority
+- explicit create-only governed output adoption with no-overwrite/protected-root rules
+- read-only Pixelorama status inspection
+- Phase-18 provenance integration for explicitly adopted raster output
+- direct Pixelorama v1.2 CLI spritesheet export over opaque `.pxo` input
+- externally pinned `v1.2-stable` runtime/executable identity and frozen real upstream `.pxo` fixture
+- opt-in supply-chain evidence workflow whose authoritative frozen-pin real-editor run completed successfully
+
+The v0 direct CLI adapter deliberately exposes only the smallest proven export surface. Pixelorama project creation/import/save through Extension API 9, generic model-facing media tools, image generation, and aesthetic vision critique remain separately governed future capabilities.
+
+See `docs/phase-19-pixelorama.md` and `docs/pixelorama-real-gate.md` for the implemented boundary and frozen real-editor evidence.
+
+**Exit condition met:** Origin Forge can run a pinned real Pixelorama v1.2 headless spritesheet export over exact frozen input inside an isolated workspace, independently validate containment/hash/raster output, record evidence without transferring Task authority, and explicitly adopt a verified new media output without overwrite or signing authority.
+
+## Phase 20 — Blockbench Integration — NEXT
 
 Add structured 3D production for geometry, hierarchy/bones, pivots, UVs, textures, animation, export, and previews.
 

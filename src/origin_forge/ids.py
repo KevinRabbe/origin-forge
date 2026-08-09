@@ -32,6 +32,8 @@ class IdKind(StrEnum):
     KEY_CERTIFICATE = "KEYCERT"
     KEY_REVOCATION = "KEYREV"
     PROVENANCE_MANIFEST = "PROV"
+    MEDIA_WORKSPACE = "MEDIA"
+    PIXELORAMA_OPERATION = "PXOP"
 
 
 def new_id(kind: IdKind) -> str:
