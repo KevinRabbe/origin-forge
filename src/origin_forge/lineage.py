@@ -254,14 +254,22 @@ class OriginForgeLineage:
         verification_type: str,
         verifier: str,
         status: str,
+        evidence: dict[str, Any] | None = None,
+        metrics: dict[str, Any] | None = None,
+        run_id: str | None = None,
     ) -> str:
         self.get_artifact(artifact_id)
+        if run_id is not None:
+            self.runtime.get_run(run_id)
         return self.store.record_verification(
             target_type="ARTIFACT",
             target_id=artifact_id,
             verification_type=verification_type,
             verifier=verifier,
             status=status,
+            evidence=evidence,
+            metrics=metrics,
+            run_id=run_id,
         )
 
     def list_artifact_verifications(self, artifact_id: str) -> list[dict[str, Any]]:
