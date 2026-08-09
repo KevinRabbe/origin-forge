@@ -183,10 +183,13 @@ class PixeloramaCliProfile:
         if (
             not isinstance(self.expected_pixelorama_version, str)
             or not self.expected_pixelorama_version.strip()
+            or self.expected_pixelorama_version != self.expected_pixelorama_version.strip()
+            or "\n" in self.expected_pixelorama_version
+            or "\r" in self.expected_pixelorama_version
             or len(self.expected_pixelorama_version) > 256
             or "\x00" in self.expected_pixelorama_version
         ):
-            raise ValueError("expected_pixelorama_version must be bounded and non-empty")
+            raise ValueError("expected_pixelorama_version must be one bounded non-empty line")
         operations = tuple(self.allowed_operations)
         if (
             not operations
@@ -317,6 +320,68 @@ class PixeloramaCliExportAdapter:
             (workspace / name).mkdir()
         return workspace
 
+    @staticmethod
+    def _validate_workspace_root(workspace: Path, name: str) -> Path:
+        root = workspace / name
+        if root.is_symlink():
+            raise PixeloramaCliIntegrityError(
+                f"Pixelorama CLI {name} workspace root may not be a symlink"
+            )
+        try:
+            workspace_resolved = workspace.resolve(strict=True)
+            resolved = root.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise PixeloramaCliIntegrityError(
+                f"Pixelorama CLI {name} workspace root is unavailable"
+            ) from exc
+        if not resolved.is_dir() or resolved.parent != workspace_resolved:
+            raise PixeloramaCliIntegrityError(
+                f"Pixelorama CLI {name} workspace root escaped containment"
+            )
+        return resolved
+
+    @classmethod
+    def _validate_relative_components(
+        cls,
+        workspace: Path,
+        relative_path: str,
+        label: str,
+    ) -> Path:
+        workspace_resolved = workspace.resolve(strict=True)
+        current = workspace
+        for part in Path(relative_path).parts:
+            current = current / part
+            if current.is_symlink():
+                raise PixeloramaCliIntegrityError(
+                    f"{label} contains a symlink component"
+                )
+        try:
+            resolved = current.resolve(strict=True)
+            resolved.relative_to(workspace_resolved)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise PixeloramaCliIntegrityError(
+                f"{label} escaped the media workspace"
+            ) from exc
+        return resolved
+
+    def _validate_workspace_containment(
+        self,
+        workspace: Path,
+        request: PixeloramaCliExportRequest,
+    ) -> None:
+        for name in ("inputs", "exports", "runtime"):
+            self._validate_workspace_root(workspace, name)
+        self._validate_relative_components(
+            workspace,
+            request.source_relative_path,
+            "Pixelorama CLI staged source",
+        )
+        self._validate_relative_components(
+            workspace,
+            request.output_relative_path,
+            "Pixelorama CLI declared output",
+        )
+
     def _stage_source(
         self,
         request: PixeloramaCliExportRequest,
@@ -429,6 +494,10 @@ class PixeloramaCliExportAdapter:
     def probe_version(self) -> str:
         executable = self.profile.verify_executable()
         probe_root = self.runtime.state_dir / "pixelorama-cli-probe"
+        if probe_root.is_symlink():
+            raise PixeloramaCliIntegrityError(
+                "Pixelorama CLI probe workspace may not be a symlink"
+            )
         if probe_root.exists():
             shutil.rmtree(probe_root)
         probe_root.mkdir(parents=True)
@@ -453,21 +522,22 @@ class PixeloramaCliExportAdapter:
                     "Pixelorama version probe stdout exceeded configured limit"
                 )
             try:
-                text = stdout.decode("utf-8", errors="strict").strip()
+                text = stdout.decode("utf-8", errors="strict")
             except UnicodeDecodeError as exc:
                 raise PixeloramaCliIntegrityError(
                     "Pixelorama version probe output is not UTF-8"
                 ) from exc
-            if self.profile.expected_pixelorama_version not in text:
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            if self.profile.expected_pixelorama_version not in lines:
                 raise PixeloramaCliIntegrityError(
-                    "Pixelorama CLI version does not match trusted profile"
+                    "Pixelorama CLI version does not match trusted profile exactly"
                 )
             return self.profile.expected_pixelorama_version
         finally:
             shutil.rmtree(probe_root, ignore_errors=True)
 
     def _validate_runtime_scratch(self, workspace: Path) -> None:
-        runtime_root = workspace / "runtime"
+        runtime_root = self._validate_workspace_root(workspace, "runtime")
         total = 0
         for path in runtime_root.rglob("*"):
             if path.is_symlink():
@@ -523,7 +593,13 @@ class PixeloramaCliExportAdapter:
             raise PixeloramaCliUnavailable(
                 f"Pixelorama CLI export exited with code {exit_code}"
             )
-        if output_path.is_symlink() or not output_path.is_file():
+        self._validate_workspace_containment(workspace, request)
+        output_path = self._validate_relative_components(
+            workspace,
+            request.output_relative_path,
+            "Pixelorama CLI declared output",
+        )
+        if not output_path.is_file():
             raise PixeloramaCliIntegrityError(
                 "Pixelorama CLI did not produce the declared spritesheet"
             )
@@ -549,11 +625,14 @@ class PixeloramaCliExportAdapter:
         for path in (workspace / "inputs").rglob("*"):
             if path.is_symlink():
                 raise PixeloramaCliIntegrityError("Pixelorama CLI input tree contains a symlink")
-        export_files = [
-            path
-            for path in (workspace / "exports").rglob("*")
-            if path.is_file()
-        ]
+        export_files = sorted(
+            (
+                path
+                for path in (workspace / "exports").rglob("*")
+                if path.is_file()
+            ),
+            key=lambda path: path.as_posix(),
+        )
         if export_files != [output_path]:
             raise PixeloramaCliIntegrityError(
                 "Pixelorama CLI produced undeclared export files"
