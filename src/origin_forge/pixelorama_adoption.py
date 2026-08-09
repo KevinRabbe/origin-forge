@@ -101,9 +101,11 @@ class GovernedPixeloramaOutputAdopter:
 
     def _source_path(self, artifact: dict[str, object]) -> Path:
         raw = artifact.get("path_or_uri")
-        if not isinstance(raw, str) or not raw:
+        if not isinstance(raw, str) or not raw or "://" in raw:
             raise PixeloramaAdoptionError("source Artifact path is invalid")
         source = Path(raw)
+        if not source.is_absolute():
+            source = self.runtime.project_root / source
         if source.is_symlink():
             raise PixeloramaAdoptionError("source Artifact path may not be a symlink")
         try:
