@@ -68,7 +68,7 @@ class RealLlamaCppVisionIntegrationTests(unittest.TestCase):
             criteria=("composition", "artifact"),
             expected_model_id=env["ORIGIN_FORGE_VISION_MODEL_ID"],
             expected_model_hash=env["ORIGIN_FORGE_VISION_MODEL_SHA256"],
-            max_output_tokens=256,
+            max_output_tokens=1024,
         )
         return png, request
 
@@ -107,6 +107,9 @@ class RealLlamaCppVisionIntegrationTests(unittest.TestCase):
         self.assertTrue(report.advisory_only)
         self.assertFalse(report.semantic_findings_verified)
         self.assertEqual(report.model_hash, env["ORIGIN_FORGE_VISION_MODEL_SHA256"])
+        self.assertIsNotNone(report.output_tokens)
+        self.assertLess(report.output_tokens, request.max_output_tokens)
+        self.assertLessEqual(len(report.findings), 4)
         self.assertTrue(
             all(finding.image_id == "synthetic" for finding in report.findings)
         )
