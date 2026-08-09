@@ -1,6 +1,6 @@
 # Phase 19 — Pixelorama Integration
 
-Status: **implementation starting after Phase 18**
+Status: **DONE — deterministic v0 media substrate and frozen real-editor export proof implemented**
 
 Phase 19 adds the first deterministic 2D production tool integration to Origin Forge. Pixelorama remains the human-visible editor, but Origin Forge owns the automation contract, isolation, validation, evidence, and provenance around every machine-driven operation.
 
@@ -11,19 +11,19 @@ Pixelorama edits pixels/projects
 Origin Forge owns task authority, input contracts, verification, and provenance
 ```
 
-Phase 19 does **not** add image generation or vision critique. Those remain Phase 21. The first goal is deterministic, inspectable 2D production.
+Phase 19 does **not** add image generation or vision critique. Those remain Phase 21. The v0 goal is deterministic, inspectable 2D production infrastructure with the smallest independently proven real-editor surface.
 
 ---
 
 ## 1. Upstream integration boundary
 
-Pixelorama is an open-source Godot-based pixel-art editor with an official extension system. Phase 19 should integrate through the smallest versioned upstream-supported boundary rather than screen-coordinate GUI macros.
+Pixelorama is an open-source Godot-based pixel-art editor with an official extension system. Phase 19 integrates through the smallest versioned upstream-supported boundary rather than screen-coordinate GUI macros.
 
 For Pixelorama v1.2, the desktop CLI provides a supported headless export surface. Its exact application runtime version is `v1.2-stable`; the v1.2 project declares Extensions API version `9` and `.pxo` format version `7`. The initial real-editor proof therefore targets opaque `.pxo` input plus the documented CLI export path. Extension API 9 project construction/save remains a separate later boundary and must not be assumed equivalent to the CLI export proof.
 
-Origin Forge must not depend on undocumented internal `.pxo` byte layout or simulated mouse/keyboard automation.
+Origin Forge does not depend on undocumented internal `.pxo` byte layout or simulated mouse/keyboard automation.
 
-If an installed Pixelorama build does not expose a stable one-shot command-line editing API, the trusted bridge becomes the explicit automation boundary.
+If a later installed Pixelorama build does not expose a stable one-shot command-line editing API, a separately governed trusted bridge must become the explicit automation boundary.
 
 ```text
 Origin Forge
@@ -69,23 +69,23 @@ The bridge is a locally installed, versioned capability. Arbitrary downloaded ex
 8. **Existing live assets are immutable without a precondition.**
    Replacement/derivation requires an exact source hash or isolated-copy workflow.
 
-9. **No network.**
-   Pixelorama automation is local and should not require network access.
+9. **No network authority.**
+   The adapter itself has no network/download surface. The separately reviewed opt-in evidence workflow may acquire frozen editor/fixture inputs before the adapter is invoked.
 
 10. **No arbitrary extension execution.**
-    Only the configured trusted Origin Forge Pixelorama bridge ID/version/fingerprint may be used.
+    Only configured trusted Pixelorama capability identities may be used.
 
 11. **No model-generated GDScript execution.**
     Bridge scripts are shipped/governed infrastructure, not generated at runtime by an LLM.
 
 12. **Provenance is first-class.**
-    Source specification, bridge version, Pixelorama version, input/output hashes, operation result, validators, and resulting Artifacts are captured.
+    Source specification, bridge/editor version, input/output hashes, operation result, validators, and resulting Artifacts are captured.
 
 ---
 
 ## 3. Phase-19 v0 asset model
 
-The initial deterministic data model should be deliberately small.
+The initial deterministic data model is deliberately small.
 
 ### 3.1 Pixel color
 
@@ -108,7 +108,7 @@ RasterLayerSpec
 - blend_mode
 ```
 
-V0 should support only a conservative known blend-mode subset, initially `NORMAL` unless Pixelorama bridge support is independently proven for more.
+V0 supports a conservative known blend-mode surface rather than assuming arbitrary editor semantics.
 
 ### 3.3 Frame
 
@@ -151,9 +151,9 @@ The specification does not contain arbitrary script text or arbitrary host paths
 
 ## 4. Deterministic pixel payloads
 
-Phase 19 needs a model-independent way to represent exact raster content.
+Phase 19 includes a model-independent representation for exact raster content.
 
-V0 should support canonical RGBA8 frame/layer payloads owned by Origin Forge:
+V0 supports canonical RGBA8 frame/layer payloads owned by Origin Forge:
 
 ```text
 PixelPlane
@@ -163,20 +163,21 @@ PixelPlane
 - bounded RGBA bytes
 ```
 
-For persistence/bridge exchange, large pixel payloads should be referenced by exact local file/hash rather than duplicated through model prompts.
+For persistence/bridge exchange, large pixel payloads are referenced by exact local file/hash rather than duplicated through model prompts.
 
-Origin Forge may implement a minimal deterministic PNG encoder/decoder/validator in Python standard library for bounded RGBA8 assets, preserving the repository's zero-runtime-dependency policy.
+Origin Forge implements deterministic standard-library PNG handling for the bounded RGBA8 surface, preserving the repository's zero-runtime-dependency policy.
 
-PNG support should be intentionally narrow:
+PNG validation is intentionally narrow and includes:
 
 - PNG signature
 - IHDR
 - 8-bit RGBA truecolor with alpha
-- non-interlaced
-- deterministic filter strategy for Origin Forge-generated files
+- non-interlaced data
 - CRC validation
 - bounded decompression
+- standard row filters
 - exact width/height
+- strict chunk/trailing-data handling
 
 Unsupported PNG modes fail closed rather than being silently converted.
 
@@ -184,7 +185,7 @@ Unsupported PNG modes fail closed rather than being silently converted.
 
 ## 5. Bridge request protocol
 
-Each one-shot request is immutable/canonical JSON.
+Each one-shot bridge request is immutable/canonical JSON.
 
 ```text
 PixeloramaBridgeRequest
@@ -200,9 +201,9 @@ PixeloramaBridgeRequest
 - content_hash
 ```
 
-The actual serialized request should use workspace-relative paths, not absolute arbitrary paths.
+The serialized request/provenance contract uses workspace-relative paths, not absolute arbitrary paths.
 
-Initial operations:
+The broader bridge model recognizes bounded operations such as:
 
 ```text
 CREATE_SPRITE_PROJECT
@@ -214,7 +215,7 @@ EXPORT_SPRITESHEET
 SAVE_PROJECT
 ```
 
-V0 may implement a smaller subset first, but unknown operation strings always fail closed.
+The independently proven direct Pixelorama CLI v0 adapter exposes only `EXPORT_SPRITESHEET`. Unknown/disallowed operations fail closed.
 
 No request field can contain:
 
@@ -262,99 +263,104 @@ FAILED
 BLOCKED
 ```
 
-The bridge result cannot mark an Origin Forge Task, Artifact, or Verification as successful.
+The bridge/editor result cannot mark an Origin Forge Task, Artifact, or Verification as successful.
 
 ---
 
-## 7. Trusted bridge identity
+## 7. Trusted bridge/editor identity
 
-The adapter configuration should pin:
+The generic bridge configuration pins governed identity and limits. The direct real-editor CLI profile independently pins:
 
 ```text
-PixeloramaBridgeProfile
-- bridge_id
-- protocol_version
-- bridge_version
-- bridge_fingerprint
+PixeloramaCliProfile
 - pixelorama_executable
+- pixelorama_fingerprint
+- expected_pixelorama_version
 - allowed_operations[]
 - timeout_seconds
-- max_input_bytes
-- max_output_bytes
+- max_stdout_bytes
+- max_stderr_bytes
+- max_executable_bytes
+- max_runtime_bytes
 ```
 
-The fingerprint covers the governed bridge package/source that Origin Forge expects.
+The direct v1.2 CLI export proof pins executable SHA-256 and exact reported runtime version (`v1.2-stable`). The integration test does not derive its expected executable or fixture hash from the same files under test.
 
 The adapter refuses:
 
-- unknown bridge version
-- fingerprint mismatch
-- unsupported protocol version
-- bridge outside configured install location where containment policy requires otherwise
-- missing executable
+- executable fingerprint mismatch
+- wrong reported runtime version
+- unsupported operation
+- missing/non-regular executable
+- timeout/resource/log bound violations
 
-The bridge is infrastructure code, not a user-content extension marketplace.
-
-For the direct v1.2 CLI export proof, executable SHA-256 and exact reported runtime version (`v1.2-stable`) are independent external pins. The integration test must not derive its expected executable or fixture hash from the same files under test.
+The editor/bridge is infrastructure, not a user-content extension marketplace.
 
 ---
 
 ## 8. Pixelorama process boundary
 
-The process adapter must:
+The process adapter:
 
-- resolve an explicitly configured executable
-- never invoke through a shell
-- use a bounded argument list
-- use a bounded isolated working directory
-- set explicit bridge request/result paths
-- enforce hard timeout
-- bound stdout/stderr
-- never infer success solely from process exit code
-- require a valid bridge result matching the request operation ID/hash
-- reject unexpected files outside declared output set
-- revalidate workspace roots and path components after editor execution so a replaced parent symlink cannot escape containment
+- resolves an explicitly configured executable
+- never invokes through a shell
+- uses a bounded argument list
+- uses a bounded isolated working directory
+- redirects common user-data/config/cache locations into isolated runtime scratch
+- pins `PWD` to the isolated media workspace for deterministic Pixelorama path handling
+- enforces hard timeout
+- bounds stdout/stderr while draining process pipes
+- never infers success solely from process exit code
+- rejects unexpected files outside the declared output set
+- revalidates workspace roots and path components after editor execution so a replaced parent symlink cannot escape containment
+- re-hashes and independently validates the resulting RGBA8 PNG
 
-If the official editor/bridge requires a GUI display, the process contract may still be deterministic; hidden UI interaction must not become part of the API.
+Request/provenance paths remain portable and workspace-relative. For the actual Pixelorama v1.2 process invocation, Origin Forge first resolves and validates the staged source and output parent inside the isolated `MEDIA-*` workspace, then passes infrastructure-derived **absolute contained paths** to Pixelorama. This is required because Pixelorama v1.2's export implementation requires an absolute export directory. It does not give callers arbitrary host-path authority.
 
-A future headless route may be added only if it is supported reliably by Pixelorama/Godot and passes integration tests. Pixelorama v1.2's documented desktop CLI already provides a headless export route; that narrower export route is the first real-editor proof target.
+The proven direct command shape is therefore conceptually:
+
+```text
+Pixelorama --headless --quit -- --spritesheet \
+  --output <validated absolute MEDIA-*/exports/...png> \
+  <validated absolute MEDIA-*/inputs/...pxo>
+```
+
+After editor exit, Origin Forge validates containment again, requires the declared output leaf to exist, rejects symlink/undeclared output behavior, and only then accepts structural media evidence.
 
 ---
 
 ## 9. Workspace containment
 
-Automated Pixelorama work uses a dedicated operation directory such as:
+Automated Pixelorama work uses a dedicated operation directory:
 
 ```text
 .origin-forge/media-workspaces/<MEDIA-ID>/
 ```
 
-or an equivalent isolated external temporary workspace managed by Origin Forge.
-
-Within the operation directory:
+The direct CLI adapter owns:
 
 ```text
-request.json
 inputs/
-project/
 exports/
-result.json
+runtime/
 ```
 
 Rules:
 
-- no symlink components
-- all paths portable and workspace-relative
-- bridge may read declared inputs only
-- bridge may write declared project/export locations only
-- canonical live project files are not passed as writable inputs
+- no symlink workspace roots
+- no symlink path components
+- request paths are portable and workspace-relative
+- staged input must match exact frozen hash and byte count
+- canonical live project files are never passed as writable inputs
 - output set is enumerated and rehashed by Origin Forge
+- workspace roots and declared paths are revalidated after editor execution
+- runtime scratch is byte-bounded and symlink-checked
 
 ---
 
 ## 10. Validation engine for 2D assets
 
-Deterministic validators should cover at least:
+Deterministic validators cover at least:
 
 ### PNG integrity
 
@@ -367,38 +373,31 @@ Deterministic validators should cover at least:
 
 ### Sprite/frame geometry
 
-- frame count
+- frame count/geometry inputs
 - frame width/height
-- spritesheet divisibility
+- spritesheet divisibility/derived geometry
 - animation index ranges
 - animation duration bounds
-- no duplicate animation names
+- duplicate/invalid animation constraints
 
 ### Alpha/readability basics
 
 Deterministic checks only:
 
 - fully transparent output detection
-- accidental fully opaque background when transparency required
-- empty frame detection
-- pixel count / bounding box
+- accidental fully opaque background when transparency is disallowed/required by contract
+- empty-output/frame detection
+- pixel/bounding geometry
 
 Aesthetic quality remains Phase-21 Visual Critic territory.
 
-### Tile/seam validation later in Phase 19
-
-For tileable assets:
-
-- declared tile dimensions
-- sheet divisibility
-- edge equality checks where exact seamless tiling is required
-- transparent padding rules
+Tile/seam-specific production remains a later bounded media capability rather than an unproven assumption in the v0 editor gate.
 
 ---
 
 ## 11. Artifact model
 
-Useful Artifact types:
+Useful media Artifact classes include:
 
 ```text
 PIXELORAMA_PROJECT
@@ -410,46 +409,24 @@ SPRITESHEET_EXPORT
 PALETTE
 ```
 
-Each resulting Artifact records:
+The implemented media service persists request/result/output Artifacts and structural Verifications while keeping Pixelorama success advisory. Explicit governed adoption is separate from editor execution.
 
-- parent/source Artifact when applicable
-- creating Run
-- Pixelorama tool version
-- bridge version/fingerprint
-- source spec hash
-- output hash
-- validator Verification IDs
-
-Phase-18 signed provenance can then sign accepted exported 2D Artifacts without any media-specific change to the trust hierarchy.
+Phase-18 provenance integration proves an explicitly adopted PNG can enter the existing cryptographic provenance path without granting the media layer signing-key authority.
 
 ---
 
-## 12. Tool contracts
+## 12. Tool and operator contracts
 
-Phase 19 should eventually register deterministic media tools such as:
+Phase 19 deliberately does **not** expose a generic model-facing media call surface.
 
-```text
-pixelorama.create_project
-pixelorama.import_layer
-pixelorama.set_animation
-pixelorama.export_frame
-pixelorama.export_spritesheet
-pixelorama.save_project
-pixelorama.inspect
-```
+Implemented operator surfaces are narrow:
 
-However, Tool Registry exposure comes only after the adapter is independently proven.
+- read-only `pixelorama status` installation/fingerprint inspection
+- explicit create-only `adopt-new` administration for already verified media outputs
 
-Initial implementation should call the adapter directly from tests/operator code, not grant a generic model-facing call surface immediately.
+There is no ordinary operator/model create/export/run command in v0. The direct adapter is exercised through governed service/test paths.
 
-Tool descriptors should declare:
-
-- local Pixelorama side effect
-- reversible through isolated workspace
-- resource requirements
-- timeout
-- verifier
-- allowed path scope
+Future tool descriptors may expose deterministic Pixelorama operations only after their specific editor boundary is separately implemented and measured.
 
 ---
 
@@ -457,49 +434,43 @@ Tool descriptors should declare:
 
 Phase 19 is deterministic editor integration, not generative image intelligence.
 
-Allowed future model role:
-
-```text
-human/model proposes bounded SpriteProjectSpec or high-level asset request
-        ↓
-infrastructure validates contract
-        ↓
-deterministic Pixelorama tools create/edit/export
-        ↓
-independent validators
-```
+A future model may propose a bounded sprite specification or asset request, but infrastructure must validate the contract before any editor call.
 
 The model may not:
 
 - emit executable editor script
 - select arbitrary extension packages
 - choose arbitrary host paths
-- bypass bridge operation allowlist
+- bypass operation allowlists
 - declare visual correctness
 - overwrite canonical live assets directly
+- mark Tasks/Goals verified
+- merge/release
+
+Image generation and semantic/aesthetic vision critique remain Phase 21.
 
 ---
 
 ## 14. Human editing and round-trip behavior
 
-Pixelorama remains useful as a normal human editor.
+Pixelorama remains a normal human editor.
 
-Human-created `.pxo` projects may be imported as source Artifacts, but Origin Forge should treat the project file as opaque unless the trusted bridge opens it and reports structured metadata.
+Human-created `.pxo` projects may be used as source Artifacts, but Origin Forge treats the project file as opaque unless a trusted Pixelorama boundary opens it and reports structured metadata.
 
-For automated modification:
+For automated modification in a future broader bridge:
 
 ```text
 source project Artifact + exact hash
 → copy into isolated media workspace
-→ bridge opens/modifies copy
-→ save new project Artifact
+→ trusted Pixelorama API edits copy
+→ save new project Artifact through Pixelorama-owned serialization
 → export + validate
 → human review / later acceptance
 ```
 
 The original project Artifact is never overwritten in place by the automation layer.
 
-For Pixelorama v1.2, `OpenSave.save_pxo_file(...)` is a Pixelorama-owned save implementation. A future trusted Extension API 9 bridge may invoke that Pixelorama-owned path after constructing a project through supported editor APIs. Origin Forge still must not synthesize `.pxo` bytes itself, and this broader creation/save path remains deferred until the direct real-editor CLI export gate is proven.
+For Pixelorama v1.2, `OpenSave.save_pxo_file(...)` is a Pixelorama-owned save implementation. A future trusted Extension API 9 bridge may invoke that Pixelorama-owned path after constructing a project through supported editor APIs. Origin Forge still must not synthesize `.pxo` bytes itself. That broader create/import/save bridge remains deferred beyond the v0 direct export proof.
 
 ---
 
@@ -510,10 +481,9 @@ Distinguish:
 ```text
 BLOCKED
 - Pixelorama unavailable
-- trusted bridge unavailable/mismatch
+- trusted bridge/editor unavailable or identity mismatch
 - unsupported editor version
-- display/backend requirement unavailable
-- resource contention
+- resource/platform requirement unavailable
 
 FAILED
 - malformed request/result
@@ -522,6 +492,56 @@ FAILED
 - validation failure
 - source hash mismatch
 - undeclared output
+- workspace/symlink containment violation
 ```
 
 Infrastructure unavailability is not evidence that the sprite specification is semantically wrong.
+
+---
+
+## 16. Implemented Phase-19 closure
+
+The repository now includes:
+
+- bounded canonical media/project/frame/layer/animation/palette/pixel models
+- deterministic standard-library RGBA8 PNG encoding, decoding, inspection, CRC/filter/decompression bounds
+- strict bridge request/result protocols and pinned bridge profiles
+- one-shot no-shell bounded bridge process isolation and fake-process adversarial coverage
+- protected `MEDIA-*` workspaces and `PXOP-*` operation identities
+- independent deterministic raster/spritesheet validators
+- media Run service that persists Artifacts/Verifications without completing production Tasks
+- explicit Task-authority regressions proving Pixelorama cannot change Task completion/revision/verification authority
+- separation of editor execution from canonical project adoption
+- create-only governed output adoption with non-overwrite/protected-root/source-drift rules
+- read-only Pixelorama status inspection
+- Phase-18 provenance integration for adopted raster output
+- direct `PixeloramaCliExportAdapter` over Pixelorama v1.2's documented headless spritesheet export
+- exact executable SHA/version pinning, frozen `.pxo` input hash/size, timeout/log/output/runtime limits
+- infrastructure-derived absolute process paths after workspace-relative request validation
+- post-process root/component/symlink containment revalidation
+- opt-in supply-chain evidence workflow with independently anchored release archive identity
+- a frozen real upstream `.pxo` fixture and a successful real Pixelorama v1.2 execution gate
+
+Frozen real-editor evidence profile:
+
+```text
+Pixelorama release: v1.2
+runtime version: v1.2-stable
+Windows x64 release archive SHA-256:
+  1ddc65930ddd435612519e293d1927849d4d4c18928a856b5bd4f058fe2f4a72
+Pixelorama.exe SHA-256:
+  07ee2defdbf14f335b8f102f224926cc1ef1456bd09f3af708e948ccadc3d904
+upstream issue #1368 fixture SHA-256:
+  c9d3eb48002d0a68ce718717588b3b43d785171f57dbb85a04e194481cb65fb2
+fixture byte count: 1906
+```
+
+The compatibility probe succeeded in GitHub Actions run `31327381822`; after those identities were frozen as reviewed expected values, the authoritative rerun `31327454509` also succeeded at Origin Forge head `eb38cfaca5b11029b281b58145abad227393763c`.
+
+The real-editor gate remains opt-in and supply-chain explicit. Normal CI does not download Pixelorama. See `docs/pixelorama-real-gate.md` for the exact evidence/acquisition contract.
+
+### Exit condition met
+
+Origin Forge can deterministically isolate and inspect 2D media operations, execute a pinned real Pixelorama v1.2 headless spritesheet export over an exact frozen real `.pxo` project, independently revalidate containment/output/hash/raster integrity, persist media evidence without transferring Task authority, and explicitly adopt verified new outputs without overwrite or signing authority.
+
+Broader Pixelorama project creation/import/save, generic model-facing media tools, image generation, and visual/aesthetic critique remain future separately governed capabilities rather than prerequisites for Phase-19 v0 completion.
