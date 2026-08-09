@@ -293,9 +293,26 @@ See `docs/phase-19-pixelorama.md` and `docs/pixelorama-real-gate.md` for the imp
 
 **Exit condition met:** Origin Forge can run a pinned real Pixelorama v1.2 headless spritesheet export over exact frozen input inside an isolated workspace, independently validate containment/hash/raster output, record evidence without transferring Task authority, and explicitly adopt a verified new media output without overwrite or signing authority.
 
-## Phase 20 — Blockbench Integration — NEXT
+## Phase 20 — Blockbench Integration — IN PROGRESS / BLOCKED
 
-Add structured 3D production for geometry, hierarchy/bones, pivots, UVs, textures, animation, export, and previews.
+Implemented the deterministic editor-independent 3D substrate:
+
+- infrastructure-owned `MODEL3D-*` workspace IDs and `BBOP-*` operation IDs
+- bounded immutable project contracts for bones/hierarchy, cuboids, pivots/rotations, UV offsets, exact texture refs, animations, and keyframes
+- deterministic ordering/content addressing with missing-reference, duplicate, numeric-bound, and hierarchy-cycle rejection
+- strict content-addressed bridge request/result protocols with exact request/version/fingerprint/output binding and no production-authority fields
+- protected one-shot no-shell bridge process execution with pinned executable identity, isolated runtime state, hard timeout/log/output bounds, strict result JSON, exact export-set matching, output rehashing, symlink/root containment, and undeclared-entry rejection
+- independent standard-library GLB v2/glTF 2.0 structural inspection covering container framing, embedded buffers/images, graph references, hierarchy cycles, skins, and animation sampler/target references
+- explicit rejection of external GLB asset URIs in the initial evidence surface
+- fake-process adversarial integration coverage proving the Origin Forge side of the isolation/protocol/validation boundary
+
+The intended real-editor boundary is a pinned governed JavaScript plugin using Blockbench's supported plugin/API surface. Origin Forge does not synthesize Blockbench's internal `.bbmodel` bytes, execute model-generated JavaScript, manipulate Electron/Chromium private state, or use GUI-coordinate automation.
+
+**Current blocker:** Blockbench v5.1.4 exposes supported plugins and `--userData`, but the inspected upstream startup surface does not provide a supported non-interactive way to load an exact local side-loaded plugin, nor a documented headless create/edit/export CLI. Side-loaded plugin testing/loading is interactive; startup reloads plugins from persisted `installed_plugins` state stored through browser `localStorage`. Merely placing a plugin in the isolated `plugins/` directory is insufficient, while manufacturing Chromium LevelDB/localStorage would depend on undocumented private state. The web `plugins=` URL parameter prompts the user to install store plugin IDs rather than providing a governed local-plugin bootstrap.
+
+See `docs/phase-20-blockbench.md` for the implemented contract and exact unblock conditions.
+
+**Exit condition pending:** Phase 20 remains draft until a supported non-interactive Blockbench plugin/bootstrap or equivalent programmatic editor entry point can drive one pinned real Blockbench execution whose GLB output is independently validated by Origin Forge.
 
 ## Phase 21 — Image and Vision — PLANNED
 
