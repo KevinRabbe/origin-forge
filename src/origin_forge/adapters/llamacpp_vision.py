@@ -5,6 +5,7 @@ import hashlib
 import json
 import urllib.error
 import urllib.request
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Mapping
 from urllib.parse import urlparse
@@ -23,6 +24,41 @@ from ..pixelorama_png import PngError, inspect_rgba8_png
 
 class LlamaCppVisionError(RuntimeError):
     pass
+
+
+# The pinned llama.cpp grammar parser rejects large finite repetitions. The
+# canonical Origin Forge schema intentionally remains provider-neutral and the
+# deterministic parser remains the final acceptance authority. For this
+# backend, use a stricter transport-only subset that preserves the exact field
+# structure while keeping generated string repetitions comfortably below the
+# runtime grammar ceiling.
+_LLAMA_CPP_TRANSPORT_TEXT_LIMIT = 1024
+
+
+def _llamacpp_transport_schema() -> dict[str, object]:
+    schema = deepcopy(VISION_REPORT_SCHEMA)
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        raise RuntimeError("VISION_REPORT_SCHEMA properties are invalid")
+    summary = properties.get("summary")
+    findings = properties.get("findings")
+    if not isinstance(summary, dict) or not isinstance(findings, dict):
+        raise RuntimeError("VISION_REPORT_SCHEMA fields are invalid")
+    summary["maxLength"] = _LLAMA_CPP_TRANSPORT_TEXT_LIMIT
+    items = findings.get("items")
+    if not isinstance(items, dict):
+        raise RuntimeError("VISION_REPORT_SCHEMA finding items are invalid")
+    item_properties = items.get("properties")
+    if not isinstance(item_properties, dict):
+        raise RuntimeError("VISION_REPORT_SCHEMA finding properties are invalid")
+    description = item_properties.get("description")
+    if not isinstance(description, dict):
+        raise RuntimeError("VISION_REPORT_SCHEMA description field is invalid")
+    description["maxLength"] = _LLAMA_CPP_TRANSPORT_TEXT_LIMIT
+    return schema
+
+
+LLAMA_CPP_VISION_REPORT_SCHEMA = _llamacpp_transport_schema()
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -199,7 +235,7 @@ class LlamaCppVisionAdapter:
             "stream": False,
             "response_format": {
                 "type": "json_object",
-                "schema": VISION_REPORT_SCHEMA,
+                "schema": LLAMA_CPP_VISION_REPORT_SCHEMA,
             },
         }
 
