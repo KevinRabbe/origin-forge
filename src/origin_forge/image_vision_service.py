@@ -126,6 +126,7 @@ class ImageGenerationService:
         self.runtime = runtime
         self.adapter = adapter
         self.lineage = OriginForgeLineage(runtime)
+        self.workspace_root = runtime.state_dir / "image-workspaces"
 
     @staticmethod
     def _tool_versions(request: ImageOperationRequest) -> tuple[str, ...]:
@@ -144,6 +145,35 @@ class ImageGenerationService:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
+
+    def _trusted_workspace(
+        self,
+        request: ImageOperationRequest,
+        returned_workspace: Path,
+    ) -> Path:
+        state = self.runtime.state_dir.resolve()
+        root = self.workspace_root
+        expected = root / request.workspace_id
+        returned = Path(returned_workspace)
+        if root.is_symlink():
+            raise ImageVisionServiceError("image workspace root may not be a symlink")
+        if expected.is_symlink() or returned.is_symlink():
+            raise ImageVisionServiceError("image workspace may not be a symlink")
+        try:
+            root_resolved = root.resolve(strict=True)
+            root_resolved.relative_to(state)
+            expected_resolved = expected.resolve(strict=True)
+            expected_resolved.relative_to(root_resolved)
+            returned_resolved = returned.resolve(strict=True)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ImageVisionServiceError(
+                "image workspace is not an existing protected project path"
+            ) from exc
+        if returned_resolved != expected_resolved:
+            raise ImageVisionServiceError(
+                "image backend returned a workspace outside the exact frozen workspace ID"
+            )
+        return expected
 
     def execute(
         self,
@@ -175,7 +205,7 @@ class ImageGenerationService:
                 raise ImageVisionServiceError(
                     f"image backend did not succeed: {operation.result.status.value}"
                 )
-            workspace = Path(operation.workspace_path)
+            workspace = self._trusted_workspace(request, operation.workspace_path)
             request_path = workspace / "request" / "request.json"
             if request_path.is_symlink() or not request_path.is_file():
                 raise ImageVisionServiceError("image backend omitted request evidence")
