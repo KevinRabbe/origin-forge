@@ -174,16 +174,23 @@ class PixeloramaCliExportTests(unittest.TestCase):
             )
         )
         self.assertEqual(
-            observed,
+            observed[:5],
             [
                 "--headless",
                 "--quit",
                 "--",
                 "--spritesheet",
                 "--output",
-                "exports/spritesheet.png",
-                "inputs/source.pxo",
             ],
+        )
+        self.assertEqual(len(observed), 7)
+        self.assertEqual(
+            Path(observed[5]),
+            result.workspace_path / result.request.output_relative_path,
+        )
+        self.assertEqual(
+            Path(observed[6]),
+            result.workspace_path / result.request.source_relative_path,
         )
         self.assertEqual(
             (result.workspace_path / "inputs" / "source.pxo").read_bytes(),
