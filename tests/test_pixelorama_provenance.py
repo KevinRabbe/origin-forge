@@ -13,6 +13,7 @@ from pathlib import Path
 from origin_forge.pixelorama_bridge import PixeloramaBridgeProfile
 from origin_forge.pixelorama_media import PixeloramaMediaService, PixeloramaOutputAdopter
 from origin_forge.pixelorama_models import (
+    BridgeBudget,
     BridgeOperation,
     BridgeOutputType,
     ExportSpec,
@@ -86,6 +87,7 @@ for export in request["export_specs"]:
         "width": spec["width"],
         "height": spec["height"],
     })
+outputs.sort(key=lambda value: value["relative_path"])
 result = {
     "protocol_version": 1,
     "operation_id": request["operation_id"],
@@ -166,6 +168,7 @@ class PixeloramaProvenanceTests(unittest.TestCase):
             operation=BridgeOperation.CREATE_SPRITE_PROJECT,
             sprite_spec=spec,
             export_specs=(ExportSpec(BridgeOutputType.PNG, "exports/frame.png"),),
+            budget=BridgeBudget(timeout_seconds=5),
         )
 
     def test_adopted_png_can_be_signed_by_phase18_without_media_key_access(self) -> None:
