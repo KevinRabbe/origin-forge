@@ -161,7 +161,7 @@ class AudioSynthTests(unittest.TestCase):
                 channels=2,
                 seed=1,
                 events=(event,),
-                loops=1,
+                loops=2,
             )
 
 
