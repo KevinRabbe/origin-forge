@@ -111,7 +111,7 @@ jobs:
             --threads 2 \
             --threads-batch 2 \
             --ctx-size 2048 \
-            --predict 256 \
+            --predict 1024 \
             >"$log" 2>&1 &
           pid=$!
           echo "ORIGIN_FORGE_VISION_SERVER_PID=$pid" >> "$GITHUB_ENV"
