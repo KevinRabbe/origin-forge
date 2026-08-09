@@ -198,7 +198,7 @@ class LlamaCppVisionAdapter:
             "max_tokens": request.max_output_tokens,
             "stream": False,
             "response_format": {
-                "type": "json_schema",
+                "type": "json_object",
                 "schema": VISION_REPORT_SCHEMA,
             },
         }
