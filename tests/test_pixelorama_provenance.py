@@ -120,7 +120,7 @@ class PixeloramaProvenanceTests(unittest.TestCase):
             bridge_id="origin-forge-pixelorama-test",
             bridge_version="test-bridge-1",
             bridge_fingerprint="sha256:" + hashlib.sha256(self.bridge.read_bytes()).hexdigest(),
-            pixelorama_executable=Path(sys.executable),
+            pixelorama_executable=Path(sys.executable).resolve(),
             bridge_package=self.bridge,
             allowed_operations=(BridgeOperation.CREATE_SPRITE_PROJECT,),
             launcher_args=(str(self.bridge),),
