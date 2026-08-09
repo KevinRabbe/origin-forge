@@ -145,8 +145,13 @@ class AudioOperationService:
                 raise AudioServiceError(
                     f"audio source for {source_id} is not an ARTIFACT ID"
                 )
-            artifact = self.lineage.get_artifact(artifact_id)
-            path = self.lineage.local_artifact_path(artifact_id)
+            try:
+                artifact = self.lineage.get_artifact(artifact_id)
+                path = self.lineage.local_artifact_path(artifact_id)
+            except (KeyError, RuntimeInvariantError) as exc:
+                raise AudioServiceError(
+                    f"audio source Artifact integrity check failed: {source_id}"
+                ) from exc
             if path.is_symlink() or not path.is_file():
                 raise AudioServiceError(f"audio source Artifact is missing or unsafe: {source_id}")
             data = path.read_bytes()
