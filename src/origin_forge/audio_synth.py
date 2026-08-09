@@ -13,6 +13,7 @@ _MAX_EVENTS = 128
 _MAX_EVENT_MS = 30_000
 _MAX_TOTAL_MS = 5 * 60 * 1000
 _MAX_LOOPS = 32
+_MAX_PCM_BYTES = 64 * 1024 * 1024 - 44
 
 
 class AudioSynthError(ValueError):
@@ -150,11 +151,23 @@ def _validate_common(
         raise AudioSynthError("seed is outside allowed range")
     if not isinstance(events, tuple) or len(events) > _MAX_EVENTS:
         raise AudioSynthError("events must be a bounded tuple")
+    if any(not isinstance(event, SynthEvent) for event in events):
+        raise AudioSynthError("events must contain only SynthEvent values")
     if not isinstance(loops, int) or not 1 <= loops <= _MAX_LOOPS:
         raise AudioSynthError("loops is outside allowed range")
     total_ms = sum(event.duration_ms + event.gap_ms for event in events) * loops
     if total_ms > _MAX_TOTAL_MS:
         raise AudioSynthError("rendered duration exceeds synthesis limit")
+    total_frames = (
+        sum(
+            (sample_rate * event.duration_ms) // 1000
+            + (sample_rate * event.gap_ms) // 1000
+            for event in events
+        )
+        * loops
+    )
+    if total_frames * channels * 2 > _MAX_PCM_BYTES:
+        raise AudioSynthError("rendered PCM exceeds synthesis byte limit")
 
 
 def _xorshift64(state: int) -> int:
