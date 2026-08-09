@@ -364,6 +364,34 @@ class PixeloramaCliExportAdapter:
             ) from exc
         return resolved
 
+    @classmethod
+    def _validate_relative_parent_components(
+        cls,
+        workspace: Path,
+        relative_path: str,
+        label: str,
+    ) -> Path:
+        workspace_resolved = workspace.resolve(strict=True)
+        relative = Path(relative_path)
+        current = workspace
+        for part in relative.parent.parts:
+            current = current / part
+            if current.is_symlink():
+                raise PixeloramaCliIntegrityError(
+                    f"{label} contains a symlink parent component"
+                )
+        try:
+            resolved_parent = current.resolve(strict=True)
+            resolved_parent.relative_to(workspace_resolved)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise PixeloramaCliIntegrityError(
+                f"{label} parent escaped the media workspace"
+            ) from exc
+        candidate = workspace / relative
+        if candidate.is_symlink():
+            raise PixeloramaCliIntegrityError(f"{label} may not be a symlink")
+        return candidate
+
     def _validate_workspace_containment(
         self,
         workspace: Path,
@@ -376,7 +404,7 @@ class PixeloramaCliExportAdapter:
             request.source_relative_path,
             "Pixelorama CLI staged source",
         )
-        self._validate_relative_components(
+        self._validate_relative_parent_components(
             workspace,
             request.output_relative_path,
             "Pixelorama CLI declared output",
@@ -418,6 +446,7 @@ class PixeloramaCliExportAdapter:
         env.update(
             {
                 "HOME": str(home),
+                "PWD": str(workspace),
                 "XDG_DATA_HOME": str(data),
                 "XDG_CONFIG_HOME": str(config),
                 "XDG_CACHE_HOME": str(cache),
@@ -594,7 +623,7 @@ class PixeloramaCliExportAdapter:
                 f"Pixelorama CLI export exited with code {exit_code}"
             )
         self._validate_workspace_containment(workspace, request)
-        output_path = self._validate_relative_components(
+        output_path = self._validate_relative_parent_components(
             workspace,
             request.output_relative_path,
             "Pixelorama CLI declared output",
@@ -603,6 +632,11 @@ class PixeloramaCliExportAdapter:
             raise PixeloramaCliIntegrityError(
                 "Pixelorama CLI did not produce the declared spritesheet"
             )
+        output_path = self._validate_relative_components(
+            workspace,
+            request.output_relative_path,
+            "Pixelorama CLI declared output",
+        )
         output_hash, output_byte_count = _sha256_file(
             output_path,
             request.max_output_bytes,
