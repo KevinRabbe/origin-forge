@@ -599,9 +599,20 @@ class PixeloramaCliExportAdapter:
         executable = self.profile.verify_executable()
         version = self.probe_version()
         workspace = self._workspace(request)
-        self._stage_source(request, source_path, workspace)
+        staged_source = self._stage_source(request, source_path, workspace)
         output_path = workspace / request.output_relative_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        self._validate_workspace_containment(workspace, request)
+        staged_source = self._validate_relative_components(
+            workspace,
+            request.source_relative_path,
+            "Pixelorama CLI staged source",
+        )
+        output_path = self._validate_relative_parent_components(
+            workspace,
+            request.output_relative_path,
+            "Pixelorama CLI declared output",
+        )
 
         command = [
             str(executable),
@@ -610,8 +621,8 @@ class PixeloramaCliExportAdapter:
             "--",
             "--spritesheet",
             "--output",
-            request.output_relative_path,
-            request.source_relative_path,
+            str(output_path),
+            str(staged_source),
         ]
         exit_code, stdout, stderr, stdout_truncated, stderr_truncated = self._run(
             command,
