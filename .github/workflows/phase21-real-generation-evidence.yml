@@ -43,14 +43,25 @@ jobs:
           echo "ORIGIN_FORGE_COMFY_RUNTIME_COMMIT=$expected_commit" >> "$GITHUB_ENV"
           echo "ORIGIN_FORGE_COMFY_VERSION=0.28.0" >> "$GITHUB_ENV"
 
-      - name: Install pinned-source ComfyUI Python dependencies for probe
+      - name: Install exact frozen ComfyUI Python environment
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check -r .external/ComfyUI/requirements.txt
-          python -m pip freeze | sort > "$RUNNER_TEMP/comfyui-pip-freeze.txt"
-          sha256sum "$RUNNER_TEMP/comfyui-pip-freeze.txt"
-          echo "COMFYUI_PROBE_PIP_FREEZE=$RUNNER_TEMP/comfyui-pip-freeze.txt" >> "$GITHUB_ENV"
+          lock="evidence/phase21/comfyui-v0.28.0-python3.13.freeze.txt"
+          expected_lock_sha="a4d5a1700302a2651050576b691d175e3944def43d432b95a970d5046ada5eaa"
+          echo "$expected_lock_sha  $lock" | sha256sum -c -
+
+          venv="$RUNNER_TEMP/comfy-locked-venv"
+          python -m venv "$venv"
+          source "$venv/bin/activate"
+          python -m pip install --disable-pip-version-check -r "$lock"
+          python -m pip freeze | LC_ALL=C sort > "$RUNNER_TEMP/comfy-installed.freeze.txt"
+          cmp -s "$lock" "$RUNNER_TEMP/comfy-installed.freeze.txt"
+          sha256sum "$RUNNER_TEMP/comfy-installed.freeze.txt"
+
+          echo "$venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$venv" >> "$GITHUB_ENV"
+          echo "PIN_COMFY_DEPENDENCY_FREEZE_SHA256=sha256:$expected_lock_sha"
 
       - name: Acquire and verify frozen SD1.5 fp16 model
         shell: bash
@@ -145,17 +156,6 @@ jobs:
           set -euo pipefail
           python -W error::ResourceWarning -m unittest discover -s tests \
             -p "test_comfyui_real.py" -v
-
-      - name: Report probe dependency environment
-        if: always()
-        shell: bash
-        run: |
-          if [ -n "${COMFYUI_PROBE_PIP_FREEZE:-}" ] && [ -f "$COMFYUI_PROBE_PIP_FREEZE" ]; then
-            echo "--- pinned-source probe pip freeze ---"
-            cat "$COMFYUI_PROBE_PIP_FREEZE"
-            echo "--- pip freeze sha256 ---"
-            sha256sum "$COMFYUI_PROBE_PIP_FREEZE"
-          fi
 
       - name: Stop ComfyUI server
         if: always()
