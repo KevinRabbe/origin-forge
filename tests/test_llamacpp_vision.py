@@ -10,7 +10,7 @@ from origin_forge.adapters.llamacpp_vision import (
     LlamaCppVisionAdapter,
     LlamaCppVisionError,
 )
-from origin_forge.image_vision_models import VisionImageRef, VisionInspectionRequest
+from origin_forge.image_vision_models import VISION_REPORT_SCHEMA, VisionImageRef, VisionInspectionRequest
 from origin_forge.pixelorama_models import PixelPlane
 from origin_forge.pixelorama_png import encode_rgba8_png, inspect_rgba8_png
 
@@ -120,7 +120,8 @@ class LlamaCppVisionAdapterTests(unittest.TestCase):
         self.assertEqual(report.input_tokens, 40)
         self.assertEqual(report.output_tokens, 20)
         payload = _VisionHandler.request_json
-        self.assertEqual(payload["response_format"]["type"], "json_schema")
+        self.assertEqual(payload["response_format"]["type"], "json_object")
+        self.assertEqual(payload["response_format"]["schema"], VISION_REPORT_SCHEMA)
         self.assertFalse(payload["stream"])
         user_content = payload["messages"][1]["content"]
         urls = [
