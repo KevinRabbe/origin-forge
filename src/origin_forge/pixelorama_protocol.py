@@ -82,6 +82,8 @@ def _layer(value: object) -> RasterLayerSpec:
             opacity=_integer(raw["opacity"], "layer opacity"),
             blend_mode=LayerBlendMode(_string(raw["blend_mode"], "blend_mode")),
         )
+    except PixeloramaProtocolError:
+        raise
     except (PixeloramaModelError, ValueError) as exc:
         raise PixeloramaProtocolError("raster layer validation failed") from exc
 
@@ -110,6 +112,8 @@ def _animation(value: object) -> AnimationSpec:
             last_frame=_integer(raw["last_frame"], "last_frame"),
             loop_mode=AnimationLoopMode(_string(raw["loop_mode"], "loop_mode")),
         )
+    except PixeloramaProtocolError:
+        raise
     except (PixeloramaModelError, ValueError) as exc:
         raise PixeloramaProtocolError("animation validation failed") from exc
 
@@ -194,6 +198,8 @@ def _export_spec(value: object) -> ExportSpec:
             BridgeOutputType(_string(raw["output_type"], "output_type")),
             _string(raw["relative_path"], "export relative_path"),
         )
+    except PixeloramaProtocolError:
+        raise
     except (PixeloramaModelError, ValueError) as exc:
         raise PixeloramaProtocolError("export spec validation failed") from exc
 
@@ -231,6 +237,8 @@ def parse_bridge_request(value: object) -> PixeloramaBridgeRequest:
             ),
             budget=_budget(raw["budget"]),
         )
+    except PixeloramaProtocolError:
+        raise
     except (PixeloramaModelError, ValueError) as exc:
         raise PixeloramaProtocolError("Pixelorama bridge request validation failed") from exc
     if raw["content_hash"] != request.content_hash:
@@ -259,6 +267,8 @@ def _output(value: object) -> BridgeOutput:
             width=width,
             height=height,
         )
+    except PixeloramaProtocolError:
+        raise
     except (PixeloramaModelError, ValueError) as exc:
         raise PixeloramaProtocolError("bridge output validation failed") from exc
 
@@ -297,6 +307,8 @@ def parse_bridge_result(value: object) -> PixeloramaBridgeResult:
             diagnostics=tuple(diagnostics),
             elapsed_ms=_integer(raw["elapsed_ms"], "elapsed_ms"),
         )
+    except PixeloramaProtocolError:
+        raise
     except (PixeloramaModelError, ValueError) as exc:
         raise PixeloramaProtocolError("Pixelorama bridge result validation failed") from exc
     if raw["content_hash"] != result.content_hash:
