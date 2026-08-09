@@ -105,7 +105,7 @@ Before the model call it requires:
 - bounded total image bytes;
 - loopback by default and no redirect following.
 
-The multimodal request uses a fixed strict transport schema. The llama.cpp transport schema is deliberately a stricter subset of the provider-neutral report contract so the pinned runtime can compile the grammar without weakening deterministic acceptance. The canonical returned report is still parsed fail-closed. Unknown fields, authority claims, invalid severities, duplicate semantic findings, and findings referencing images outside the frozen request are rejected.
+The multimodal request uses a strict backend transport schema derived from the provider-neutral report contract. It is deliberately narrower so the pinned llama.cpp grammar compiler can enforce bounded output: summary/description size and finding count are capped, the completion budget has a backend minimum, and each request rewrites the finding `image_id` field to an enum of the exact frozen image IDs. A completion that exhausts the token budget is rejected explicitly. The canonical returned report is then independently parsed fail-closed with the provider-neutral rules unchanged. Unknown fields, authority claims, invalid severities, duplicate semantic findings, and findings referencing images outside the frozen request are rejected.
 
 Every accepted `VisionReport` permanently carries:
 
@@ -197,7 +197,7 @@ The evidence workflow pins:
 - loopback-only offline server execution;
 - CPU-only model/projector execution;
 - embedded/prebuilt llama.cpp UI disabled at build time;
-- one strict production-adapter multimodal request and canonical advisory report parse.
+- one strict request-bound production-adapter multimodal request and canonical advisory report parse.
 
 Exact CI run IDs and final closure head are maintained in the PR closure record so updating evidence metadata does not itself move the proven code head.
 
