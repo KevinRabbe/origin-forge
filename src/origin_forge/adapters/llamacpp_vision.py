@@ -64,6 +64,32 @@ def _llamacpp_transport_schema() -> dict[str, object]:
 LLAMA_CPP_VISION_REPORT_SCHEMA = _llamacpp_transport_schema()
 
 
+def _request_transport_schema(image_ids: tuple[str, ...]) -> dict[str, object]:
+    """Bind transport findings to the exact frozen image identities.
+
+    The canonical parser independently enforces this same relationship after
+    inference. Encoding it in the provider grammar prevents the model from
+    spending valid structured output on findings that can never bind to the
+    frozen request.
+    """
+
+    exact_ids = tuple(sorted(image_ids))
+    if not exact_ids or len(set(exact_ids)) != len(exact_ids):
+        raise LlamaCppVisionError("vision transport requires distinct frozen image IDs")
+    schema = deepcopy(LLAMA_CPP_VISION_REPORT_SCHEMA)
+    try:
+        image_id_schema = schema["properties"]["findings"]["items"]["properties"]
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError("llama.cpp vision transport schema is invalid") from exc
+    if not isinstance(image_id_schema, dict):
+        raise RuntimeError("llama.cpp vision finding properties are invalid")
+    image_id_schema["image_id"] = {
+        "type": "string",
+        "enum": list(exact_ids),
+    }
+    return schema
+
+
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -204,11 +230,12 @@ class LlamaCppVisionAdapter:
             "do not claim verification, acceptance, adoption, Task completion, merge, or release authority. "
             "Reference only the supplied image_id values."
         )
+        image_ids = tuple(image_id for image_id, _ in images)
         context = {
             "inspection_id": request.inspection_id,
             "objective": request.objective,
             "criteria": list(request.criteria),
-            "image_ids": [image_id for image_id, _ in images],
+            "image_ids": list(image_ids),
         }
         content: list[dict[str, object]] = [
             {
@@ -238,7 +265,7 @@ class LlamaCppVisionAdapter:
             "stream": False,
             "response_format": {
                 "type": "json_object",
-                "schema": LLAMA_CPP_VISION_REPORT_SCHEMA,
+                "schema": _request_transport_schema(image_ids),
             },
         }
 
