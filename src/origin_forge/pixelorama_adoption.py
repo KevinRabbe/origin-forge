@@ -193,6 +193,10 @@ class GovernedPixeloramaOutputAdopter:
         try:
             relative = portable_relative_path(relative_path)
         except ValueError as exc:
+            if "protected" in str(exc).casefold():
+                raise PixeloramaAdoptionError(
+                    "adoption destination may not target protected project state"
+                ) from exc
             raise PixeloramaAdoptionError("invalid adoption destination path") from exc
         if not relative.parts:
             raise PixeloramaAdoptionError("adoption destination path may not be empty")
