@@ -154,8 +154,7 @@ class PixeloramaMediaService:
             }
         else:
             evidence["raster_validation"] = None
-        verification_id = self.runtime.record_verification(
-            "ARTIFACT",
+        verification_id = self.lineage.record_artifact_verification(
             artifact_id,
             verification_type="pixelorama-output-integrity",
             verifier="OriginForge.PixeloramaMediaService",
@@ -439,8 +438,7 @@ class PixeloramaOutputAdopter:
             tool_versions=tuple(__import__("json").loads(str(artifact["tool_versions_json"]))),
             status="ADOPTED",
         )
-        verification_id = self.runtime.record_verification(
-            "ARTIFACT",
+        verification_id = self.lineage.record_artifact_verification(
             adopted_artifact_id,
             verification_type="pixelorama-adoption-integrity",
             verifier="OriginForge.PixeloramaOutputAdopter",
