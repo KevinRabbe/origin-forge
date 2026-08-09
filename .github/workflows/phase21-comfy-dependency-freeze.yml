@@ -1,0 +1,59 @@
+name: Phase 21 ComfyUI dependency freeze
+
+on:
+  pull_request:
+    types: [edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  freeze-comfy-dependencies:
+    if: >-
+      github.event.pull_request.number == 30 &&
+      contains(github.event.pull_request.body, '<!-- phase21-comfy-dependency-freeze -->')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Origin Forge
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Checkout pinned ComfyUI source
+        uses: actions/checkout@v4
+        with:
+          repository: Comfy-Org/ComfyUI
+          ref: 700821e1364eaab0e8f21c538a2131719fec57bf
+          path: .external/ComfyUI
+          persist-credentials: false
+
+      - name: Resolve probe environment and freeze exact versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_commit="700821e1364eaab0e8f21c538a2131719fec57bf"
+          test "$(git -C .external/ComfyUI rev-parse HEAD)" = "$expected_commit"
+          grep -Fx '__version__ = "0.28.0"' .external/ComfyUI/comfyui_version.py
+
+          python -m venv "$RUNNER_TEMP/comfy-freeze-venv"
+          source "$RUNNER_TEMP/comfy-freeze-venv/bin/activate"
+          python -m pip install --disable-pip-version-check -r .external/ComfyUI/requirements.txt
+          python -m pip freeze | LC_ALL=C sort > comfyui-v0.28.0-python3.13.freeze.txt
+
+          echo "--- exact freeze ---"
+          cat comfyui-v0.28.0-python3.13.freeze.txt
+          echo "--- exact freeze sha256 ---"
+          sha256sum comfyui-v0.28.0-python3.13.freeze.txt
+
+      - name: Upload exact dependency freeze
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase21-comfyui-v0.28.0-python3.13-freeze
+          path: comfyui-v0.28.0-python3.13.freeze.txt
+          if-no-files-found: error
+          retention-days: 14
