@@ -16,6 +16,7 @@ from origin_forge.pixelorama_media import (
     PixeloramaOutputAdopter,
 )
 from origin_forge.pixelorama_models import (
+    BridgeBudget,
     BridgeOperation,
     BridgeOutputType,
     ExportSpec,
@@ -92,6 +93,7 @@ for export in request["export_specs"]:
         "width": spec["width"],
         "height": spec["height"],
     })
+outputs.sort(key=lambda value: value["relative_path"])
 result = {
     "protocol_version": 1,
     "operation_id": request["operation_id"],
@@ -166,6 +168,7 @@ class PixeloramaMediaTests(unittest.TestCase):
             operation=BridgeOperation.CREATE_SPRITE_PROJECT,
             sprite_spec=spec,
             export_specs=(ExportSpec(BridgeOutputType.PNG, "exports/frame.png"),),
+            budget=BridgeBudget(timeout_seconds=5),
         )
 
     def test_media_run_records_artifacts_and_verification_without_completing_task(self) -> None:
