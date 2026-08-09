@@ -7,6 +7,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from origin_forge.adapters.llamacpp_vision import (
+    LLAMA_CPP_VISION_REPORT_SCHEMA,
     LlamaCppVisionAdapter,
     LlamaCppVisionError,
 )
@@ -121,7 +122,22 @@ class LlamaCppVisionAdapterTests(unittest.TestCase):
         self.assertEqual(report.output_tokens, 20)
         payload = _VisionHandler.request_json
         self.assertEqual(payload["response_format"]["type"], "json_object")
-        self.assertEqual(payload["response_format"]["schema"], VISION_REPORT_SCHEMA)
+        self.assertEqual(
+            payload["response_format"]["schema"], LLAMA_CPP_VISION_REPORT_SCHEMA
+        )
+        self.assertEqual(
+            LLAMA_CPP_VISION_REPORT_SCHEMA["properties"]["summary"]["maxLength"],
+            1024,
+        )
+        self.assertEqual(
+            LLAMA_CPP_VISION_REPORT_SCHEMA["properties"]["findings"]["items"]["properties"]["description"]["maxLength"],
+            1024,
+        )
+        self.assertEqual(VISION_REPORT_SCHEMA["properties"]["summary"]["maxLength"], 8192)
+        self.assertEqual(
+            VISION_REPORT_SCHEMA["properties"]["findings"]["items"]["properties"]["description"]["maxLength"],
+            4096,
+        )
         self.assertFalse(payload["stream"])
         user_content = payload["messages"][1]["content"]
         urls = [
