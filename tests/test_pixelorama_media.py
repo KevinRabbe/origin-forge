@@ -171,6 +171,20 @@ class PixeloramaMediaTests(unittest.TestCase):
             budget=BridgeBudget(timeout_seconds=5),
         )
 
+    @staticmethod
+    def _assert_run_did_not_complete_task(
+        before_task: dict[str, object],
+        after_task: dict[str, object],
+    ) -> None:
+        if after_task["status"] != TaskStatus.RUNNING.value:
+            raise AssertionError("Pixelorama Run changed production Task status")
+        if after_task["revision"] != before_task["revision"]:
+            raise AssertionError("Pixelorama Run changed production Task revision")
+        if after_task["attempt_count"] != before_task["attempt_count"] + 1:
+            raise AssertionError("Pixelorama Run did not record exactly one Task attempt")
+        if after_task["assigned_run_id"] is not None:
+            raise AssertionError("finished Pixelorama Run left Task assigned")
+
     def test_media_run_records_artifacts_and_verification_without_completing_task(self) -> None:
         script = self._script()
         before_task = self.runtime.get_task(self.task)
@@ -182,7 +196,10 @@ class PixeloramaMediaTests(unittest.TestCase):
         run = self.runtime.get_run(result.run_id)
         self.assertEqual(run["role"], PixeloramaMediaService.RUN_ROLE)
         self.assertEqual(run["status"], RunStatus.SUCCEEDED.value)
-        self.assertEqual(self.runtime.get_task(self.task), before_task)
+        self._assert_run_did_not_complete_task(
+            before_task,
+            self.runtime.get_task(self.task),
+        )
         self.assertEqual(self.runtime.list_verifications("TASK", self.task), [])
         self.assertEqual(len(result.output_evidence), 2)
         output_types = {value.output_type for value in result.output_evidence}
@@ -277,7 +294,11 @@ class PixeloramaMediaTests(unittest.TestCase):
         service = PixeloramaMediaService(self.runtime, self._profile(script))
         with self.assertRaisesRegex(PixeloramaMediaError, "failed deterministic validation"):
             service.execute(self.task, self._request())
-        self.assertEqual(self.runtime.get_task(self.task), before_task)
+        self._assert_run_did_not_complete_task(
+            before_task,
+            self.runtime.get_task(self.task),
+        )
+        self.assertEqual(self.runtime.list_verifications("TASK", self.task), [])
         runs = [
             row
             for row in self.runtime.list_runs()
