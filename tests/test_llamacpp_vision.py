@@ -99,7 +99,7 @@ class LlamaCppVisionAdapterTests(unittest.TestCase):
                 model_hash=MODEL_HASH,
             )
 
-    def test_valid_png_is_rehashed_then_sent_as_schema_constrained_multimodal_input(self) -> None:
+    def test_valid_png_is_rehashed_then_sent_as_request_bound_schema_constrained_input(self) -> None:
         png, request = _fixture()
         server = ThreadingHTTPServer(("127.0.0.1", 0), _VisionHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -123,16 +123,18 @@ class LlamaCppVisionAdapterTests(unittest.TestCase):
         self.assertEqual(report.output_tokens, 20)
         payload = _VisionHandler.request_json
         self.assertEqual(payload["response_format"]["type"], "json_object")
-        self.assertEqual(
-            payload["response_format"]["schema"], LLAMA_CPP_VISION_REPORT_SCHEMA
-        )
-        transport = LLAMA_CPP_VISION_REPORT_SCHEMA["properties"]
+        transport = payload["response_format"]["schema"]["properties"]
         self.assertEqual(transport["summary"]["maxLength"], 256)
         self.assertEqual(transport["findings"]["maxItems"], 4)
+        finding_properties = transport["findings"]["items"]["properties"]
+        self.assertEqual(finding_properties["description"]["maxLength"], 256)
         self.assertEqual(
-            transport["findings"]["items"]["properties"]["description"]["maxLength"],
-            256,
+            finding_properties["image_id"],
+            {"type": "string", "enum": ["concept"]},
         )
+        base_image_id = LLAMA_CPP_VISION_REPORT_SCHEMA["properties"]["findings"]["items"]["properties"]["image_id"]
+        self.assertNotIn("enum", base_image_id)
+        self.assertEqual(base_image_id["maxLength"], 128)
         self.assertEqual(VISION_REPORT_SCHEMA["properties"]["summary"]["maxLength"], 8192)
         self.assertEqual(
             VISION_REPORT_SCHEMA["properties"]["findings"]["items"]["properties"]["description"]["maxLength"],
