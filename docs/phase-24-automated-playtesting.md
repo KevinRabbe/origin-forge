@@ -1,6 +1,6 @@
 # Phase 24 — Automated Playtesting
 
-Status: **IN PROGRESS — governed v1 substrate implemented; final roadmap/closure pending**
+Status: **DONE candidate — governed v1 substrate frozen; merge remains gated on final exact-head CI**
 
 Phase 24 adds bounded synthetic-player execution and telemetry without creating a generic OS-input or production-verification path.
 
@@ -49,6 +49,8 @@ Phase 24 v1 provides:
 - concurrent bounded stdout/stderr capture with process-group termination on timeout/overflow/cleanup;
 - strict telemetry JSON schema with unknown-field rejection and pre-read byte bounds;
 - infrastructure-owned synthetic `FAILED`/`TIMEOUT` telemetry when an abnormal process cannot emit final telemetry;
+- exact `PLAYWS-*` workspace, scenario-file and log-file containment with symlink and lexical-path rejection;
+- independent backend result consistency checks binding timeout/exit state to telemetry outcome before persistence;
 - durable scenario/telemetry/summary/log Artifacts and a `playtest-structure` Run Verification;
 - read-only operator inspection through `playtest_cli`;
 - explicit evidence fields proving that production Task verification, semantic game-quality authority, canonical adoption, signing, merge and release remain outside this service.
@@ -101,6 +103,8 @@ The harness receives only:
 - scenario/session identity hashes;
 - the exact telemetry output path.
 
+`PlaytestService` independently rechecks the returned execution rather than assuming a backend is structurally honest. A returned workspace must be the exact scenario `PLAYWS-*`; persisted scenario evidence must be the exact `request/scenario.json`; log Artifacts must be the exact lexical `logs/stdout.log` and `logs/stderr.log`; symlinked parents/outputs are rejected; and telemetry outcome must agree with timeout/exit state.
+
 ## Runtime outcome vs playtest infrastructure outcome
 
 A failed game session is still useful playtest evidence.
@@ -115,7 +119,7 @@ If the harness exits nonzero before writing telemetry, Origin Forge creates an i
 
 A zero exit is stronger: it must provide valid exact-bound `COMPLETED` telemetry. Zero exit without telemetry fails closed.
 
-If telemetry exists, its declared outcome must agree with the process state. Unknown fields, identity drift, oversized telemetry, malformed events, symlinks, workspace escape, log overflow, or content drift are infrastructure failures rather than game-quality findings.
+If telemetry exists, its declared outcome must agree with the process state. Unknown fields, identity drift, oversized telemetry, malformed events, symlinks, workspace/path escape, path aliases, log overflow, content drift, or backend exit/outcome inconsistency are infrastructure failures rather than game-quality findings.
 
 ## Deterministic telemetry analysis
 
@@ -138,11 +142,31 @@ It does not decide whether the game is fun, balanced, shippable, or semantically
 
 A duplicate active start for the same encounter fails closed because the event stream is structurally ambiguous. Incomplete encounters and unmatched ends are preserved as evidence because they may themselves indicate runtime problems.
 
+## Reward-hacking boundary
+
+Phase 24 deliberately does not contain an autonomous optimizer that can change the game or its own harness in order to improve a playtest metric.
+
+Future optimization or self-improvement work must preserve this separation:
+
+```text
+synthetic player
+    !=
+telemetry producer
+    !=
+evaluator
+    !=
+production Task verifier
+```
+
+A metric increase is evidence, not proof of legitimate gameplay improvement. Any later loop that learns from playtest trajectories must operate against a frozen capability manifest and must treat unexpected command paths, environment mutation, undeclared filesystem/process/network authority, or score changes unsupported by gameplay evidence as potential reward-hacking signals.
+
+Harness, prompt, Skill, routing, context or mini-workflow improvements discovered from trajectories are proposal-only candidates for the later governed refinement pipeline. A running playtester cannot activate its own replacement.
+
 ## Durable evidence
 
 `PlaytestService` requires an already-`RUNNING` production Task and creates a separate `PLAYTESTER` Run.
 
-It independently revalidates the exact returned workspace, scenario bytes, telemetry binding and log hashes/sizes, then persists:
+It independently revalidates the exact returned workspace, scenario path/bytes, backend process-state binding, telemetry binding and log path/hash/size constraints, then persists:
 
 - `PLAYTEST_SCENARIO`
 - `PLAYTEST_TELEMETRY`
@@ -184,6 +208,7 @@ Not implemented or authorized:
 - GUI-coordinate automation;
 - network or host-filesystem sandbox claims for a trusted native harness;
 - automatic model-driven exploration loops;
+- automatic self-modification or harness activation;
 - semantic vision/game-quality grading;
 - automatic balancing or tuning mutations;
 - automatic retry/repair after telemetry findings;
@@ -203,12 +228,13 @@ Phase 24 v1 is complete when one immutable repository head proves on the support
 4. require exact valid telemetry on normal completion while preserving nonzero/timeout outcomes as scenario-bound synthetic evidence when final target telemetry is absent;
 5. independently bind and validate typed telemetry covering deaths, encounters, damage, shortages, soft locks, pathfinding failures and progression;
 6. derive deterministic encounter/progression/gameplay metrics without semantic game-quality authority;
-7. persist exact scenario/telemetry/summary/log lineage through a separate `PLAYTESTER` Run;
-8. expose that evidence through a read-only operator surface; and
-9. prove none of those paths verifies/completes the production Task, adopts assets/config, signs provenance, merges or releases.
+7. independently reject workspace, scenario-path, log-path, symlink, content-hash and backend outcome/exit-state drift before durable evidence is accepted;
+8. persist exact scenario/telemetry/summary/log lineage through a separate `PLAYTESTER` Run;
+9. expose that evidence through a read-only operator surface; and
+10. prove none of those paths verifies/completes the production Task, adopts assets/config, signs provenance, merges or releases.
 
-The regression suite includes real local subprocess coverage for successful telemetry, nonzero exit without telemetry, timeout without telemetry, success-without-telemetry rejection, schema-extension rejection and log overflow, plus a real harness → durable service → lineage round trip.
+The regression suite includes real local subprocess coverage for successful telemetry, nonzero exit without telemetry, timeout without telemetry, success-without-telemetry rejection, schema-extension rejection and log overflow, plus a real harness → durable service → lineage round trip. Adversarial service coverage additionally proves escaped/aliased log-path rejection, symlinked scenario-evidence rejection, workspace escape rejection, hash drift rejection and backend process-state/telemetry inconsistency rejection before Artifact persistence.
 
-Remaining closure work is canonical roadmap synchronization and one final exact-head Python 3.12/3.13 matrix after the documentation is frozen.
+The PR may be merged only after the frozen closure head passes the normal Python 3.12/3.13 matrix and unrelated external evidence gates remain disarmed/skipped.
 
 Phase 25 remains separate. Automated playtesting observes executed gameplay; simulation evaluates cheaper abstract system models before or without full runtime execution.
