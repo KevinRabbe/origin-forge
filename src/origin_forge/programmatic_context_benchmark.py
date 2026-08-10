@@ -236,6 +236,23 @@ class ContextExperimentReport:
         environments = {v.environment_hash for v in cases}
         if len(environments) != 1:
             raise ProgrammaticContextModelError("experiment environment changed between cases")
+        for case in cases:
+            expected_case = compare_context_case(
+                case_id=case.case_id,
+                case_hash=case.case_hash,
+                environment_hash=case.environment_hash,
+                baseline=case.baseline,
+                programmatic=case.programmatic,
+                policy=self.policy,
+            )
+            if (
+                case.verdict is not expected_case.verdict
+                or case.regression_reasons != expected_case.regression_reasons
+                or case.improvements != expected_case.improvements
+            ):
+                raise ProgrammaticContextModelError(
+                    f"experiment case classification is inconsistent: {case.case_id}"
+                )
         object.__setattr__(self, "cases", tuple(sorted(cases, key=lambda v: v.case_id)))
         if not isinstance(self.verdict, ContextExperimentVerdict):
             raise ProgrammaticContextModelError("experiment verdict is invalid")
