@@ -111,7 +111,7 @@ class SimulationModelTests(unittest.TestCase):
         with self.assertRaisesRegex(SimulationModelError, "exceeds"):
             SimulationInvariant("bad", "gold", minimum=5, maximum=4)
 
-    def test_work_budget_fails_closed(self) -> None:
+    def test_rule_work_budget_fails_closed(self) -> None:
         rules = tuple(
             SimulationRule(
                 f"rule-{index:03d}",
@@ -128,6 +128,22 @@ class SimulationModelTests(unittest.TestCase):
                 rules=rules,
                 replicates=2,
                 max_steps=10_000,
+                stall_steps=1,
+            )
+
+    def test_invariant_work_is_included_in_budget(self) -> None:
+        invariants = tuple(
+            SimulationInvariant(f"limit-{index:03d}", "value", minimum=0)
+            for index in range(256)
+        )
+        with self.assertRaisesRegex(SimulationModelError, "work budget"):
+            SimulationSpec.create(
+                seed=2,
+                initial_state=(("value", 0),),
+                rules=(SimulationRule("noop-probability", 0, 0, produce=(("value", 1),)),),
+                invariants=invariants,
+                replicates=256,
+                max_steps=100,
                 stall_steps=1,
             )
 
