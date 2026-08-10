@@ -10,7 +10,7 @@ from .ids import IdKind, validate_id
 from .lineage import OriginForgeLineage
 from .playtest_analysis import PlaytestSummary, analyze_playtest
 from .playtest_harness import PlaytestHarnessExecution
-from .playtest_models import PlaytestScenario
+from .playtest_models import PlaytestOutcome, PlaytestScenario, PlaytestTelemetry
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .runtime_observation_models import canonical_bytes
 from .state import RunStatus, TaskStatus
@@ -116,6 +116,10 @@ class PlaytestService:
     ) -> Path:
         expected = workspace.joinpath(*relative_path)
         returned = Path(returned)
+        if returned != expected:
+            raise PlaytestServiceError(
+                f"{label} must be the exact governed playtest output path"
+            )
         parent = expected.parent
         if parent.is_symlink() or expected.is_symlink() or returned.is_symlink():
             raise PlaytestServiceError(f"{label} may not use symlinks")
@@ -135,6 +139,41 @@ class PlaytestService:
         return expected
 
     @staticmethod
+    def _validate_execution_state(
+        scenario: PlaytestScenario,
+        execution: PlaytestHarnessExecution,
+    ) -> None:
+        if not isinstance(execution, PlaytestHarnessExecution):
+            raise PlaytestServiceError("backend returned an invalid playtest execution")
+        if not isinstance(execution.scenario, PlaytestScenario):
+            raise PlaytestServiceError("backend returned an invalid playtest scenario")
+        if execution.scenario.content_hash != scenario.content_hash:
+            raise PlaytestServiceError("backend returned a different playtest scenario")
+        if not isinstance(execution.telemetry, PlaytestTelemetry):
+            raise PlaytestServiceError("backend returned invalid playtest telemetry")
+        if type(execution.timed_out) is not bool:
+            raise PlaytestServiceError("backend returned invalid timeout state")
+        if type(execution.process_duration_ms) is not int or execution.process_duration_ms < 0:
+            raise PlaytestServiceError("backend returned invalid process duration")
+
+        if execution.timed_out:
+            if execution.exit_code is not None:
+                raise PlaytestServiceError("timed-out playtest may not report an exit code")
+            expected_outcome = PlaytestOutcome.TIMEOUT
+        else:
+            if type(execution.exit_code) is not int:
+                raise PlaytestServiceError("completed playtest must report an integer exit code")
+            expected_outcome = (
+                PlaytestOutcome.COMPLETED
+                if execution.exit_code == 0
+                else PlaytestOutcome.FAILED
+            )
+        if execution.telemetry.outcome is not expected_outcome:
+            raise PlaytestServiceError(
+                "playtest telemetry outcome disagrees with backend process state"
+            )
+
+    @staticmethod
     def _read_bound_file(
         path: Path,
         *,
@@ -145,7 +184,7 @@ class PlaytestService:
     ) -> bytes:
         if path.is_symlink() or not path.is_file():
             raise PlaytestServiceError(f"{label} is missing or unsafe")
-        if not isinstance(byte_count, int) or byte_count < 0 or byte_count > max_bytes:
+        if type(byte_count) is not int or byte_count < 0 or byte_count > max_bytes:
             raise PlaytestServiceError(f"{label} exceeds byte budget")
         size = path.stat().st_size
         if size != byte_count or size > max_bytes:
@@ -172,15 +211,17 @@ class PlaytestService:
         run_id = self.runtime.start_run(task_id, role=self.RUN_ROLE)
         try:
             execution = self.backend.execute(scenario)
-            if execution.scenario.content_hash != scenario.content_hash:
-                raise PlaytestServiceError("backend returned a different playtest scenario")
+            self._validate_execution_state(scenario, execution)
             execution.telemetry.bind_scenario(scenario)
             workspace = self._trusted_workspace(scenario, execution.workspace_path)
 
-            scenario_path = workspace / "request" / "scenario.json"
+            scenario_path = self._exact_output_path(
+                workspace,
+                workspace / "request" / "scenario.json",
+                relative_path=("request", "scenario.json"),
+                label="playtest scenario evidence",
+            )
             scenario_bytes = canonical_bytes(scenario.to_dict())
-            if scenario_path.is_symlink() or not scenario_path.is_file():
-                raise PlaytestServiceError("playtest backend omitted scenario evidence")
             if scenario_path.stat().st_size != len(scenario_bytes):
                 raise PlaytestServiceError("persisted playtest scenario bytes drifted")
             if scenario_path.read_bytes() != scenario_bytes:
