@@ -86,11 +86,24 @@ def analyze_simulation(
         raise TypeError("result must be a SimulationResult")
     result.bind_spec(spec)
 
+    state_maps = tuple(
+        (
+            dict(replicate.final_state),
+            dict(replicate.minimum_state),
+            dict(replicate.maximum_state),
+        )
+        for replicate in result.replicates
+    )
+    rule_maps = tuple(
+        (dict(replicate.rule_attempts), dict(replicate.rule_firings))
+        for replicate in result.replicates
+    )
+
     variables: list[SimulationVariableSummary] = []
     for name, _ in spec.initial_state:
-        finals = [dict(value.final_state)[name] for value in result.replicates]
-        observed_minima = [dict(value.minimum_state)[name] for value in result.replicates]
-        observed_maxima = [dict(value.maximum_state)[name] for value in result.replicates]
+        finals = [maps[0][name] for maps in state_maps]
+        observed_minima = [maps[1][name] for maps in state_maps]
+        observed_maxima = [maps[2][name] for maps in state_maps]
         variables.append(
             SimulationVariableSummary(
                 variable=name,
@@ -105,8 +118,8 @@ def analyze_simulation(
 
     rules: list[SimulationRuleSummary] = []
     for rule_id in sorted(rule.rule_id for rule in spec.rules):
-        attempts = sum(dict(value.rule_attempts)[rule_id] for value in result.replicates)
-        firings = sum(dict(value.rule_firings)[rule_id] for value in result.replicates)
+        attempts = sum(maps[0][rule_id] for maps in rule_maps)
+        firings = sum(maps[1][rule_id] for maps in rule_maps)
         rules.append(
             SimulationRuleSummary(
                 rule_id=rule_id,
