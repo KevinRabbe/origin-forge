@@ -19,8 +19,9 @@ from ..audio_models import (
     content_hash,
 )
 from ..audio_profiles import AudioProfileKind, GovernedAudioProfile
-from ..audio_wav import WavError, canonicalize_pcm16_wav, inspect_pcm16_wav
+from ..audio_wav import WavError, inspect_pcm16_wav
 from ..runtime import OriginForgeRuntime
+from .audio_piper_wav import canonicalize_piper_output_wav
 
 
 _MAX_PROCESS_OUTPUT_BYTES = 1024 * 1024
@@ -574,7 +575,10 @@ class PiperAudioAdapter:
         if len(raw) > _MAX_WAV_BYTES:
             raise PiperAudioIntegrityError("Piper output exceeds WAV byte limit")
         try:
-            canonical = canonicalize_pcm16_wav(raw, max_duration_ms=request.max_duration_ms)
+            canonical = canonicalize_piper_output_wav(
+                raw,
+                max_duration_ms=request.max_duration_ms,
+            )
             inspection = inspect_pcm16_wav(canonical, max_duration_ms=request.max_duration_ms)
         except WavError as exc:
             raise PiperAudioIntegrityError("Piper output is not accepted PCM16 WAV") from exc
