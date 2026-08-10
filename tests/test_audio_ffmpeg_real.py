@@ -23,6 +23,7 @@ from origin_forge.state import FlowStatus, RunStatus, TaskStatus
 
 _REQUIRED_ENV = (
     "ORIGIN_FORGE_REAL_FFMPEG_EXECUTABLE",
+    "ORIGIN_FORGE_REAL_FFMPEG_RELEASE_VERSION",
     "ORIGIN_FORGE_REAL_FFMPEG_VERSION",
     "ORIGIN_FORGE_REAL_FFMPEG_SOURCE_COMMIT",
     "ORIGIN_FORGE_REAL_FFMPEG_RUNTIME_SHA256",
@@ -36,11 +37,13 @@ _REQUIRED_ENV = (
 class RealFfmpegAudioIntegrationTests(unittest.TestCase):
     def test_real_pinned_ffmpeg_processes_through_governed_audio_service(self) -> None:
         executable = Path(os.environ["ORIGIN_FORGE_REAL_FFMPEG_EXECUTABLE"])
+        release_version = os.environ["ORIGIN_FORGE_REAL_FFMPEG_RELEASE_VERSION"]
         version = os.environ["ORIGIN_FORGE_REAL_FFMPEG_VERSION"]
         source_commit = os.environ["ORIGIN_FORGE_REAL_FFMPEG_SOURCE_COMMIT"]
         expected_runtime_hash = os.environ["ORIGIN_FORGE_REAL_FFMPEG_RUNTIME_SHA256"]
         self.assertEqual(source_commit, "38b88335f99e76ed89ff3c93f877fdefce736c13")
-        self.assertEqual(version, "8.1.2")
+        self.assertEqual(release_version, "8.1.2")
+        self.assertEqual(version, "n8.1.2")
         self.assertTrue(executable.is_file())
         self.assertFalse(executable.is_symlink())
         actual_runtime_hash = "sha256:" + hashlib.sha256(executable.read_bytes()).hexdigest()
