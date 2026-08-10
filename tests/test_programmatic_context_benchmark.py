@@ -215,6 +215,29 @@ class ProgrammaticContextBenchmarkTests(unittest.TestCase):
         with self.assertRaisesRegex(ProgrammaticContextModelError, "verdict is inconsistent"):
             replace(report, verdict=ContextExperimentVerdict.REGRESSED)
 
+    def test_report_recomputes_and_rejects_forged_case_classification(self) -> None:
+        program = _program()
+        valid = compare_context_case(
+            case_id="case.forged",
+            case_hash=HASH_A,
+            environment_hash=HASH_B,
+            baseline=_observation(),
+            programmatic=_observation(calls=2, input_tokens=2000, output_tokens=400, context_bytes=8000, resource_units=90),
+            policy=ContextExperimentPolicy(),
+        )
+        forged = replace(
+            valid,
+            verdict=ContextExperimentVerdict.REGRESSED,
+            regression_reasons=("quality_milli",),
+            improvements=(),
+        )
+        with self.assertRaisesRegex(ProgrammaticContextModelError, "case classification is inconsistent"):
+            ContextExperimentReport.create(
+                program=program,
+                policy=ContextExperimentPolicy(),
+                cases=(forged,),
+            )
+
     def test_report_rejects_program_hash_drift(self) -> None:
         program = _program()
         case = compare_context_case(
@@ -230,10 +253,7 @@ class ProgrammaticContextBenchmarkTests(unittest.TestCase):
             policy=ContextExperimentPolicy(),
             cases=(case,),
         )
-        changed_program = replace(program, output_bindings=("result",))
-        # Dataclass replacement with identical fields is still the same hash; use a fresh
-        # program ID to prove exact program identity is part of the binding.
-        changed_program = replace(changed_program, program_id=new_id(IdKind.CONTEXT_PROGRAM))
+        changed_program = replace(program, program_id=new_id(IdKind.CONTEXT_PROGRAM))
         with self.assertRaisesRegex(ProgrammaticContextModelError, "exact program"):
             report.bind_program(changed_program)
 
