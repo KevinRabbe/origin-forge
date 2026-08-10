@@ -98,6 +98,8 @@ class HarnessWorkshopStoreTests(unittest.TestCase):
             evaluation=report,
         )
         decision = WorkshopDecision.create(
+            candidate=candidate,
+            plan=plan,
             audit=audit,
             evaluation=report,
             outcome=WorkshopDecisionOutcome.DEFER,
