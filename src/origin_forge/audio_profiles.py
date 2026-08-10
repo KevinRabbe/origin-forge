@@ -54,6 +54,7 @@ class GovernedAudioProfile:
     model_hash: str | None = None
     model_config_hash: str | None = None
     license_id: str | None = None
+    license_hash: str | None = None
 
     def __post_init__(self) -> None:
         if not validate_id(self.profile_id, IdKind.AUDIO_PROFILE):
@@ -89,8 +90,14 @@ class GovernedAudioProfile:
                 raise AudioProfileError(str(exc)) from exc
             if self.model_id is None:
                 raise AudioProfileError("model_config_hash requires a model identity")
+        if (self.license_id is None) != (self.license_hash is None):
+            raise AudioProfileError("license_id and license_hash must be supplied together")
         if self.license_id is not None:
             object.__setattr__(self, "license_id", _token(self.license_id, "license_id"))
+            try:
+                validate_sha256(self.license_hash or "", "license_hash")
+            except ValueError as exc:
+                raise AudioProfileError(str(exc)) from exc
         self._validate_kind()
 
     def _validate_kind(self) -> None:
@@ -105,12 +112,24 @@ class GovernedAudioProfile:
                 f"{self.kind.value} requires operation {expected_operation.value}"
             )
         if self.kind in {AudioProfileKind.PIPER_TTS, AudioProfileKind.NEURAL_AUDIO}:
-            if self.model_id is None or self.license_id is None:
+            if (
+                self.model_id is None
+                or self.model_config_hash is None
+                or self.license_id is None
+                or self.license_hash is None
+            ):
                 raise AudioProfileError(
-                    f"{self.kind.value} requires exact model and license identity"
+                    f"{self.kind.value} requires exact model, config, and license evidence"
                 )
-        elif self.model_id is not None or self.model_config_hash is not None:
-            raise AudioProfileError(f"{self.kind.value} may not bind a model identity")
+        elif (
+            self.model_id is not None
+            or self.model_config_hash is not None
+            or self.license_id is not None
+            or self.license_hash is not None
+        ):
+            raise AudioProfileError(
+                f"{self.kind.value} may not bind model or license evidence"
+            )
 
     @classmethod
     def create(
@@ -127,6 +146,7 @@ class GovernedAudioProfile:
         model_hash: str | None = None,
         model_config_hash: str | None = None,
         license_id: str | None = None,
+        license_hash: str | None = None,
     ) -> "GovernedAudioProfile":
         return cls(
             profile_id=new_id(IdKind.AUDIO_PROFILE),
@@ -141,11 +161,12 @@ class GovernedAudioProfile:
             model_hash=model_hash,
             model_config_hash=model_config_hash,
             license_id=license_id,
+            license_hash=license_hash,
         )
 
     def semantic_dict(self) -> dict[str, object]:
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "profile_id": self.profile_id,
             "kind": self.kind.value,
             "operation": self.operation.value,
@@ -158,6 +179,7 @@ class GovernedAudioProfile:
             "model_hash": self.model_hash,
             "model_config_hash": self.model_config_hash,
             "license_id": self.license_id,
+            "license_hash": self.license_hash,
         }
 
     @property
@@ -294,9 +316,10 @@ class AudioProfileStore:
             "model_hash",
             "model_config_hash",
             "license_id",
+            "license_hash",
             "profile_hash",
         }
-        if set(value) != expected or value.get("schema_version") != 1:
+        if set(value) != expected or value.get("schema_version") != 2:
             raise AudioProfileError("stored audio profile has unknown or missing fields")
         try:
             profile = GovernedAudioProfile(
@@ -312,6 +335,7 @@ class AudioProfileStore:
                 model_hash=value["model_hash"],
                 model_config_hash=value["model_config_hash"],
                 license_id=value["license_id"],
+                license_hash=value["license_hash"],
             )
         except (KeyError, TypeError, ValueError, AudioProfileError) as exc:
             raise AudioProfileError("stored audio profile is invalid") from exc
