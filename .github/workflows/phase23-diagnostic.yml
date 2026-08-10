@@ -1,0 +1,47 @@
+name: Phase 23 Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  phase23-diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install package
+        run: python -m pip install -e .
+
+      - name: Models tests
+        run: python -m unittest discover -s tests -p 'test_runtime_observation_models.py' -v
+
+      - name: Visual tests
+        run: python -m unittest discover -s tests -p 'test_runtime_visual.py' -v
+
+      - name: Observer tests
+        run: python -m unittest discover -s tests -p 'test_runtime_observer.py' -v
+
+      - name: Observer partial module
+        run: python -m unittest discover -s tests -p 'test_runtime_observer_partial.py' -v
+
+      - name: Service tests
+        run: python -m unittest discover -s tests -p 'test_runtime_observation_service.py' -v
+
+      - name: Service partial module
+        run: python -m unittest discover -s tests -p 'test_runtime_observation_partial_service.py' -v
+
+      - name: Bounds tests
+        run: python -m unittest discover -s tests -p 'test_runtime_observation_bounds.py' -v
+
+      - name: CLI tests
+        run: python -m unittest discover -s tests -p 'test_runtime_observation_cli.py' -v
