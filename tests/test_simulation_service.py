@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from origin_forge.lineage import OriginForgeLineage
 from origin_forge.runtime import OriginForgeRuntime
@@ -172,6 +173,14 @@ class SimulationServiceTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(SimulationEngineError, "engine identity"):
             SimulationService(self.runtime).execute(self.task, spec)
+        self.assertEqual(OriginForgeLineage(self.runtime).list_artifacts(), [])
+
+    def test_evidence_byte_limit_fails_before_artifact_persistence(self) -> None:
+        before = self.runtime.get_task(self.task)
+        with patch("origin_forge.simulation_service.MAX_SIMULATION_EVIDENCE_BYTES", 1):
+            with self.assertRaisesRegex(SimulationServiceError, "byte limit"):
+                SimulationService(self.runtime).execute(self.task, self._spec())
+        self._assert_task_observation_only(before, self.runtime.get_task(self.task))
         self.assertEqual(OriginForgeLineage(self.runtime).list_artifacts(), [])
 
     def test_service_exposes_no_production_mutation_or_release_authority(self) -> None:
