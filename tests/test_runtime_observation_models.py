@@ -68,6 +68,22 @@ class RuntimeObservationModelTests(unittest.TestCase):
             baselines=(self._baseline(),),
         )
 
+    def _outputs(self, request: RuntimeObservationRequest) -> tuple[RuntimeCaptureEvidence, ...]:
+        return tuple(
+            RuntimeCaptureEvidence(
+                capture_id=spec.capture_id,
+                kind=spec.kind,
+                relative_path=spec.relative_path,
+                timestamp_ms=spec.timestamp_ms,
+                content_hash=SHA_B,
+                pixel_hash=SHA_C,
+                byte_count=70,
+                width=2,
+                height=2,
+            )
+            for spec in request.captures
+        )
+
     def test_request_is_content_addressed_and_orders_timed_captures(self) -> None:
         request = self._request()
         self.assertTrue(request.observation_id.startswith("OBS-"))
@@ -104,22 +120,9 @@ class RuntimeObservationModelTests(unittest.TestCase):
                 ),
             )
 
-    def test_result_binds_exact_capture_set_and_identity(self) -> None:
+    def test_result_binds_exact_capture_set_on_normal_exit(self) -> None:
         request = self._request()
-        outputs = tuple(
-            RuntimeCaptureEvidence(
-                capture_id=spec.capture_id,
-                kind=spec.kind,
-                relative_path=spec.relative_path,
-                timestamp_ms=spec.timestamp_ms,
-                content_hash=SHA_B,
-                pixel_hash=SHA_C,
-                byte_count=70,
-                width=2,
-                height=2,
-            )
-            for spec in request.captures
-        )
+        outputs = self._outputs(request)
         result = RuntimeObservationResult(
             observation_id=request.observation_id,
             workspace_id=request.workspace_id,
@@ -159,6 +162,28 @@ class RuntimeObservationModelTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeObservationModelError, "capture set"):
             missing.bind_request(request)
+
+    def test_abnormal_exit_may_bind_declared_capture_subset(self) -> None:
+        request = self._request()
+        outputs = self._outputs(request)
+        result = RuntimeObservationResult(
+            observation_id=request.observation_id,
+            workspace_id=request.workspace_id,
+            request_hash=request.content_hash,
+            status=RuntimeObservationStatus.SUCCEEDED,
+            backend_id=request.backend_id,
+            backend_version=request.backend_version,
+            target_id=request.target_id,
+            target_version=request.target_version,
+            executable_hash=request.executable_hash,
+            exit_kind=RuntimeExitKind.FAILED,
+            exit_code=3,
+            stdout=RuntimeLogEvidence("logs/stdout.log", SHA_B, 0),
+            stderr=RuntimeLogEvidence("logs/stderr.log", SHA_B, 0),
+            captures=outputs[:1],
+            performance=RuntimePerformanceEvidence(12, 1000),
+        )
+        result.bind_request(request)
 
     def test_timeout_may_not_claim_exit_code(self) -> None:
         request = RuntimeObservationRequest.create(
