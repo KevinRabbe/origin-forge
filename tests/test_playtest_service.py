@@ -45,22 +45,35 @@ class _FakePlaytestBackend:
         reported_workspace: Path | None = None,
         corrupt_stdout_hash: bool = False,
         escaped_stdout: bool = False,
+        aliased_stdout: bool = False,
+        escaped_scenario: bool = False,
+        inconsistent_exit_state: bool = False,
     ):
         self.runtime = runtime
         self.outcome = outcome
         self.reported_workspace = reported_workspace
         self.corrupt_stdout_hash = corrupt_stdout_hash
         self.escaped_stdout = escaped_stdout
+        self.aliased_stdout = aliased_stdout
+        self.escaped_scenario = escaped_scenario
+        self.inconsistent_exit_state = inconsistent_exit_state
 
     def execute(self, scenario: PlaytestScenario) -> PlaytestHarnessExecution:
         workspace = self.runtime.state_dir / "playtests" / scenario.workspace_id
-        for name in ("request", "runtime", "logs"):
+        for name in ("runtime", "logs"):
             (workspace / name).mkdir(parents=True, exist_ok=True)
         (workspace / "runtime" / "home").mkdir(exist_ok=True)
         (workspace / "runtime" / "tmp").mkdir(exist_ok=True)
-        (workspace / "request" / "scenario.json").write_bytes(
-            canonical_bytes(scenario.to_dict())
-        )
+        scenario_bytes = canonical_bytes(scenario.to_dict())
+        if self.escaped_scenario:
+            escaped_request = self.runtime.state_dir / "unrelated-playtest-request"
+            escaped_request.mkdir()
+            (escaped_request / "scenario.json").write_bytes(scenario_bytes)
+            (workspace / "request").symlink_to(escaped_request, target_is_directory=True)
+        else:
+            (workspace / "request").mkdir()
+            (workspace / "request" / "scenario.json").write_bytes(scenario_bytes)
+
         stdout = b"synthetic player started\n"
         stderr = b"target exited nonzero\n" if self.outcome is PlaytestOutcome.FAILED else b""
         stdout_path = workspace / "logs" / "stdout.log"
@@ -71,6 +84,9 @@ class _FakePlaytestBackend:
         if self.escaped_stdout:
             reported_stdout_path = self.runtime.state_dir / "unrelated-playtest-stdout.log"
             reported_stdout_path.write_bytes(stdout)
+        elif self.aliased_stdout:
+            reported_stdout_path = workspace / "logs" / ".." / "logs" / "stdout.log"
+
         events = (
             PlaytestTelemetryEvent(
                 0, 100, PlaytestTelemetryKind.PROGRESSION, "spawn"
@@ -102,6 +118,9 @@ class _FakePlaytestBackend:
         )
         timed_out = self.outcome is PlaytestOutcome.TIMEOUT
         exit_code = None if timed_out else (0 if self.outcome is PlaytestOutcome.COMPLETED else 7)
+        if self.inconsistent_exit_state:
+            timed_out = False
+            exit_code = 0
         return PlaytestHarnessExecution(
             scenario=scenario,
             telemetry=telemetry,
@@ -259,6 +278,30 @@ class PlaytestServiceTests(unittest.TestCase):
         self.assertEqual(len(runs), 1)
         self.assertEqual(runs[0]["status"], RunStatus.FAILED.value)
         self.assertEqual(self.runtime.list_verifications("TASK", self.task), [])
+
+    def test_log_path_alias_is_rejected_even_when_it_resolves_to_exact_file(self) -> None:
+        with self.assertRaisesRegex(PlaytestServiceError, "exact governed"):
+            PlaytestService(
+                self.runtime,
+                _FakePlaytestBackend(self.runtime, aliased_stdout=True),
+            ).execute(self.task, self._scenario())
+        self.assertEqual(OriginForgeLineage(self.runtime).list_artifacts(), [])
+
+    def test_scenario_parent_symlink_escape_fails_before_artifact_persistence(self) -> None:
+        with self.assertRaisesRegex(PlaytestServiceError, "may not use symlinks"):
+            PlaytestService(
+                self.runtime,
+                _FakePlaytestBackend(self.runtime, escaped_scenario=True),
+            ).execute(self.task, self._scenario())
+        self.assertEqual(OriginForgeLineage(self.runtime).list_artifacts(), [])
+
+    def test_backend_outcome_exit_inconsistency_fails_closed(self) -> None:
+        with self.assertRaisesRegex(PlaytestServiceError, "disagrees"):
+            PlaytestService(
+                self.runtime,
+                _FakePlaytestBackend(self.runtime, inconsistent_exit_state=True),
+            ).execute(self.task, self._scenario())
+        self.assertEqual(OriginForgeLineage(self.runtime).list_artifacts(), [])
 
     def test_log_hash_drift_fails_closed(self) -> None:
         with self.assertRaisesRegex(PlaytestServiceError, "hash drifted"):
