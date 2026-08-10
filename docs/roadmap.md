@@ -293,9 +293,9 @@ See `docs/phase-19-pixelorama.md` and `docs/pixelorama-real-gate.md` for the imp
 
 **Exit condition met:** Origin Forge can run a pinned real Pixelorama v1.2 headless spritesheet export over exact frozen input inside an isolated workspace, independently validate containment/hash/raster output, record evidence without transferring Task authority, and explicitly adopt a verified new media output without overwrite or signing authority.
 
-## Phase 20 — Blockbench Integration — IN PROGRESS / BLOCKED
+## Phase 20A — Editor-Independent 3D Integration Substrate — DONE
 
-Implemented the deterministic editor-independent 3D substrate:
+Implemented the deterministic 3D substrate independently of any single editor:
 
 - infrastructure-owned `MODEL3D-*` workspace IDs and `BBOP-*` operation IDs
 - bounded immutable project contracts for bones/hierarchy, cuboids, pivots/rotations, UV offsets, exact texture refs, animations, and keyframes
@@ -306,21 +306,61 @@ Implemented the deterministic editor-independent 3D substrate:
 - explicit rejection of external GLB asset URIs in the initial evidence surface
 - fake-process adversarial integration coverage proving the Origin Forge side of the isolation/protocol/validation boundary
 
-The intended real-editor boundary is a pinned governed JavaScript plugin using Blockbench's supported plugin/API surface. Origin Forge does not synthesize Blockbench's internal `.bbmodel` bytes, execute model-generated JavaScript, manipulate Electron/Chromium private state, or use GUI-coordinate automation.
+**Exit condition met:** Origin Forge owns a backend-replaceable, content-addressed 3D contract and independent GLB truth layer without depending on a specific editor runtime.
 
-**Current blocker:** Blockbench v5.1.4 exposes supported plugins and `--userData`, but the inspected upstream startup surface does not provide a supported non-interactive way to load an exact local side-loaded plugin, nor a documented headless create/edit/export CLI. Side-loaded plugin testing/loading is interactive; startup reloads plugins from persisted `installed_plugins` state stored through browser `localStorage`. Merely placing a plugin in the isolated `plugins/` directory is insufficient, while manufacturing Chromium LevelDB/localStorage would depend on undocumented private state. The web `plugins=` URL parameter prompts the user to install store plugin IDs rather than providing a governed local-plugin bootstrap.
+## Phase 20B — Real Blockbench Automation — DEFERRED
 
-See `docs/phase-20-blockbench.md` for the implemented contract and exact unblock conditions.
+The intended real Blockbench boundary remains a pinned governed JavaScript plugin using Blockbench's supported plugin/API surface. Origin Forge does not synthesize Blockbench's internal `.bbmodel` bytes, execute model-generated JavaScript, manipulate Electron/Chromium private state, or use GUI-coordinate automation.
 
-**Exit condition pending:** Phase 20 remains draft until a supported non-interactive Blockbench plugin/bootstrap or equivalent programmatic editor entry point can drive one pinned real Blockbench execution whose GLB output is independently validated by Origin Forge.
+Blockbench v5.1.4 was inspected and did not expose a supported non-interactive way to load an exact local side-loaded plugin or a documented headless create/edit/export CLI. Side-loaded plugin startup depends on persisted browser state, and manufacturing Chromium/LevelDB state would rely on private implementation details.
 
-## Phase 21 — Image and Vision — PLANNED
+See `docs/phase-20-blockbench.md` for the implemented contract and exact future unblock conditions.
 
-Add replaceable local image generation/editing and vision inspection adapters for concepts, references, textures/UI exploration, screenshots/assets, and independent visual critique.
+**Deferred condition:** revisit when Blockbench exposes a supported non-interactive bootstrap, or when Origin Forge deliberately approves a separately maintained/pinned distribution or fork. Blockbench no longer blocks unrelated roadmap work.
 
-## Phase 22 — Audio — PLANNED
+## Phase 20C — Governed Blender Backend — NEXT
 
-Add deterministic/local SFX, FFmpeg processing, music generation, TTS, and audio validation/provenance.
+Add Blender as a second, separately governed 3D/media backend behind the Phase-20A contracts rather than as unrestricted Python execution.
+
+Initial boundary:
+
+- exact pinned Blender release/runtime identity and executable/runtime hash;
+- background/factory-startup execution with automatic script execution disabled where applicable;
+- isolated `MODEL3D-*` workspace and minimal environment;
+- bounded structured job specifications owned by Origin Forge;
+- infrastructure-owned, frozen Blender runner code for any required `bpy` operations;
+- no caller/model-supplied Python, shell commands, add-on installation, arbitrary host paths, merge/release/adoption authority, or self-verification;
+- declared GLB and optional PNG render outputs only in the first slice;
+- independent Origin Forge GLB/PNG hash and structural validation after Blender exits;
+- real pinned Blender evidence required before the backend is called complete.
+
+Blockbench and Blender remain replaceable backends; neither defines Origin Forge's canonical 3D representation or production truth.
+
+## Phase 21 — Image and Vision — DONE
+
+Implemented provider-neutral image generation/editing and advisory visual inspection boundaries with isolated `IMAGE-*` workspaces, immutable governed workflows, independent raster validation, durable Run/Artifact/Verification evidence, create-only adoption, and read-only operator surfaces.
+
+Real evidence includes a pinned local llama.cpp + SmolVLM multimodal path with request-bound structured output and a pinned ComfyUI + SD1.5 generation path with frozen source/model/dependency identities. Generated or inspected image evidence never verifies or completes the production Task by itself.
+
+**Exit condition met:** real pinned generation and vision backends execute through governed replaceable adapters, outputs are independently validated, and semantic model findings remain advisory evidence rather than production truth.
+
+## Phase 22 — Audio — DONE
+
+Implemented deterministic/local audio production and evidence:
+
+- exact canonical PCM16 RIFF/WAVE parsing, encoding, inspection and metadata-stripping canonicalization;
+- deterministic structured SFX/music synthesis;
+- immutable governed audio profiles and typed operation/result contracts;
+- bounded FFmpeg and Piper process adapters with no caller-supplied shell/command authority;
+- durable audio Run/Artifact/Verification lineage with independent exact-workspace/output revalidation;
+- create-only verified audio adoption and read-only operator inspection;
+- pinned real FFmpeg 8.1.2 processing evidence;
+- pinned real Piper v1.6.0 + reviewed Joe voice TTS evidence;
+- Piper-specific exact streaming IEEE-float32 WAV normalization into shared canonical PCM16 without weakening the canonical WAV parser.
+
+See `docs/phase-22-audio.md` for the detailed architecture, pins, authority exclusions and evidence levels.
+
+**Exit condition met:** deterministic audio substrate, real governed processing, and real governed TTS all produce independently validated canonical evidence while neural SFX/music remains optional and replaceable.
 
 ## Phase 23 — Runtime Observation — PLANNED
 
