@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import signal
 import sys
 import tempfile
 import textwrap
@@ -137,6 +138,19 @@ class RuntimeObserverTests(unittest.TestCase):
         self.assertEqual(result.exit_kind, RuntimeExitKind.TIMEOUT)
         self.assertIsNone(result.exit_code)
         self.assertGreaterEqual(result.performance.duration_ms, 900)
+
+    def test_signal_is_distinct_runtime_evidence(self) -> None:
+        script = self._script(
+            """
+            import os
+            import signal
+            os.kill(os.getpid(), signal.SIGTERM)
+            """
+        )
+        result = self._adapter(script).execute(self._request()).result
+        self.assertEqual(result.status, RuntimeObservationStatus.SUCCEEDED)
+        self.assertEqual(result.exit_kind, RuntimeExitKind.SIGNALED)
+        self.assertEqual(result.exit_code, -signal.SIGTERM)
 
     def test_undeclared_capture_fails_closed(self) -> None:
         script = self._script(
