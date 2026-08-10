@@ -27,7 +27,6 @@ from origin_forge.harness_workshop_models import (
 )
 from origin_forge.harness_workshop_skill_adapter import (
     PHASE12_SKILL_PROTOCOL,
-    SkillWorkshopEvaluation,
     evaluate_skill_benchmark,
 )
 from origin_forge.ids import IdKind, new_id
@@ -188,7 +187,7 @@ class HarnessWorkshopAuditTests(unittest.TestCase):
         )
         self.assertFalse(rejected.to_dict()["promotion_eligible"])
 
-    def test_non_skill_candidate_uses_generic_trusted_evaluation_path(self) -> None:
+    def test_non_skill_candidate_fails_closed_without_trusted_evaluator_adapter(self) -> None:
         candidate = self._candidate(HarnessComponentKind.PROMPT)
         plan = self._plan(candidate, "prompt-benchmark-v1")
         report = WorkshopEvaluationReport.evaluate(
@@ -205,15 +204,42 @@ class HarnessWorkshopAuditTests(unittest.TestCase):
             plan=plan,
             evaluation=report,
         )
-        self.assertIs(audit.status, WorkshopAuditStatus.PASS)
-        decision = WorkshopDecision.create(
+        self.assertIs(audit.status, WorkshopAuditStatus.FAIL)
+        self.assertIn("no promotion-capable trusted evaluator", audit.findings[0])
+        deferred = WorkshopDecision.create(
             audit=audit,
             evaluation=report,
-            outcome=WorkshopDecisionOutcome.APPROVE_FOR_PROMOTION,
-            rationale="Structurally valid improved evidence is eligible for a separate promotion gate.",
+            outcome=WorkshopDecisionOutcome.DEFER,
+            rationale="No governed evaluator adapter exists for this target kind yet.",
         )
-        self.assertTrue(decision.to_dict()["promotion_eligible"])
-        self.assertFalse(decision.to_dict()["production_activation_authorized"])
+        self.assertFalse(deferred.to_dict()["promotion_eligible"])
+        with self.assertRaisesRegex(HarnessWorkshopModelError, "passing workshop audit"):
+            WorkshopDecision.create(
+                audit=audit,
+                evaluation=report,
+                outcome=WorkshopDecisionOutcome.APPROVE_FOR_PROMOTION,
+                rationale="An untrusted evaluator may not create promotion eligibility.",
+            )
+
+    def test_arbitrary_skill_evaluator_protocol_fails_structural_audit(self) -> None:
+        candidate = self._candidate(HarnessComponentKind.SKILL)
+        plan = self._plan(candidate, "candidate-selected-scorer")
+        report = WorkshopEvaluationReport.evaluate(
+            candidate=candidate,
+            plan=plan,
+            baseline_metrics={"success": 80},
+            candidate_metrics={"success": 99},
+            baseline_cost=_costs(),
+            candidate_cost=_costs(),
+            evaluator_evidence=(_evidence(),),
+        )
+        audit = audit_workshop_evaluation(
+            candidate=candidate,
+            plan=plan,
+            evaluation=report,
+        )
+        self.assertIs(audit.status, WorkshopAuditStatus.FAIL)
+        self.assertIn("no promotion-capable trusted evaluator", audit.findings[0])
 
     def test_forged_skill_effective_verdict_fails_audit(self) -> None:
         candidate = self._candidate(HarnessComponentKind.SKILL)
