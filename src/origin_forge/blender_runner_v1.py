@@ -190,6 +190,7 @@ def _load_request(path: Path) -> dict[str, object]:
         raise ValueError("request fields do not match Blender runner v1 schema")
     if value["operation"] != "EXPORT_GLB":
         raise ValueError("runner v1 supports EXPORT_GLB only")
+    _name(value["expected_blender_version"], "expected_blender_version")
     _validate_project(value["project"], value["project_hash"])
     return value
 
@@ -230,6 +231,14 @@ def main() -> None:
         or result_path.is_symlink()
     ):
         raise ValueError("runner output target already exists")
+
+    embedded_version = "Blender " + bpy.app.version_string
+    expected_runtime_version = str(request["expected_blender_version"])
+    if expected_runtime_version not in {
+        embedded_version,
+        embedded_version + " LTS",
+    }:
+        raise ValueError("embedded Blender API version does not match frozen request")
 
     # Factory startup is also enforced by the host argv. Clearing here makes
     # the runner's output independent of any default camera/light/mesh.
@@ -283,7 +292,7 @@ def main() -> None:
         + hashlib.sha256(_canonical_bytes(request)).hexdigest(),
         "project_hash": request["project_hash"],
         "output_relative_path": request["output_relative_path"],
-        "blender_version": "Blender " + bpy.app.version_string,
+        "blender_version": expected_runtime_version,
     }
     result_path.write_bytes(_canonical_bytes(runner_result))
 
