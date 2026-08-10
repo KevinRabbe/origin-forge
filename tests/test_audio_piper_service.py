@@ -158,9 +158,10 @@ class PiperAudioServiceTests(unittest.TestCase):
         output_artifact = self.lineage.get_artifact(result.output.artifact_id)
         self.assertEqual(output_artifact["type"], "AUDIO_OUTPUT_WAV")
         self.assertEqual(output_artifact["model_id"], self.profile.model_id)
+        tool_versions = json.loads(output_artifact["tool_versions_json"])
         self.assertIn(
             f"audio-model:{self.profile.model_id}:{self.profile.model_hash}",
-            output_artifact["tool_versions"],
+            tool_versions,
         )
         verifications = self.lineage.list_artifact_verifications(
             result.output.artifact_id
