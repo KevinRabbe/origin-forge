@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .harness_workshop_evaluators import trusted_workshop_protocols
 from .harness_workshop_store import HarnessWorkshopStore
 from .runtime import OriginForgeRuntime
 
@@ -62,6 +63,7 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "status": "OK",
                     "counts": counts,
+                    "trusted_evaluator_protocols": trusted_workshop_protocols(),
                     "candidate_creation_enabled": False,
                     "evaluation_execution_enabled": False,
                     "promotion_execution_enabled": False,
