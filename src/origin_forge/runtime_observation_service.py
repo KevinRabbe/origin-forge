@@ -22,6 +22,9 @@ from .runtime_visual import RuntimeVisualDiff, compare_png_to_baseline
 from .state import RunStatus, TaskStatus
 
 
+_MAX_CAPTURE_BYTES = 128 * 1024 * 1024
+
+
 class RuntimeObservationServiceError(RuntimeError):
     pass
 
@@ -181,7 +184,16 @@ class RuntimeObservationService:
                 raise RuntimeObservationServiceError(
                     f"visual baseline is missing or unsafe: {baseline_id}"
                 )
+            size = path.stat().st_size
+            if size <= 0 or size > _MAX_CAPTURE_BYTES:
+                raise RuntimeObservationServiceError(
+                    f"visual baseline exceeds bounded PNG byte limit: {baseline_id}"
+                )
             data = path.read_bytes()
+            if len(data) != size:
+                raise RuntimeObservationServiceError(
+                    f"visual baseline changed while being read: {baseline_id}"
+                )
             ref = refs[baseline_id]
             inspection = inspect_truecolor8_png(data)
             actual_hash = self._hash_bytes(data)
@@ -209,12 +221,22 @@ class RuntimeObservationService:
         content_hash: str,
         byte_count: int,
         label: str,
+        max_bytes: int,
     ) -> bytes:
         if path.is_symlink() or not path.is_file():
             raise RuntimeObservationServiceError(f"{label} is missing or unsafe")
+        if not isinstance(max_bytes, int) or max_bytes <= 0:
+            raise RuntimeObservationServiceError(f"{label} has invalid byte budget")
+        if not isinstance(byte_count, int) or byte_count < 0 or byte_count > max_bytes:
+            raise RuntimeObservationServiceError(f"{label} exceeds byte budget")
+        size = path.stat().st_size
+        if size != byte_count or size > max_bytes:
+            raise RuntimeObservationServiceError(f"{label} bytes drifted")
         data = path.read_bytes()
+        if len(data) != size:
+            raise RuntimeObservationServiceError(f"{label} changed while being read")
         actual_hash = "sha256:" + hashlib.sha256(data).hexdigest()
-        if actual_hash != content_hash or len(data) != byte_count:
+        if actual_hash != content_hash:
             raise RuntimeObservationServiceError(f"{label} bytes drifted")
         return data
 
@@ -253,7 +275,10 @@ class RuntimeObservationService:
             request_path = workspace / "request" / "request.json"
             if request_path.is_symlink() or not request_path.is_file():
                 raise RuntimeObservationServiceError("runtime backend omitted request evidence")
-            if request_path.read_bytes() != canonical_bytes(request.to_dict()):
+            expected_request_bytes = canonical_bytes(request.to_dict())
+            if request_path.stat().st_size != len(expected_request_bytes):
+                raise RuntimeObservationServiceError("persisted runtime request bytes drifted")
+            if request_path.read_bytes() != expected_request_bytes:
                 raise RuntimeObservationServiceError("persisted runtime request bytes drifted")
             result_path = workspace / "runtime" / "result.json"
             self._write_json(result_path, execution.result.to_dict())
@@ -286,12 +311,14 @@ class RuntimeObservationService:
                 content_hash=execution.result.stdout.content_hash,
                 byte_count=execution.result.stdout.byte_count,
                 label="runtime stdout log",
+                max_bytes=request.max_log_bytes,
             )
             self._read_bound_file(
                 stderr_path,
                 content_hash=execution.result.stderr.content_hash,
                 byte_count=execution.result.stderr.byte_count,
                 label="runtime stderr log",
+                max_bytes=request.max_log_bytes,
             )
             stdout_artifact_id = self.lineage.create_artifact(
                 artifact_type="RUNTIME_STDOUT_LOG",
@@ -323,6 +350,7 @@ class RuntimeObservationService:
                     content_hash=output.content_hash,
                     byte_count=output.byte_count,
                     label=f"runtime capture {output.capture_id}",
+                    max_bytes=_MAX_CAPTURE_BYTES,
                 )
                 inspection = inspect_truecolor8_png(data)
                 if (
