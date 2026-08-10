@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,7 +85,13 @@ class GeneratedAudioAdopter:
                 "source Artifact must have exactly one PASS audio-output-integrity verification"
             )
         verification = passes[0]
-        evidence = verification.get("evidence")
+        raw_evidence = verification.get("evidence_json")
+        if not isinstance(raw_evidence, str):
+            raise AudioAdoptionError("source audio verification lacks structured evidence")
+        try:
+            evidence = json.loads(raw_evidence)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise AudioAdoptionError("source audio verification lacks structured evidence") from exc
         if not isinstance(evidence, dict):
             raise AudioAdoptionError("source audio verification lacks structured evidence")
         try:
