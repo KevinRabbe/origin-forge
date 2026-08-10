@@ -72,7 +72,7 @@ class AudioProfileTests(unittest.TestCase):
         )
         self.assertEqual(profile.license_id, "CC0-1.0")
         self.assertEqual(profile.license_hash, LICENSE_HASH)
-        with self.assertRaisesRegex(AudioProfileError, "model, config, and license evidence"):
+        with self.assertRaisesRegex(AudioProfileError, "license_id and license_hash"):
             GovernedAudioProfile.create(
                 kind=AudioProfileKind.PIPER_TTS,
                 operation=AudioOperation.SYNTHESIZE_SPEECH,
