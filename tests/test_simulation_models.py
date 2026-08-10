@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import fields
+from dataclasses import fields, replace
 
 from origin_forge.ids import IdKind, validate_id
+from origin_forge.simulation_engine import run_simulation
 from origin_forge.simulation_models import (
     SimulationInvariant,
     SimulationModelError,
     SimulationRule,
     SimulationSpec,
+    SimulationViolation,
 )
 
 
@@ -146,6 +148,69 @@ class SimulationModelTests(unittest.TestCase):
                 max_steps=100,
                 stall_steps=1,
             )
+
+    def test_bind_spec_rejects_firings_greater_than_attempts(self) -> None:
+        spec = SimulationSpec.create(
+            seed=10,
+            initial_state=(("value", 0),),
+            rules=(SimulationRule("income", 0, 1_000_000, produce=(("value", 1),)),),
+            max_steps=1,
+            stall_steps=1,
+        )
+        valid = run_simulation(spec)
+        replicate = valid.replicates[0]
+        forged = replace(
+            replicate,
+            rule_attempts=(("income", 0),),
+            rule_firings=(("income", 1),),
+        )
+        result = replace(valid, replicates=(forged,))
+        with self.assertRaisesRegex(SimulationModelError, "firing/attempt"):
+            result.bind_spec(spec)
+
+    def test_bind_spec_rejects_extrema_excluding_initial_or_final_state(self) -> None:
+        spec = SimulationSpec.create(
+            seed=11,
+            initial_state=(("value", 0),),
+            rules=(SimulationRule("income", 0, 1_000_000, produce=(("value", 1),)),),
+            max_steps=1,
+            stall_steps=1,
+        )
+        valid = run_simulation(spec)
+        replicate = valid.replicates[0]
+        forged = replace(replicate, minimum_state=(("value", 1),))
+        result = replace(valid, replicates=(forged,))
+        with self.assertRaisesRegex(SimulationModelError, "extrema"):
+            result.bind_spec(spec)
+
+    def test_bind_spec_rejects_unknown_or_mismatched_invariant_violation(self) -> None:
+        spec = SimulationSpec.create(
+            seed=12,
+            initial_state=(("value", 0),),
+            rules=(SimulationRule("never", 0, 0, produce=(("value", 1),)),),
+            invariants=(SimulationInvariant("floor", "value", minimum=1),),
+            max_steps=1,
+            stall_steps=1,
+        )
+        valid = run_simulation(spec)
+        replicate = valid.replicates[0]
+        forged_violation = SimulationViolation(
+            invariant_id="unknown",
+            variable="value",
+            checkpoint=0,
+            observed=0,
+            minimum=1,
+            maximum=None,
+        )
+        forged = replace(
+            replicate,
+            violation_count=1,
+            violations=(forged_violation,),
+            violations_truncated=False,
+        )
+        result = replace(valid, replicates=(forged,))
+        with self.assertRaisesRegex(SimulationModelError, "unknown invariant"):
+            result.bind_spec(spec)
 
     def test_rule_surface_contains_only_declarative_state_transition_fields(self) -> None:
         self.assertEqual(
