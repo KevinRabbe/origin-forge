@@ -127,14 +127,14 @@ def _evidence_tuple(
         raise HarnessWorkshopModelError(f"{label} exceeds limit")
     if not all(isinstance(value, EvidenceRef) for value in refs):
         raise HarnessWorkshopModelError(f"{label} must contain EvidenceRef objects")
-    keys = [value.sort_key() for value in refs]
+    keys = [value.key for value in refs]
     if len(set(keys)) != len(keys):
         raise HarnessWorkshopModelError(f"{label} contains duplicate evidence")
     if forbidden_ref_id is not None and any(
         value.ref_id == forbidden_ref_id for value in refs
     ):
         raise HarnessWorkshopModelError(f"{label} may not self-reference the candidate")
-    return tuple(sorted(refs, key=lambda value: value.sort_key()))
+    return tuple(sorted(refs, key=lambda value: value.key))
 
 
 def _validate_json_value(value: object, *, depth: int = 0, nodes: list[int]) -> None:
