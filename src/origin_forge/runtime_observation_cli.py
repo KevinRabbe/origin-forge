@@ -58,7 +58,7 @@ def _runs(runtime: OriginForgeRuntime) -> list[dict[str, object]]:
                 "role": run["role"],
                 "status": run["status"],
                 "started_at": run["started_at"],
-                "finished_at": run["finished_at"],
+                "ended_at": run["ended_at"],
                 "failure_reason": run["failure_reason"],
             }
         )
