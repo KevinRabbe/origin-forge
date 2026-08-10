@@ -45,7 +45,10 @@ def _number(value: object, label: str) -> float:
 def _vec3(value: object, label: str) -> tuple[float, float, float]:
     if not isinstance(value, list) or len(value) != 3:
         raise ValueError(f"{label} must be a three-number array")
-    return tuple(_number(component, f"{label}[{index}]") for index, component in enumerate(value))
+    return tuple(
+        _number(component, f"{label}[{index}]")
+        for index, component in enumerate(value)
+    )
 
 
 def _name(value: object, label: str) -> str:
@@ -62,12 +65,25 @@ def _name(value: object, label: str) -> str:
 def _validate_project(project: object, expected_hash: object) -> dict[str, object]:
     if not isinstance(project, dict):
         raise ValueError("project must be an object")
-    expected = {"schema_version", "project_name", "bones", "cuboids", "textures", "animations"}
+    expected = {
+        "schema_version",
+        "project_name",
+        "bones",
+        "cuboids",
+        "textures",
+        "animations",
+    }
     if set(project) != expected or project["schema_version"] != 1:
         raise ValueError("project fields do not match runner v1 schema")
     _name(project["project_name"], "project_name")
-    if project["bones"] != [] or project["textures"] != [] or project["animations"] != []:
-        raise ValueError("runner v1 accepts unrigged untextured unanimated projects only")
+    if (
+        project["bones"] != []
+        or project["textures"] != []
+        or project["animations"] != []
+    ):
+        raise ValueError(
+            "runner v1 accepts unrigged untextured unanimated projects only"
+        )
     cuboids = project["cuboids"]
     if not isinstance(cuboids, list) or not 1 <= len(cuboids) <= _MAX_CUBOIDS:
         raise ValueError("runner v1 cuboid count is outside the allowed range")
@@ -76,7 +92,9 @@ def _validate_project(project: object, expected_hash: object) -> dict[str, objec
     return project
 
 
-def _validate_cuboid(value: object) -> tuple[str, tuple[float, float, float], tuple[float, float, float]]:
+def _validate_cuboid(
+    value: object,
+) -> tuple[str, tuple[float, float, float], tuple[float, float, float]]:
     if not isinstance(value, dict):
         raise ValueError("cuboid must be an object")
     expected = {
@@ -110,12 +128,16 @@ def _validate_cuboid(value: object) -> tuple[str, tuple[float, float, float], tu
         raise ValueError("runner v1 does not accept UV controls")
     if value["visible"] is not True:
         raise ValueError("runner v1 requires visible cuboids")
-    if any(finish < begin for begin, finish in zip(start, end, strict=True)) or start == end:
-        raise ValueError("cuboid extent is invalid")
+    if any(finish <= begin for begin, finish in zip(start, end, strict=True)):
+        raise ValueError("runner v1 requires positive cuboid extent on every axis")
     return element_id, start, end
 
 
-def _create_cuboid(element_id: str, start: tuple[float, float, float], end: tuple[float, float, float]) -> None:
+def _create_cuboid(
+    element_id: str,
+    start: tuple[float, float, float],
+    end: tuple[float, float, float],
+) -> None:
     x0, y0, z0 = start
     x1, y1, z1 = end
     vertices = (
@@ -196,17 +218,30 @@ def main() -> None:
     result_path.parent.resolve(strict=True).relative_to(workspace)
 
     request = _load_request(request_path)
-    expected_output = (workspace / str(request["output_relative_path"])).resolve(strict=False)
+    expected_output = (
+        workspace / str(request["output_relative_path"])
+    ).resolve(strict=False)
     if output_path != expected_output:
         raise ValueError("output path does not match frozen request")
-    if output_path.exists() or output_path.is_symlink() or result_path.exists() or result_path.is_symlink():
+    if (
+        output_path.exists()
+        or output_path.is_symlink()
+        or result_path.exists()
+        or result_path.is_symlink()
+    ):
         raise ValueError("runner output target already exists")
 
-    # Factory startup is also enforced by the host argv.  Clearing here makes
+    # Factory startup is also enforced by the host argv. Clearing here makes
     # the runner's output independent of any default camera/light/mesh.
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False, confirm=False)
-    for datablocks in (bpy.data.meshes, bpy.data.curves, bpy.data.materials, bpy.data.cameras, bpy.data.lights):
+    for datablocks in (
+        bpy.data.meshes,
+        bpy.data.curves,
+        bpy.data.materials,
+        bpy.data.cameras,
+        bpy.data.lights,
+    ):
         for datablock in tuple(datablocks):
             if datablock.users == 0:
                 datablocks.remove(datablock)
@@ -244,7 +279,8 @@ def main() -> None:
         "status": "SUCCEEDED",
         "operation_id": request["operation_id"],
         "workspace_id": request["workspace_id"],
-        "request_hash": "sha256:" + hashlib.sha256(_canonical_bytes(request)).hexdigest(),
+        "request_hash": "sha256:"
+        + hashlib.sha256(_canonical_bytes(request)).hexdigest(),
         "project_hash": request["project_hash"],
         "output_relative_path": request["output_relative_path"],
         "blender_version": "Blender " + bpy.app.version_string,
