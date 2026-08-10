@@ -49,7 +49,7 @@ class RealBlenderIntegrationTests(unittest.TestCase):
             archive_sha,
             "96f6c181a30f4950607839dc84d42a354b250d8a0231b098b59b7bc69c351c48",
         )
-        self.assertEqual(expected_version, "Blender 5.2.0")
+        self.assertEqual(expected_version, "Blender 5.2.0 LTS")
         self.assertEqual(blender_runtime_tree_hash(runtime_root), runtime_hash)
         self.assertEqual(blender_runner_v1_fingerprint(), runner_sha)
 
