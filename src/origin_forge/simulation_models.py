@@ -464,21 +464,102 @@ class SimulationResult:
             or len(self.replicates) != spec.replicates
         ):
             raise SimulationModelError("simulation result does not bind exact specification")
+
         expected_state_names = tuple(name for name, _ in spec.initial_state)
         expected_rule_ids = tuple(sorted(rule.rule_id for rule in spec.rules))
+        initial_state = dict(spec.initial_state)
+        invariant_by_id = {value.invariant_id: value for value in spec.invariants}
+
         for replicate in self.replicates:
             if replicate.steps_executed > spec.max_steps:
                 raise SimulationModelError("replicate exceeds spec max_steps")
+
+            state_maps: list[dict[str, int]] = []
             for values in (
                 replicate.final_state,
                 replicate.minimum_state,
                 replicate.maximum_state,
             ):
                 if tuple(name for name, _ in values) != expected_state_names:
-                    raise SimulationModelError("replicate state variables differ from specification")
+                    raise SimulationModelError(
+                        "replicate state variables differ from specification"
+                    )
+                state_maps.append(dict(values))
+            final_state, minimum_state, maximum_state = state_maps
+            for name in expected_state_names:
+                if not (
+                    minimum_state[name]
+                    <= initial_state[name]
+                    <= maximum_state[name]
+                    and minimum_state[name]
+                    <= final_state[name]
+                    <= maximum_state[name]
+                ):
+                    raise SimulationModelError(
+                        "replicate state extrema do not contain initial/final state"
+                    )
+
+            metric_maps: list[dict[str, int]] = []
             for values in (replicate.rule_attempts, replicate.rule_firings):
                 if tuple(name for name, _ in values) != expected_rule_ids:
-                    raise SimulationModelError("replicate rule metrics differ from specification")
+                    raise SimulationModelError(
+                        "replicate rule metrics differ from specification"
+                    )
+                metric_maps.append(dict(values))
+            attempts, firings = metric_maps
+            for rule_id in expected_rule_ids:
+                if not (
+                    0
+                    <= firings[rule_id]
+                    <= attempts[rule_id]
+                    <= replicate.steps_executed
+                ):
+                    raise SimulationModelError(
+                        "replicate rule firing/attempt counts are inconsistent"
+                    )
+
+            possible_violations = len(spec.invariants) * (replicate.steps_executed + 1)
+            if replicate.violation_count > possible_violations:
+                raise SimulationModelError(
+                    "replicate violation_count exceeds possible invariant checkpoints"
+                )
+            violation_keys: list[tuple[int, str]] = []
+            for violation in replicate.violations:
+                invariant = invariant_by_id.get(violation.invariant_id)
+                if invariant is None:
+                    raise SimulationModelError(
+                        "replicate violation references unknown invariant"
+                    )
+                if (
+                    violation.variable != invariant.variable
+                    or violation.minimum != invariant.minimum
+                    or violation.maximum != invariant.maximum
+                ):
+                    raise SimulationModelError(
+                        "replicate violation differs from declared invariant"
+                    )
+                if violation.checkpoint > replicate.steps_executed:
+                    raise SimulationModelError(
+                        "replicate violation checkpoint exceeds executed steps"
+                    )
+                actually_violated = (
+                    invariant.minimum is not None
+                    and violation.observed < invariant.minimum
+                ) or (
+                    invariant.maximum is not None
+                    and violation.observed > invariant.maximum
+                )
+                if not actually_violated:
+                    raise SimulationModelError(
+                        "replicate violation does not violate its declared invariant"
+                    )
+                violation_keys.append((violation.checkpoint, violation.invariant_id))
+            if len(set(violation_keys)) != len(violation_keys):
+                raise SimulationModelError("replicate contains duplicate stored violations")
+            if violation_keys != sorted(violation_keys):
+                raise SimulationModelError(
+                    "replicate stored violations are not in canonical order"
+                )
 
     def to_dict(self) -> dict[str, object]:
         return {
