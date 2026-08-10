@@ -1,6 +1,6 @@
 # Phase 23 — Runtime Observation
 
-Status: **IN PROGRESS — governed v1 substrate implemented; final exact-head closure pending**
+Status: **IN PROGRESS — governed v1 substrate and roadmap synchronized; final exact-head closure pending**
 
 Phase 23 adds runtime evidence without creating a second path for production truth. Launches, logs, captures, crashes, timings, memory observations, and visual comparisons are evidence about an application run. They do not verify or complete the production Task by themselves.
 
@@ -33,9 +33,9 @@ The repository now provides:
 - no caller-controlled environment variables or follow-up commands;
 - bounded concurrent stdout/stderr draining with active termination on overflow;
 - POSIX process-group cleanup, including descendants that survive direct-child exit;
-- wall-clock duration and best-effort Linux `/proc` peak-RSS observations;
+- wall-clock duration and best-effort Linux `/proc` direct-process peak-RSS observations;
 - cooperative exact-path screenshot capture as standard RGB/RGBA PNG;
-- timed `VIDEO_FRAME` PNG sequences as the canonical v1 video evidence surface;
+- logically timed `VIDEO_FRAME` PNG sequences as the canonical v1 video evidence surface;
 - exact capture-set enforcement with symlink/root containment rejection;
 - pre-read PNG size bounds so sparse/oversized captures cannot force an unbounded allocation;
 - independent PNG reinspection after the backend returns;
@@ -48,7 +48,7 @@ The repository now provides:
 
 ## Why video is a frame sequence in v1
 
-A codec container is useful transport but poor canonical truth. Different encoder builds and metadata can produce different bytes for the same frames. Phase 23 therefore starts from timed, independently validated PNG frames. A later governed FFmpeg derivation can package those frames into a viewable video while the frame sequence remains the deterministic evidence source.
+A codec container is useful transport but poor canonical truth. Different encoder builds and metadata can produce different bytes for the same frames. Phase 23 therefore starts from logically timed, independently validated PNG frames. A later governed FFmpeg derivation can package those frames into a viewable video while the frame sequence remains the deterministic evidence source.
 
 This is intentionally analogous to the Phase-22 audio rule that canonical media structure is independently inspected instead of trusting a tool exit code.
 
@@ -64,6 +64,12 @@ The v1 local process backend does not pretend to be a universal desktop recorder
 A target that supports the governed observation hook may write the exact declared PNGs there. Undeclared files, missing captures, symlinks, invalid PNGs, oversized PNGs, path escapes, or capture drift fail closed.
 
 **Decision:** cooperative exact-path capture is the accepted Phase-23 v1 capture surface. Platform framebuffer/window capture is a replaceable backend-specific enhancement, not a blocker for the runtime-observation substrate. A future native/window backend must be separately governed and proven rather than hidden behind GUI-coordinate automation.
+
+### Capture timing semantics
+
+`timestamp_ms` is a frozen logical capture offset in the request and capture manifest. The service proves that the returned capture has the exact declared capture ID, kind, path and logical timestamp, but the cooperative v1 backend does **not** independently measure the wall-clock instant at which target code sampled the image.
+
+Therefore Phase 23 v1 proves the ordered/logically timed frame contract and exact frame bytes; it does not claim independent framebuffer-time attestation. A future window/framebuffer backend may add infrastructure-measured sampling timestamps as a stronger evidence level without changing the current canonical frame contract.
 
 ## Process authority
 
@@ -93,7 +99,7 @@ observer succeeded + app crashed
 observer infrastructure failed
 ```
 
-The durable Run records `crash_detected`, `timed_out`, exit kind/code, log Artifacts, capture Artifacts, duration and peak RSS. Governance or a later verification policy may decide what those observations mean for a particular production Task.
+The durable Run records `crash_detected`, `timed_out`, exit kind/code, log Artifacts, capture Artifacts, duration and direct-process peak RSS. Governance or a later verification policy may decide what those observations mean for a particular production Task.
 
 ## Visual regression
 
@@ -145,6 +151,8 @@ Not implemented or authorized:
 - caller/model-selected executables or environment variables;
 - host-filesystem or network sandbox claims for the native local backend;
 - OS/window/framebuffer capture as a required canonical backend;
+- infrastructure-attested wall-clock capture timestamps for cooperative frames;
+- aggregate descendant/process-tree RSS accounting;
 - mouse/keyboard/game-controller automation;
 - semantic visual grading by a vision model;
 - performance-budget pass/fail authority;
@@ -161,14 +169,14 @@ Phase 23 v1 is complete when one immutable repository head proves on the normal 
 1. launch one exact adapter-owned executable with fixed argv and no shell/caller environment authority;
 2. bound stdout/stderr and terminate the full observation process group on timeout/overflow/cleanup;
 3. record normal exit, nonzero failure, signal, or timeout distinctly from observer infrastructure failure;
-4. capture only the exact declared screenshot/timed-video-frame PNG set and independently validate bounded bytes/pixels;
+4. capture only the exact declared screenshot/logically timed-video-frame PNG set and independently validate bounded bytes/pixels;
 5. revalidate exact baseline Artifacts and emit deterministic visual-regression PASS/FAIL evidence;
-6. persist request/result/log/capture lineage plus duration/peak-RSS evidence;
+6. persist request/result/log/capture lineage plus duration/direct-process peak-RSS evidence;
 7. expose that evidence through a read-only operator surface; and
 8. prove none of those paths verifies/completes the production Task, adopts assets, signs provenance, merges, or releases.
 
-The regression suite uses real local subprocesses for launch, timeout, log overflow, abnormal exit, sparse oversized capture, and descendant cleanup, while fake service adapters exercise adversarial workspace/evidence binding. A separate heavyweight external runtime is not required for the v1 substrate because the governed local process boundary itself executes for real in ordinary CI.
+The regression suite uses real local subprocesses for launch, timeout, log overflow, nonzero exit, signal exit, sparse oversized capture, and descendant cleanup, while fake service adapters exercise adversarial workspace/evidence binding. A separate heavyweight external runtime is not required for the v1 substrate because the governed local process boundary itself executes for real in ordinary CI.
 
-Remaining closure work is limited to canonical roadmap synchronization and one final exact-head Python 3.12/3.13 matrix after documentation is frozen.
+Remaining closure work is one final exact-head Python 3.12/3.13 matrix after this documentation is frozen.
 
 Phase 24 remains separate. Runtime observation collects evidence; automated playtesting decides and performs synthetic player actions.
