@@ -140,6 +140,21 @@ class ProgrammaticContextProposalTests(unittest.TestCase):
                 budget=self.budget,
             )
 
+    def test_pathological_integer_is_normalized_to_bounded_proposal_error(self) -> None:
+        huge_integer = "9" * 5000
+        raw = (
+            '{"instructions":[{"binding":"first","operation_id":"context.lookup",'
+            '"operation_version":"1","arguments":[{"kind":"LITERAL","name":"id",'
+            '"literal":' + huge_integer + '}]}],"output_bindings":["first"]}'
+        )
+        with self.assertRaisesRegex(ContextProgramProposalError, "invalid bounded JSON"):
+            parse_context_program_proposal(
+                raw,
+                request=self.request,
+                catalog=self.catalog,
+                budget=self.budget,
+            )
+
     def test_literal_float_is_rejected_through_model_contract(self) -> None:
         proposal = self._proposal()
         proposal["instructions"][0]["arguments"][0]["literal"] = 0.5  # type: ignore[index]
