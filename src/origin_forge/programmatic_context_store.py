@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .ids import IdKind, validate_id
+from .programmatic_context_benchmark import ContextExperimentReport
 from .programmatic_context_models import (
     ContextExecutionTrace,
     ContextOperationCatalog,
@@ -26,6 +27,7 @@ _CATEGORY_KIND = {
     "programs": IdKind.CONTEXT_PROGRAM,
     "packages": IdKind.CONTEXT_PACKAGE,
     "executions": IdKind.CONTEXT_EXECUTION,
+    "experiments": IdKind.CONTEXT_EXPERIMENT,
 }
 
 
@@ -95,6 +97,8 @@ class ProgrammaticContextStore:
             return value.package_id
         if category == "executions" and isinstance(value, ContextExecutionTrace):
             return value.execution_id
+        if category == "experiments" and isinstance(value, ContextExperimentReport):
+            return value.experiment_id
         raise TypeError(f"object type does not belong in programmatic-context/{category}")
 
     def _exact_path(self, category: str, object_id: str, *, require_file: bool) -> Path:
@@ -217,3 +221,6 @@ class ProgrammaticContextStore:
 
     def publish_execution(self, value: ContextExecutionTrace) -> Path:
         return self._publish("executions", value)
+
+    def publish_experiment(self, value: ContextExperimentReport) -> Path:
+        return self._publish("experiments", value)
