@@ -1,8 +1,8 @@
 # Phase 26 — Skill & Harness Workshop
 
-Status: **IN PROGRESS — governed improvement-candidate and evaluation substrate**
+Status: **DONE — governed proposal, evaluation, audit and promotion-eligibility substrate**
 
-Phase 26 turns verified trajectories, audited Dream findings and benchmark evidence into bounded improvement proposals without introducing live self-modification.
+Phase 26 turns verified trajectories, Dream proposals and benchmark evidence into bounded improvement candidates without introducing live self-modification.
 
 ## Core rule
 
@@ -13,31 +13,31 @@ minimal immutable improvement candidate
     ↓
 independently frozen evaluation plan
     ↓
-paired / regression-dominant evaluation evidence
+trusted regression-dominant evaluation evidence
     ↓
 independent structural audit
     ↓
 promotion-eligibility decision
+    ↓
+STOP
 
 promotion eligibility != production activation
 ```
 
-The candidate author, optimizer, Dream process, evaluator, acceptance authority and activation authority remain separate roles.
+The candidate author, Dream process, evaluator, acceptance authority and activation authority remain separate roles.
 
 ## Relationship to existing phases
 
-Phase 26 extends rather than replaces existing governance:
+Phase 26 extends existing governance rather than replacing it:
 
 - Phase 12 remains the authoritative paired Skill benchmark implementation for Skill candidates.
-- Phase 15 Dream candidates remain proposal-only source evidence and retain their mandatory downstream gates.
-- Phase 25 simulation evidence may later participate in frozen evaluation plans, but a candidate cannot choose seeds/metrics after evaluation starts.
-- Phase 27 remains the place to experiment with executable model-written mini-workflows/programmatic context. Phase 26 may represent a mini-workflow improvement proposal, but v1 does not execute or activate one.
+- Phase 15 Dream candidates remain proposal/source evidence and retain their mandatory downstream gates.
+- Phase 25 simulation evidence may be referenced by future frozen evaluation plans, but candidate-authored post-hoc acceptance criteria remain forbidden.
+- Phase 27 remains the place for sandboxed model-written mini-workflow and programmatic-context experiments. Phase 26 can represent a mini-workflow candidate as inert data, but v1 neither executes nor activates one.
 
-## Improvement candidate
+## Improvement candidates
 
-A `HarnessImprovementCandidate` proposes exactly one bounded component change.
-
-Supported target kinds:
+`HarnessImprovementCandidate` represents exactly one bounded target:
 
 - `SKILL`
 - `PROMPT`
@@ -48,107 +48,173 @@ Supported target kinds:
 
 Every candidate binds:
 
-- infrastructure-owned candidate ID;
+- infrastructure-owned `HIC-*` identity;
 - exact target component ID/version/hash;
-- exact source evidence references/hashes;
-- optional exact originating Dream candidate ID/hash;
-- a bounded hypothesis;
-- one bounded immutable candidate payload;
-- the exact baseline payload hash;
-- the expected metric effects as hypotheses only;
-- known risks;
-- the required evaluator family for the target kind.
+- exact baseline payload hash;
+- exact source-evidence IDs/hashes/classes;
+- one bounded canonical candidate payload;
+- bounded hypothesis, expected metric effects and known risks;
+- evaluator family fixed by target kind;
+- optional exact originating Dream candidate ID/hash/required gate.
 
-The payload is data, not executable authority. v1 accepts bounded canonical JSON-compatible configuration/instruction data and rejects binary blobs, callables, paths-as-authority, commands and executable hooks.
+Candidate payloads are inert canonical JSON data. v1 bounds depth, node count, collections, strings and total bytes; rejects floats and non-JSON objects; and never interprets payload fields as shell commands, executable paths, callbacks, source code, arbitrary tool calls or process authority.
 
-The improvement must be one independently evaluable target. Bundled multi-component self-upgrades are rejected.
+A candidate payload must differ from the baseline payload hash. Bundled multi-component self-upgrades are outside the v1 contract.
 
 ## Smallest-change principle
 
-Phase 26 adopts the following invariant:
+Phase 26 adopts this invariant:
 
 > An improvement proposal must contain the smallest independently evaluable change capable of testing its stated hypothesis.
 
-The infrastructure cannot prove that prose is philosophically "minimal", but the contract enforces one target component and one immutable payload delta. Auditors/evaluators may reject a candidate whose scope exceeds the frozen evaluation plan.
+Infrastructure cannot prove that prose is philosophically minimal, but it does enforce one target component and one immutable payload delta. Evaluation remains tied to a separately frozen plan.
 
-## Independent evaluation plan
+## Independent evaluation plans
 
-A `WorkshopEvaluationPlan` is infrastructure-owned and frozen separately from the candidate. The candidate does not define its own acceptance gate.
+`WorkshopEvaluationPlan` is infrastructure-owned and content-addressed separately from the candidate. The candidate therefore cannot define or rewrite its own acceptance gate.
 
 A plan binds:
 
-- candidate ID/hash;
+- infrastructure-owned `HPLAN-*` identity;
+- exact candidate ID/hash;
 - exact evaluator family/protocol;
-- exact suite/evidence references and hashes;
-- declared metrics;
-- direction (`HIGHER_IS_BETTER` / `LOWER_IS_BETTER` / `MUST_NOT_REGRESS`);
-- minimum improvement or maximum regression thresholds represented as exact integers/rationals where possible;
-- cost ceilings for model calls, tokens, wall time and resource units;
-- regression policy;
-- explicit required evidence count.
+- exact evaluation evidence references/hashes;
+- exact metric IDs and direction;
+- integer minimum-improvement and maximum-regression thresholds;
+- exact cost ceilings for model calls, input/output tokens, wall time and resource units;
+- regression-dominant policy.
 
-Changing a metric, threshold, seed suite, scorer or evaluator creates a new plan/hash. It cannot retroactively reinterpret a completed candidate evaluation.
+Changing the candidate, evaluator, evidence suite, metric, threshold or cost ceiling changes the plan hash. Completed evidence cannot be silently reinterpreted under a different plan.
 
-## Evaluation evidence
+Candidate `expected_effects` are hypotheses only and never populate or override the plan's acceptance criteria.
 
-A `WorkshopEvaluationReport` binds the exact candidate and plan and references immutable evaluator evidence.
+## Trusted evaluator registry
 
-For `SKILL` targets, v1 consumes an exact Phase-12 `SkillBenchmarkReport` envelope/report hash and preserves its regression-dominant verdict. Phase 26 does not reimplement the Skill trial runner.
+Promotion-capable evaluator protocols are infrastructure-owned code, not candidate data and not free-form plan authority.
 
-Other target kinds initially support evidence/report contracts and independent evaluator adapters, but no generic model-authored evaluator is accepted. An evaluator must be a trusted infrastructure adapter associated with the frozen plan's evaluator family.
-
-Overall workshop verdicts are regression-dominant:
+The v1 registry contains exactly one promotion-capable adapter:
 
 ```text
-any required regression → REGRESSED
-required evidence missing / ambiguous → INCONCLUSIVE
-required improvement with no regressions → IMPROVED
-all within equivalence policy → EQUIVALENT
+SKILL_BENCHMARK → paired-skill-ab-v1 (Phase 12)
 ```
 
-Improvements may also fail policy because cost ceilings are exceeded even when task metrics improve.
+The following evaluator families deliberately have no promotion-capable v1 adapter:
 
-## Audit and eligibility
+- `PROMPT_BENCHMARK`
+- `CONTEXT_BENCHMARK`
+- `ROUTING_BENCHMARK`
+- `SPECIALIST_BENCHMARK`
+- `MINI_WORKFLOW_BENCHMARK`
 
-`WorkshopEvaluationAudit` independently verifies structural bindings:
+Candidates, plans and generic reports for those families may still be represented and retained as evidence, but structural audit fails closed for promotion until a separately governed evaluator adapter is added to the infrastructure-owned registry with its own evidence validation.
 
-- exact candidate hash;
-- exact plan hash;
-- exact evaluator evidence refs/hashes;
-- exact baseline/candidate target hashes;
-- verdict consistency;
-- required evidence completeness;
-- no changed plan after the report;
-- no candidate self-reference as acceptance evidence.
+A plausible protocol string such as `prompt-benchmark-v1` therefore grants no authority by itself.
 
-A structurally valid audit does not prove semantic correctness.
+## Regression-dominant evaluation reports
 
-A later `WorkshopDecision` may record only promotion eligibility:
+`WorkshopEvaluationReport` binds the exact candidate and plan and references immutable evaluator evidence.
+
+Metric keys must exactly equal the frozen plan. Candidate-chosen extra metrics are rejected.
+
+Each metric records exact integer baseline/candidate values, signed improvement and verdict. v1 also records baseline/candidate cost totals and deltas for:
+
+- model calls;
+- input tokens;
+- output tokens;
+- wall time;
+- resource units.
+
+Overall generic report policy is regression-dominant:
+
+```text
+any required metric regression → REGRESSED
+any candidate cost ceiling exceeded → REGRESSED
+otherwise any required improvement → IMPROVED
+otherwise → EQUIVALENT
+```
+
+`INCONCLUSIVE` remains a first-class effective verdict for trusted evaluator evidence that cannot establish a comparison.
+
+## Phase-12 Skill reuse
+
+For `SKILL` targets, Phase 26 consumes an exact Phase-12 `SkillBenchmarkReport`; it does not reimplement the paired trial runner.
+
+The adapter requires:
+
+- target kind `SKILL`;
+- evaluator family `SKILL_BENCHMARK`;
+- protocol `paired-skill-ab-v1`;
+- exact Phase-12 report content hash;
+- benchmark-class evidence binding.
+
+The effective Skill verdict is the more conservative of the Phase-26 metric/cost report and Phase 12's own overall paired benchmark verdict.
+
+Consequences:
+
+- Phase-12 `REGRESSED` can never become Phase-26 `IMPROVED`;
+- Phase-12 `EQUIVALENT` caps a separate Phase-26 improvement at `EQUIVALENT`;
+- a Phase-26 regression remains a regression even if Phase 12 improved.
+
+Phase 26 may become stricter than Phase 12 but may not weaken Phase-12 evidence.
+
+## Structural audit
+
+`WorkshopEvaluationAudit` independently rebinds exact candidate, plan and evaluation evidence.
+
+Audit requires the evaluator protocol to exist in the trusted promotion registry. Skill audit additionally requires the Phase-12 Skill adapter and exact Phase-12 report. A generic Workshop report cannot bypass those requirements.
+
+The audit records:
+
+- infrastructure-owned `HAUD-*` identity;
+- exact candidate/plan/report/evaluation hashes;
+- effective verdict;
+- `PASS` or `FAIL`;
+- bounded structural findings;
+- `semantic_correctness_verified = false`;
+- `production_activation_authorized = false`.
+
+A structurally valid negative evaluation may receive audit `PASS`; that means the evidence is well-formed, not that the candidate is desirable.
+
+## Promotion eligibility is not activation
+
+`WorkshopDecision` records one of:
 
 - `APPROVE_FOR_PROMOTION`
 - `REJECT`
 - `DEFER`
 
-The decision must bind a passing structural audit and frozen report. It does **not** install, enable, overwrite, route traffic to, or otherwise activate the candidate.
+`APPROVE_FOR_PROMOTION` requires:
 
-Actual activation remains a separate governed component-specific operation. Phase 26 v1 does not invent a generic production-component registry merely to make self-improvement look complete.
+1. the decision to rebind the exact candidate, plan, audit and evaluation;
+2. audit `PASS`;
+3. effective verdict `IMPROVED`;
+4. a currently trusted promotion-capable evaluator protocol; and
+5. for Skills, exact Phase-12 adapter/report revalidation again at decision time.
+
+The final revalidation prevents a manually forged `PASS` audit object from amplifying an unsupported evaluator into promotion eligibility.
+
+Unsupported evaluators can still produce durable `DEFER` or `REJECT` decisions so evidence is retained without authority escalation.
+
+Even an `APPROVE_FOR_PROMOTION` decision sets `production_activation_authorized = false`. Phase 26 does not install, enable, overwrite, route traffic to or otherwise activate a candidate.
 
 ## Dream bridge
 
-An audited Phase-15 Dream candidate may become source evidence only when its type maps to an appropriate workshop target:
+The proposal-only bridge pins the exact Dream candidate ID/hash/type/required gate into a new independently content-addressed Workshop candidate.
 
-- Dream `SKILL` → Workshop `SKILL`
-- Dream `ROUTING` → Workshop `ROUTING_POLICY`
-- Dream `CONTEXT` → Workshop `CONTEXT_STRATEGY`
-- Dream `PROCESS` → Workshop `PROMPT`, `SPECIALIST_CONTRACT`, or `MINI_WORKFLOW` only through an explicit infrastructure mapping
+Supported mappings:
 
-Dream `MEMORY` and `DATA_QUALITY` keep their existing downstream gates and are not silently routed through the workshop.
+- Dream `SKILL` → Workshop `SKILL`, preserving `SKILL_EVALUATION`;
+- Dream `ROUTING` → Workshop `ROUTING_POLICY`, preserving `ROUTING_BENCHMARK`;
+- Dream `CONTEXT` → Workshop `CONTEXT_STRATEGY`, preserving `CONTEXT_BENCHMARK`;
+- Dream `PROCESS` → explicitly infrastructure-selected `PROMPT`, `SPECIALIST_CONTRACT` or `MINI_WORKFLOW`, preserving `ENGINEERING_REVIEW`.
 
-The Dream candidate's `required_gate` remains evidence about what must happen next; converting it to a workshop candidate never satisfies that gate by itself.
+Dream `MEMORY` and `DATA_QUALITY` keep their Phase-15 gates and are rejected by the Workshop bridge. Non-`PROCESS` Dream candidates cannot choose a different Workshop target family.
 
-## Persistent evidence
+Bridging never satisfies the Dream downstream gate. Since v1 trusts only the Phase-12 Skill evaluator, Dream routing/context/process proposals can be represented and inspected but cannot become promotion-eligible yet.
 
-The planned protected store is:
+## Immutable persistence
+
+`HarnessWorkshopStore` persists canonical envelopes under:
 
 ```text
 .origin-forge/workshop/
@@ -159,31 +225,50 @@ The planned protected store is:
 └── decisions/
 ```
 
-Objects are immutable, content-addressed, byte/count bounded, symlink-safe and revalidated when loaded. No object may be silently rewritten after downstream evidence has bound its hash.
+The store provides:
+
+- exact ID-kind validation (`HIC-*`, `HPLAN-*`, `HREP-*`, `HAUD-*`, `HDEC-*`);
+- canonical UTF-8 JSON envelopes with schema version/type/ID/hash/payload;
+- 512 KiB per-object limit;
+- 10,000-object limit per category;
+- exclusive no-overwrite publication with flush/fsync;
+- symlink/root/category/object containment checks;
+- duplicate-key rejection;
+- canonical-byte and content-hash revalidation on load;
+- object revalidation while listing.
+
+Downstream objects bind immutable upstream hashes, so post-publication rewriting creates detectable drift rather than silent reinterpretation.
 
 ## Read-only operator surface
 
-The initial CLI is inspection-only:
+The inspection-only CLI exposes:
 
 ```text
-workshop status
-workshop candidates
-workshop candidate-show <ID>
-workshop plan-show <ID>
-workshop report-show <ID>
-workshop audit-show <ID>
-workshop decision-show <ID>
+python -m origin_forge.harness_workshop_cli status
+python -m origin_forge.harness_workshop_cli candidates
+python -m origin_forge.harness_workshop_cli plans
+python -m origin_forge.harness_workshop_cli reports
+python -m origin_forge.harness_workshop_cli audits
+python -m origin_forge.harness_workshop_cli decisions
+python -m origin_forge.harness_workshop_cli candidate-show <HIC-ID>
+python -m origin_forge.harness_workshop_cli plan-show <HPLAN-ID>
+python -m origin_forge.harness_workshop_cli report-show <HREP-ID>
+python -m origin_forge.harness_workshop_cli audit-show <HAUD-ID>
+python -m origin_forge.harness_workshop_cli decision-show <HDEC-ID>
 ```
 
-It intentionally has no `refine`, `apply`, `promote`, `activate`, `install`, `rewrite`, `merge` or `release` command.
+`status` also exposes the read-only trusted evaluator registry snapshot. All execution/mutation authority flags remain false.
+
+There is no candidate creation, evaluation execution, refinement, promotion execution, activation, installation, rewrite, Task mutation, provenance signing, merge or release command.
 
 ## Explicit exclusions in v1
 
 Not implemented or authorized:
 
 - live prompt/Skill/harness rewriting by a running agent;
-- candidate-defined acceptance metrics;
+- candidate-defined acceptance metrics or promotion-capable evaluator protocols;
 - generic model-authored evaluator code;
+- promotion-capable prompt/context/routing/specialist/mini-workflow evaluator adapters;
 - generic executable mini-workflows;
 - automatic production activation;
 - automatic Skill installation/replacement;
@@ -197,18 +282,21 @@ Not implemented or authorized:
 - merge/release authority;
 - model weight updates.
 
-## Initial v1 exit condition
+## Phase-26 v1 exit condition — MET
 
-Phase 26 v1 is complete when one immutable repository head proves on the supported Python matrix that Origin Forge can:
+Phase 26 v1 is complete because the implementation can:
 
-1. freeze one content-addressed single-target improvement candidate over exact source evidence;
+1. freeze a content-addressed single-target improvement candidate over exact source evidence;
 2. freeze an independent evaluation plan whose acceptance criteria cannot be changed by the candidate;
-3. reuse Phase-12 Skill benchmark evidence for Skill candidates rather than reimplementing Skill evaluation;
-4. accept only trusted evaluator-family evidence for non-Skill candidates;
-5. derive a regression-dominant bounded report including task metrics and cost/resource evidence;
-6. independently audit candidate/plan/report/evaluator bindings;
-7. record a promotion-eligibility decision without production activation authority;
-8. persist and revalidate immutable bounded workshop objects;
-9. bridge supported Dream candidates only as proposal/source evidence while preserving their downstream-gate semantics;
-10. expose workshop state through read-only inspection; and
-11. prove the workshop cannot verify/complete production Tasks, mutate active Skills/prompts/routing/context, activate candidates, sign provenance, merge or release.
+3. reuse exact Phase-12 Skill benchmark evidence rather than reimplementing Skill evaluation;
+4. restrict promotion-capable evaluation to infrastructure-owned trusted adapters, with unsupported evaluator families failing closed;
+5. derive a bounded regression-dominant metric/cost report whose metric keys exactly match the frozen plan;
+6. preserve the more conservative Phase-12 Skill verdict rather than weakening it;
+7. independently audit candidate/plan/evaluation bindings and separate structural validity from semantic quality;
+8. revalidate evaluator trust at decision time and record promotion eligibility only for trusted, structurally valid, effective `IMPROVED` evidence;
+9. persist and revalidate immutable bounded Workshop objects;
+10. bridge supported Dream candidates only as exact proposal/source evidence while preserving downstream-gate semantics;
+11. expose Workshop state and evaluator trust through read-only inspection; and
+12. keep production Task completion/verification, active Skill/prompt/routing/context mutation, candidate activation, provenance signing, merge and release authority outside the Workshop.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
