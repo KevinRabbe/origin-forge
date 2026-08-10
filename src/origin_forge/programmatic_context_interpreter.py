@@ -21,6 +21,7 @@ from .runtime_observation_models import canonical_bytes, content_hash
 
 
 _MAX_ADAPTER_INPUT_BYTES = 64 * 1024
+_MAX_AGGREGATE_ADAPTER_INPUT_BYTES = 2 * 1024 * 1024
 _MAX_JSON_INT = 9_223_372_036_854_775_807
 _MAX_JSON_NODES = 4096
 _MAX_JSON_DEPTH = 12
@@ -207,7 +208,10 @@ class ContextProgramInterpreter:
         traces: list[ContextStepTrace] = []
         total_result_bytes = 0
         total_input_bytes = 0
-        aggregate_input_limit = min(program.budget.max_result_bytes, 2 * 1024 * 1024)
+        aggregate_input_limit = min(
+            program.budget.max_context_bytes,
+            _MAX_AGGREGATE_ADAPTER_INPUT_BYTES,
+        )
 
         for instruction in program.instructions:
             descriptor = catalog.descriptor(
