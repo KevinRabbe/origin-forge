@@ -1,0 +1,126 @@
+name: Phase 20C real Blender evidence
+
+on:
+  pull_request:
+    types: [edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  real-blender-gate:
+    if: >-
+      github.event.pull_request.number == 32 &&
+      contains(github.event.pull_request.body, '<!-- phase20c-real-blender-evidence -->')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout exact Origin Forge PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify exact Origin Forge head
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha }}"
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+          echo "PIN_ORIGIN_FORGE_HEAD=$actual"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Acquire and freeze reviewed Blender 5.2.0 LTS runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="5.2.0"
+          source_tag="v5.2.0"
+          source_commit="fbe6228777e7d9afefcd61a413844e790ae75db7"
+          expected_build_hash="fbe6228777e7"
+          archive_name="blender-5.2.0-linux-x64.tar.xz"
+          archive_sha256="96f6c181a30f4950607839dc84d42a354b250d8a0231b098b59b7bc69c351c48"
+          release_root="https://download.blender.org/release/Blender5.2"
+
+          mkdir -p .external
+          actual_commit="$(git ls-remote https://github.com/blender/blender.git "refs/tags/${source_tag}^{}" | awk 'NR==1 {print $1}')"
+          if [ -z "$actual_commit" ]; then
+            actual_commit="$(git ls-remote https://github.com/blender/blender.git "refs/tags/${source_tag}" | awk 'NR==1 {print $1}')"
+          fi
+          test "$actual_commit" = "$source_commit"
+
+          checksum_file="$(pwd)/.external/blender-${version}.sha256"
+          archive="$(pwd)/.external/${archive_name}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$checksum_file" \
+            "$release_root/blender-${version}.sha256"
+          official_sha="$(grep -F "$archive_name" "$checksum_file" | awk 'NR==1 {print $1}')"
+          test "$official_sha" = "$archive_sha256"
+
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "$release_root/$archive_name"
+          echo "$archive_sha256  $archive" | sha256sum --check --strict
+          archive_size="$(stat -c '%s' "$archive")"
+
+          extract_root="$(pwd)/.external/extracted"
+          runtime_root="$(pwd)/.external/blender-runtime"
+          mkdir -p "$extract_root" "$runtime_root"
+          tar -xJf "$archive" -C "$extract_root"
+          source_root="$extract_root/blender-${version}-linux-x64"
+          test -x "$source_root/blender"
+          cp -aL "$source_root"/. "$runtime_root"/
+          test -z "$(find "$runtime_root" -type l -print -quit)"
+
+          executable="$runtime_root/blender"
+          test -x "$executable"
+          version_output="$(env -i PATH=/usr/bin:/bin HOME="$(pwd)" LANG=C.UTF-8 LC_ALL=C.UTF-8 "$executable" --version)"
+          first_line="$(printf '%s\n' "$version_output" | head -n 1)"
+          test "$first_line" = "Blender $version"
+          build_hash="$(printf '%s\n' "$version_output" | sed -n 's/^[[:space:]]*build hash: //p' | head -n 1)"
+          test "$build_hash" = "$expected_build_hash"
+
+          runtime_hash="$(PYTHONPATH=src python - "$runtime_root" <<'PY'
+          import sys
+          from pathlib import Path
+          from origin_forge.blender_adapter import blender_runtime_tree_hash
+          print(blender_runtime_tree_hash(Path(sys.argv[1])))
+          PY
+          )"
+          runner_sha="$(PYTHONPATH=src python - <<'PY'
+          from origin_forge.blender_adapter import blender_runner_v1_fingerprint
+          print(blender_runner_v1_fingerprint())
+          PY
+          )"
+
+          echo "PIN_BLENDER_VERSION=$version"
+          echo "PIN_BLENDER_SOURCE_TAG=$source_tag"
+          echo "PIN_BLENDER_SOURCE_COMMIT=$source_commit"
+          echo "PIN_BLENDER_BUILD_HASH=$build_hash"
+          echo "PIN_BLENDER_ARCHIVE_SHA256=$archive_sha256"
+          echo "PIN_BLENDER_ARCHIVE_SIZE=$archive_size"
+          echo "PIN_BLENDER_RUNTIME_HASH=$runtime_hash"
+          echo "PIN_BLENDER_RUNNER_SHA256=$runner_sha"
+
+          echo "ORIGIN_FORGE_REAL_BLENDER_RUNTIME_ROOT=$runtime_root" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_BLENDER_EXECUTABLE=$executable" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_BLENDER_RUNTIME_HASH=$runtime_hash" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_BLENDER_VERSION=Blender $version" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_BLENDER_SOURCE_COMMIT=$source_commit" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_BLENDER_ARCHIVE_SHA256=$archive_sha256" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_BLENDER_RUNNER_SHA256=$runner_sha" >> "$GITHUB_ENV"
+
+      - name: Run real governed Blender v1 gate
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -W error::ResourceWarning -m unittest discover -s tests \
+            -p "test_blender_real.py" -v
