@@ -128,6 +128,23 @@ class BlenderModelTests(unittest.TestCase):
                 **base,
             )
 
+    def test_v1_requires_positive_extent_on_every_axis(self) -> None:
+        base = {
+            "output_relative_path": "exports/crate.glb",
+            "runner_fingerprint": "sha256:" + "1" * 64,
+            "runtime_hash": "sha256:" + "2" * 64,
+            "expected_blender_version": "Blender 5.2.0",
+        }
+        for axis, end in (
+            ("x", Vec3(-1, 1, 1)),
+            ("y", Vec3(1, -1, 1)),
+            ("z", Vec3(1, 1, -1)),
+        ):
+            with self.subTest(axis=axis):
+                project = self._project(self._cube(to_point=end))
+                with self.assertRaisesRegex(BlenderModelError, "positive cuboid extent"):
+                    BlenderJobRequest.create(project=project, **base)
+
 
 if __name__ == "__main__":
     unittest.main()
