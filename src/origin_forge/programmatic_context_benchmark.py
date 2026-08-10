@@ -191,7 +191,10 @@ def compare_context_case(
 
     if regressions:
         verdict = ContextExperimentVerdict.REGRESSED
-    elif improvements:
+    elif programmatic.success and improvements:
+        # Efficiency/quality improvements are useful only when the candidate path
+        # actually succeeds. Two failed variants cannot create an IMPROVED verdict
+        # merely because the second failure was cheaper.
         verdict = ContextExperimentVerdict.IMPROVED
     else:
         verdict = ContextExperimentVerdict.EQUIVALENT
