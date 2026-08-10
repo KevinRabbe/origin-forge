@@ -10,8 +10,9 @@ from .ids import IdKind, validate_id
 from .lineage import OriginForgeLineage
 from .playtest_analysis import PlaytestSummary, analyze_playtest
 from .playtest_harness import PlaytestHarnessExecution
-from .playtest_models import PlaytestScenario, canonical_bytes
+from .playtest_models import PlaytestScenario
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
+from .runtime_observation_models import canonical_bytes
 from .state import RunStatus, TaskStatus
 
 
