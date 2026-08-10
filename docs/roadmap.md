@@ -318,23 +318,27 @@ See `docs/phase-20-blockbench.md` for the implemented contract and exact future 
 
 **Deferred condition:** revisit when Blockbench exposes a supported non-interactive bootstrap, or when Origin Forge deliberately approves a separately maintained/pinned distribution or fork. Blockbench no longer blocks unrelated roadmap work.
 
-## Phase 20C — Governed Blender Backend — NEXT
+## Phase 20C — Governed Blender Backend — DONE
 
-Add Blender as a second, separately governed 3D/media backend behind the Phase-20A contracts rather than as unrestricted Python execution.
+Implemented Blender as a separately governed replaceable 3D backend behind the Phase-20A contract rather than as unrestricted Python execution:
 
-Initial boundary:
+- infrastructure-owned `BLOP-*` operation identity;
+- bounded Blender v1 acceptance over the existing canonical 3D project spec;
+- explicit rejection of unsupported hierarchy/texture/animation/rotation/inflation semantics in the first runner revision;
+- repository-owned frozen runner with no caller/model Python surface;
+- exact Blender 5.2.0 LTS release/build/archive identity;
+- symlink-free materialized runtime-tree hashing and frozen runner hashing;
+- background/factory-startup/offline execution with automatic script execution disabled;
+- isolated `MODEL3D-*` workspace, minimal environment and hardened fixed argv;
+- exact request/result/version/hash/export-set binding;
+- independent existing GLB validation after Blender exits;
+- normal fake-process/adversarial CI plus authoritative real Blender execution on one immutable closure SHA.
 
-- exact pinned Blender release/runtime identity and executable/runtime hash;
-- background/factory-startup execution with automatic script execution disabled where applicable;
-- isolated `MODEL3D-*` workspace and minimal environment;
-- bounded structured job specifications owned by Origin Forge;
-- infrastructure-owned, frozen Blender runner code for any required `bpy` operations;
-- no caller/model-supplied Python, shell commands, add-on installation, arbitrary host paths, merge/release/adoption authority, or self-verification;
-- declared GLB and optional PNG render outputs only in the first slice;
-- independent Origin Forge GLB/PNG hash and structural validation after Blender exits;
-- real pinned Blender evidence required before the backend is called complete.
+Frozen runtime evidence used Blender 5.2.0 LTS source tag `v5.2.0` / commit `fbe6228777e7d9afefcd61a413844e790ae75db7`, archive SHA-256 `96f6c181a30f4950607839dc84d42a354b250d8a0231b098b59b7bc69c351c48`, materialized runtime-tree hash `sha256:96528bd441b3c6d095216be58a5165a5ae4c1b7f0679e63dcbe2bd40ebe11676`, and runner hash `sha256:c2eb8ebc0523bcfe0675bf8ba0a48018ae811a128551e1a935afde8ceb978746`.
 
 Blockbench and Blender remain replaceable backends; neither defines Origin Forge's canonical 3D representation or production truth.
+
+**Exit condition met:** the frozen Blender runtime and frozen infrastructure-owned runner produced a real bounded cuboid → GLB result on exact closure head `7f9140ab87cce7bf961a467f37afb25e55ef7e90`, with Python 3.12/3.13 normal CI and independent GLB validation green before the SHA-guarded merge.
 
 ## Phase 21 — Image and Vision — DONE
 
@@ -362,9 +366,32 @@ See `docs/phase-22-audio.md` for the detailed architecture, pins, authority excl
 
 **Exit condition met:** deterministic audio substrate, real governed processing, and real governed TTS all produce independently validated canonical evidence while neural SFX/music remains optional and replaceable.
 
-## Phase 23 — Runtime Observation — PLANNED
+## Phase 23 — Runtime Observation — DONE
 
-Add application/game launch automation, screenshots/video capture, logs, crash detection, performance metrics, and visual-regression evidence.
+Implemented a governed runtime-observation substrate that records application behavior without transferring production Task authority:
+
+- infrastructure-owned `OBS-*` observation IDs and `OBSWS-*` workspaces;
+- content-addressed backend/target/executable-bound request/result contracts;
+- adapter-owned executable and fixed argv with no shell or caller environment injection;
+- bounded concurrent stdout/stderr capture with active overflow termination;
+- POSIX process-group timeout and descendant cleanup;
+- explicit normal exit, nonzero failure, signal and timeout outcomes distinct from observer infrastructure failure;
+- duration and best-effort Linux peak-RSS observations;
+- cooperative exact-path screenshot capture and timed `VIDEO_FRAME` PNG sequences as the canonical v1 video evidence;
+- exact capture-set, symlink/root/path and pre-read byte-bound enforcement;
+- independent RGB/RGBA PNG inspection after process exit;
+- exact baseline Artifact revalidation and deterministic changed-pixel/channel visual-regression evidence;
+- durable request/result/log/capture Artifacts plus Run/Artifact Verifications;
+- visual-regression FAIL evidence without automatic Task failure/completion authority;
+- read-only `runtime_observation_cli` status/run/artifact inspection;
+- real local subprocess regressions covering abnormal exit, timeout, log overflow, oversized sparse capture and direct-child/descendant cleanup;
+- no input automation, semantic vision authority, performance-requirement authority, asset adoption, signing, merge, or release surface.
+
+Cooperative exact-path PNG capture is the accepted v1 capture boundary. OS/window/framebuffer capture remains a replaceable backend-specific enhancement and untrusted native binaries require a separately governed sandbox backend.
+
+See `docs/phase-23-runtime-observation.md` for the detailed v1 contract, exclusions, evidence model and acceptance boundary.
+
+**Exit condition met:** one immutable repository head proves on Python 3.12 and 3.13 that Origin Forge can launch an exact trusted target, bound logs/runtime outcomes/performance evidence, capture and independently validate only declared screenshots/timed video frames, emit deterministic baseline-regression evidence, persist/read that evidence, terminate descendant process state, and leave production Task/adoption/signing/merge/release authority unchanged.
 
 ## Phase 24 — Automated Playtesting — PLANNED
 
