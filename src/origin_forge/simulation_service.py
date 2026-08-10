@@ -14,6 +14,9 @@ from .simulation_models import SimulationResult, SimulationSpec
 from .state import RunStatus, TaskStatus
 
 
+MAX_SIMULATION_EVIDENCE_BYTES = 16 * 1024 * 1024
+
+
 class SimulationServiceError(RuntimeError):
     pass
 
@@ -57,6 +60,10 @@ class SimulationService:
 
     @staticmethod
     def _write_new(path: Path, data: bytes) -> None:
+        if len(data) > MAX_SIMULATION_EVIDENCE_BYTES:
+            raise SimulationServiceError(
+                f"simulation evidence exceeds {MAX_SIMULATION_EVIDENCE_BYTES} byte limit"
+            )
         if path.parent.is_symlink() or path.exists() or path.is_symlink():
             raise SimulationServiceError(
                 f"simulation evidence path is not a fresh exact file: {path.name}"
