@@ -114,10 +114,13 @@ class HarnessWorkshopAuditTests(unittest.TestCase):
         self.assertEqual(audit.findings, ())
         self.assertFalse(audit.to_dict()["semantic_correctness_verified"])
         decision = WorkshopDecision.create(
+            candidate=candidate,
+            plan=plan,
             audit=audit,
             evaluation=evaluation,
             outcome=WorkshopDecisionOutcome.APPROVE_FOR_PROMOTION,
             rationale="The frozen evaluation and structural audit passed.",
+            phase12_report=phase12,
         )
         self.assertTrue(decision.to_dict()["promotion_eligible"])
         self.assertFalse(decision.to_dict()["production_activation_authorized"])
@@ -144,6 +147,8 @@ class HarnessWorkshopAuditTests(unittest.TestCase):
         self.assertIn("Phase-12 Skill workshop adapter", audit.findings[0])
         with self.assertRaisesRegex(HarnessWorkshopModelError, "passing workshop audit"):
             WorkshopDecision.create(
+                candidate=candidate,
+                plan=plan,
                 audit=audit,
                 evaluation=report,
                 outcome=WorkshopDecisionOutcome.APPROVE_FOR_PROMOTION,
@@ -174,16 +179,22 @@ class HarnessWorkshopAuditTests(unittest.TestCase):
         self.assertIs(audit.effective_verdict, WorkshopVerdict.REGRESSED)
         with self.assertRaisesRegex(HarnessWorkshopModelError, "IMPROVED"):
             WorkshopDecision.create(
+                candidate=candidate,
+                plan=plan,
                 audit=audit,
                 evaluation=evaluation,
                 outcome=WorkshopDecisionOutcome.APPROVE_FOR_PROMOTION,
                 rationale="A regression may not be promoted.",
+                phase12_report=phase12,
             )
         rejected = WorkshopDecision.create(
+            candidate=candidate,
+            plan=plan,
             audit=audit,
             evaluation=evaluation,
             outcome=WorkshopDecisionOutcome.REJECT,
             rationale="Phase-12 regression remains authoritative evidence.",
+            phase12_report=phase12,
         )
         self.assertFalse(rejected.to_dict()["promotion_eligible"])
 
@@ -207,6 +218,8 @@ class HarnessWorkshopAuditTests(unittest.TestCase):
         self.assertIs(audit.status, WorkshopAuditStatus.FAIL)
         self.assertIn("no promotion-capable trusted evaluator", audit.findings[0])
         deferred = WorkshopDecision.create(
+            candidate=candidate,
+            plan=plan,
             audit=audit,
             evaluation=report,
             outcome=WorkshopDecisionOutcome.DEFER,
@@ -215,10 +228,40 @@ class HarnessWorkshopAuditTests(unittest.TestCase):
         self.assertFalse(deferred.to_dict()["promotion_eligible"])
         with self.assertRaisesRegex(HarnessWorkshopModelError, "passing workshop audit"):
             WorkshopDecision.create(
+                candidate=candidate,
+                plan=plan,
                 audit=audit,
                 evaluation=report,
                 outcome=WorkshopDecisionOutcome.APPROVE_FOR_PROMOTION,
                 rationale="An untrusted evaluator may not create promotion eligibility.",
+            )
+
+    def test_forged_passing_audit_cannot_bypass_decision_time_trust_check(self) -> None:
+        candidate = self._candidate(HarnessComponentKind.PROMPT)
+        plan = self._plan(candidate, "prompt-benchmark-v1")
+        report = WorkshopEvaluationReport.evaluate(
+            candidate=candidate,
+            plan=plan,
+            baseline_metrics={"success": 80},
+            candidate_metrics={"success": 90},
+            baseline_cost=_costs(),
+            candidate_cost=_costs(),
+            evaluator_evidence=(_evidence(),),
+        )
+        failed_audit = audit_workshop_evaluation(
+            candidate=candidate,
+            plan=plan,
+            evaluation=report,
+        )
+        forged = replace(failed_audit, status=WorkshopAuditStatus.PASS, findings=())
+        with self.assertRaisesRegex(HarnessWorkshopModelError, "no promotion-capable trusted evaluator"):
+            WorkshopDecision.create(
+                candidate=candidate,
+                plan=plan,
+                audit=forged,
+                evaluation=report,
+                outcome=WorkshopDecisionOutcome.APPROVE_FOR_PROMOTION,
+                rationale="A forged PASS audit must not amplify authority.",
             )
 
     def test_arbitrary_skill_evaluator_protocol_fails_structural_audit(self) -> None:
