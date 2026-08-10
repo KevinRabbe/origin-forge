@@ -82,6 +82,15 @@ def _validate_v0_project(project: BlockbenchProjectSpec) -> None:
             raise BlenderModelError("Blender runner v1 does not accept UV controls")
         if not cuboid.visible:
             raise BlenderModelError("Blender runner v1 requires visible cuboids")
+        if any(
+            finish <= begin
+            for begin, finish in zip(
+                cuboid.from_point.to_list(), cuboid.to_point.to_list(), strict=True
+            )
+        ):
+            raise BlenderModelError(
+                "Blender runner v1 requires positive cuboid extent on every axis"
+            )
 
 
 @dataclass(frozen=True)
