@@ -201,26 +201,27 @@ class WorkshopDecision:
     def create(
         cls,
         *,
+        candidate: HarnessImprovementCandidate,
+        plan: WorkshopEvaluationPlan,
         audit: WorkshopEvaluationAudit,
         evaluation: WorkshopEvaluationReport | SkillWorkshopEvaluation,
         outcome: WorkshopDecisionOutcome,
         rationale: str,
+        phase12_report: "SkillBenchmarkReport | None" = None,
     ) -> "WorkshopDecision":
+        if not isinstance(candidate, HarnessImprovementCandidate):
+            raise TypeError("candidate must be a HarnessImprovementCandidate")
+        if not isinstance(plan, WorkshopEvaluationPlan):
+            raise TypeError("plan must be a WorkshopEvaluationPlan")
         if not isinstance(audit, WorkshopEvaluationAudit):
             raise TypeError("audit must be a WorkshopEvaluationAudit")
         if not isinstance(evaluation, (WorkshopEvaluationReport, SkillWorkshopEvaluation)):
             raise TypeError("evaluation has unsupported type")
+        plan.bind_candidate(candidate)
+        audit.bind(candidate, plan, evaluation)
         base_report = (
             evaluation.report if isinstance(evaluation, SkillWorkshopEvaluation) else evaluation
         )
-        if (
-            audit.report_id != base_report.report_id
-            or audit.evaluation_hash != evaluation.content_hash
-            or audit.effective_verdict is not evaluation.verdict
-        ):
-            raise HarnessWorkshopModelError(
-                "decision inputs do not bind the exact audited evaluation"
-            )
         if outcome is WorkshopDecisionOutcome.APPROVE_FOR_PROMOTION:
             if audit.status is not WorkshopAuditStatus.PASS:
                 raise HarnessWorkshopModelError(
@@ -230,6 +231,23 @@ class WorkshopDecision:
                 raise HarnessWorkshopModelError(
                     "promotion eligibility requires an IMPROVED effective verdict"
                 )
+            require_trusted_workshop_evaluator(plan)
+            if candidate.component_kind is HarnessComponentKind.SKILL:
+                if not isinstance(evaluation, SkillWorkshopEvaluation):
+                    raise HarnessWorkshopModelError(
+                        "SKILL promotion eligibility requires the Phase-12 Skill workshop adapter"
+                    )
+                if phase12_report is None:
+                    raise HarnessWorkshopModelError(
+                        "SKILL promotion eligibility requires the exact Phase-12 benchmark report"
+                    )
+                evaluation.bind(candidate, plan, phase12_report)
+            else:
+                if isinstance(evaluation, SkillWorkshopEvaluation):
+                    raise HarnessWorkshopModelError(
+                        "non-SKILL promotion may not use Skill workshop evidence"
+                    )
+                evaluation.bind(candidate, plan)
         return cls(
             decision_id=new_id(IdKind.WORKSHOP_DECISION),
             audit_id=audit.audit_id,
