@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
+import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -64,43 +65,48 @@ class _CrashBeforeCaptureBackend:
         return SimpleNamespace(request=request, result=result, workspace_path=workspace)
 
 
-def test_service_records_missing_capture_ids_without_losing_crash_evidence() -> None:
-    with tempfile.TemporaryDirectory() as tempdir:
-        runtime = OriginForgeRuntime(Path(tempdir))
-        runtime.initialize("runtime-observation-partial-service-test")
-        goal = runtime.create_goal("Observe crash")
-        flow = runtime.create_flow(goal)
-        runtime.transition_flow(flow, FlowStatus.RUNNING, expected_revision=0)
-        task = runtime.create_task(flow, "Observe target")
-        revision = runtime.transition_task(task, TaskStatus.READY, expected_revision=0)
-        runtime.transition_task(task, TaskStatus.RUNNING, expected_revision=revision)
+class RuntimeObservationPartialServiceTests(unittest.TestCase):
+    def test_service_records_missing_capture_ids_without_losing_crash_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            runtime = OriginForgeRuntime(Path(tempdir))
+            runtime.initialize("runtime-observation-partial-service-test")
+            goal = runtime.create_goal("Observe crash")
+            flow = runtime.create_flow(goal)
+            runtime.transition_flow(flow, FlowStatus.RUNNING, expected_revision=0)
+            task = runtime.create_task(flow, "Observe target")
+            revision = runtime.transition_task(task, TaskStatus.READY, expected_revision=0)
+            runtime.transition_task(task, TaskStatus.RUNNING, expected_revision=revision)
 
-        request = RuntimeObservationRequest.create(
-            backend_id="fixture-observer",
-            backend_version="1",
-            target_id="fixture-game",
-            target_version="1",
-            executable_hash=EXECUTABLE_HASH,
-            captures=(
-                RuntimeCaptureSpec(
-                    capture_id="late-shot",
-                    kind=RuntimeCaptureKind.SCREENSHOT,
-                    relative_path="captures/late-shot.png",
-                    timestamp_ms=1000,
+            request = RuntimeObservationRequest.create(
+                backend_id="fixture-observer",
+                backend_version="1",
+                target_id="fixture-game",
+                target_version="1",
+                executable_hash=EXECUTABLE_HASH,
+                captures=(
+                    RuntimeCaptureSpec(
+                        capture_id="late-shot",
+                        kind=RuntimeCaptureKind.SCREENSHOT,
+                        relative_path="captures/late-shot.png",
+                        timestamp_ms=1000,
+                    ),
                 ),
-            ),
-        )
-        result = RuntimeObservationService(
-            runtime, _CrashBeforeCaptureBackend(runtime)
-        ).execute(task, request)
+            )
+            result = RuntimeObservationService(
+                runtime, _CrashBeforeCaptureBackend(runtime)
+            ).execute(task, request)
 
-        assert result.crash_detected is True
-        assert result.timed_out is False
-        assert result.captures == ()
-        assert result.missing_capture_ids == ("late-shot",)
-        assert result.to_dict()["missing_capture_ids"] == ["late-shot"]
-        verification = runtime.list_verifications("RUN", result.run_id)[0]
-        evidence = json.loads(verification["evidence_json"])
-        assert evidence["missing_capture_ids"] == ["late-shot"]
-        assert runtime.get_task(task)["status"] == TaskStatus.RUNNING.value
-        assert runtime.list_verifications("TASK", task) == []
+            self.assertTrue(result.crash_detected)
+            self.assertFalse(result.timed_out)
+            self.assertEqual(result.captures, ())
+            self.assertEqual(result.missing_capture_ids, ("late-shot",))
+            self.assertEqual(result.to_dict()["missing_capture_ids"], ["late-shot"])
+            verification = runtime.list_verifications("RUN", result.run_id)[0]
+            evidence = json.loads(verification["evidence_json"])
+            self.assertEqual(evidence["missing_capture_ids"], ["late-shot"])
+            self.assertEqual(runtime.get_task(task)["status"], TaskStatus.RUNNING.value)
+            self.assertEqual(runtime.list_verifications("TASK", task), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
