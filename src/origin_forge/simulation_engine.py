@@ -48,9 +48,11 @@ def _eligible(state: dict[str, int], rule: SimulationRule) -> bool:
     return True
 
 
-def _apply_rule(state: dict[str, int], rule: SimulationRule) -> None:
+def _apply_rule(state: dict[str, int], rule: SimulationRule) -> tuple[str, ...]:
+    changed: set[str] = set()
     for name, amount in rule.consume:
         state[name] -= amount
+        changed.add(name)
     for name, amount in rule.produce:
         value = state[name] + amount
         if value < STATE_MIN or value > STATE_MAX:
@@ -58,6 +60,8 @@ def _apply_rule(state: dict[str, int], rule: SimulationRule) -> None:
                 f"simulation state overflow for {name} while firing {rule.rule_id}"
             )
         state[name] = value
+        changed.add(name)
+    return tuple(sorted(changed))
 
 
 def _record_invariants(
@@ -129,9 +133,10 @@ def _run_replicate(
             )
             if not fires:
                 continue
-            _apply_rule(state, rule)
+            changed = _apply_rule(state, rule)
             firings[rule.rule_id] += 1
-            for name, value in state.items():
+            for name in changed:
+                value = state[name]
                 if value < minimum_state[name]:
                     minimum_state[name] = value
                 if value > maximum_state[name]:
