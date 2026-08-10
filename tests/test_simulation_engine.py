@@ -154,6 +154,19 @@ class SimulationEngineTests(unittest.TestCase):
         self.assertEqual(len(replicate.rule_firings), 129)
         result.bind_spec(spec)
 
+    def test_caller_cannot_spoof_built_in_engine_identity(self) -> None:
+        spec = SimulationSpec.create(
+            seed=9,
+            initial_state=(("value", 0),),
+            rules=(SimulationRule("income", 0, 1_000_000, produce=(("value", 1),)),),
+            max_steps=1,
+            stall_steps=1,
+            engine_id="caller-selected-engine",
+            engine_version="999",
+        )
+        with self.assertRaisesRegex(SimulationEngineError, "engine identity"):
+            run_simulation(spec)
+
     def test_engine_exposes_no_execution_or_mutation_authority(self) -> None:
         import origin_forge.simulation_engine as engine
 
