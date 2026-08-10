@@ -133,8 +133,8 @@ class LocalProcessRuntimeObserver:
     cannot inject shell text, arbitrary executable paths, environment values,
     or follow-up commands.
 
-    Phase-23 v1 capture is cooperative: the target may write only the exact
-    declared PNG paths beneath ORIGIN_FORGE_CAPTURE_DIR. A timed sequence of
+    Phase-23 v1 capture is cooperative: the target may write only declared PNG
+    paths beneath ORIGIN_FORGE_CAPTURE_DIR. A logically timed sequence of
     VIDEO_FRAME PNGs is the canonical video evidence surface in this revision;
     codec/container packaging is deliberately derived evidence, not truth.
     """
@@ -225,6 +225,8 @@ class LocalProcessRuntimeObserver:
     def _capture_evidence(
         workspace: Path,
         request: RuntimeObservationRequest,
+        *,
+        allow_missing: bool,
     ) -> tuple[RuntimeCaptureEvidence, ...]:
         capture_root = workspace / "captures"
         expected_paths = {value.relative_path for value in request.captures}
@@ -243,15 +245,17 @@ class LocalProcessRuntimeObserver:
                 except ValueError as exc:
                     raise RuntimeObserverError("runtime capture escaped workspace") from exc
                 actual_paths.add(relative)
-        if actual_paths != expected_paths:
-            missing = sorted(expected_paths - actual_paths)
-            extra = sorted(actual_paths - expected_paths)
+        extra = sorted(actual_paths - expected_paths)
+        missing = sorted(expected_paths - actual_paths)
+        if extra or (missing and not allow_missing):
             raise RuntimeObserverError(
                 f"runtime capture set mismatch; missing={missing!r} extra={extra!r}"
             )
 
         evidence: list[RuntimeCaptureEvidence] = []
         for spec in request.captures:
+            if spec.relative_path not in actual_paths:
+                continue
             path = workspace / spec.relative_path
             try:
                 resolved = path.resolve(strict=True)
@@ -411,7 +415,11 @@ class LocalProcessRuntimeObserver:
             else:
                 exit_kind = RuntimeExitKind.FAILED
 
-        captures = self._capture_evidence(workspace, request)
+        captures = self._capture_evidence(
+            workspace,
+            request,
+            allow_missing=exit_kind is not RuntimeExitKind.EXITED,
+        )
         result = RuntimeObservationResult(
             observation_id=request.observation_id,
             workspace_id=request.workspace_id,
