@@ -44,6 +44,7 @@ def _normalize_pairs(
     label: str,
     minimum: int,
     maximum: int,
+    max_entries: int = _MAX_VARIABLES,
     allow_empty: bool = True,
 ) -> tuple[tuple[str, int], ...]:
     normalized: list[tuple[str, int]] = []
@@ -60,8 +61,8 @@ def _normalize_pairs(
         normalized.append((name, value))
     if not allow_empty and not normalized:
         raise SimulationModelError(f"{label} may not be empty")
-    if len(normalized) > _MAX_VARIABLES:
-        raise SimulationModelError(f"{label} exceeds variable limit")
+    if len(normalized) > max_entries:
+        raise SimulationModelError(f"{label} exceeds entry limit")
     return tuple(sorted(normalized))
 
 
@@ -364,6 +365,7 @@ class SimulationReplicateResult:
                     label=field_name,
                     minimum=0,
                     maximum=_MAX_STEPS,
+                    max_entries=_MAX_RULES,
                     allow_empty=False,
                 ),
             )
@@ -446,7 +448,7 @@ class SimulationResult:
         ):
             raise SimulationModelError("simulation result does not bind exact specification")
         expected_state_names = tuple(name for name, _ in spec.initial_state)
-        expected_rule_ids = tuple(rule.rule_id for rule in spec.rules)
+        expected_rule_ids = tuple(sorted(rule.rule_id for rule in spec.rules))
         for replicate in self.replicates:
             if replicate.steps_executed > spec.max_steps:
                 raise SimulationModelError("replicate exceeds spec max_steps")
