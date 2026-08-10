@@ -501,7 +501,11 @@ class RuntimeObservationResult:
         if self.status is RuntimeObservationStatus.SUCCEEDED:
             specs = {value.capture_id: value for value in request.captures}
             outputs = {value.capture_id: value for value in self.captures}
-            if set(outputs) != set(specs):
+            unknown = set(outputs) - set(specs)
+            if unknown:
+                raise RuntimeObservationModelError("runtime result contains undeclared captures")
+            missing = set(specs) - set(outputs)
+            if self.exit_kind is RuntimeExitKind.EXITED and missing:
                 raise RuntimeObservationModelError("runtime result capture set differs from request")
             for capture_id, output in outputs.items():
                 spec = specs[capture_id]
