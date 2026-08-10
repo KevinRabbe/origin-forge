@@ -1,0 +1,95 @@
+name: Phase 22 real FFmpeg evidence
+
+on:
+  pull_request:
+    types: [edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  real-ffmpeg-gate:
+    if: >-
+      github.event.pull_request.number == 31 &&
+      contains(github.event.pull_request.body, '<!-- phase22-real-ffmpeg-evidence -->')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout exact Origin Forge PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify exact Origin Forge head
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha }}"
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+          echo "PIN_ORIGIN_FORGE_HEAD=$actual"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Checkout pinned FFmpeg source
+        uses: actions/checkout@v4
+        with:
+          repository: FFmpeg/FFmpeg
+          ref: 38b88335f99e76ed89ff3c93f877fdefce736c13
+          path: .external/ffmpeg
+          persist-credentials: false
+
+      - name: Verify and build pinned offline FFmpeg runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_commit="38b88335f99e76ed89ff3c93f877fdefce736c13"
+          actual_commit="$(git -C .external/ffmpeg rev-parse HEAD)"
+          test "$actual_commit" = "$source_commit"
+
+          pushd .external/ffmpeg >/dev/null
+          ./configure \
+            --disable-doc \
+            --disable-debug \
+            --disable-network \
+            --disable-autodetect \
+            --disable-ffplay \
+            --disable-ffprobe \
+            --disable-x86asm
+          make -j2 ffmpeg
+          popd >/dev/null
+
+          ffmpeg="$(pwd)/.external/ffmpeg/ffmpeg"
+          test -x "$ffmpeg"
+          first_line="$("$ffmpeg" -version | head -n 1)"
+          case "$first_line" in
+            "ffmpeg version 8.1.2"*) ;;
+            *)
+              echo "unexpected FFmpeg version: $first_line"
+              exit 1
+              ;;
+          esac
+          runtime_sha="sha256:$(sha256sum "$ffmpeg" | awk '{print $1}')"
+
+          echo "PIN_FFMPEG_SOURCE_COMMIT=$source_commit"
+          echo "PIN_FFMPEG_VERSION=8.1.2"
+          echo "PIN_FFMPEG_RUNTIME_SHA256=$runtime_sha"
+
+          echo "ORIGIN_FORGE_REAL_FFMPEG_EXECUTABLE=$ffmpeg" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_FFMPEG_VERSION=8.1.2" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_FFMPEG_SOURCE_COMMIT=$source_commit" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_FFMPEG_RUNTIME_SHA256=$runtime_sha" >> "$GITHUB_ENV"
+
+      - name: Run frozen real FFmpeg governed gate
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -W error::ResourceWarning -m unittest discover -s tests \
+            -p "test_audio_ffmpeg_real.py" -v
