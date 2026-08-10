@@ -235,11 +235,22 @@ class SimulationSpec:
         for invariant in invariants:
             if invariant.variable not in variables:
                 raise SimulationModelError("invariant references unknown state variable")
-        object.__setattr__(
-            self, "invariants", tuple(sorted(invariants, key=lambda value: value.invariant_id))
-        )
+        invariants = tuple(sorted(invariants, key=lambda value: value.invariant_id))
+        object.__setattr__(self, "invariants", invariants)
 
-        work_units = self.replicates * self.max_steps * len(rules)
+        rule_step_cost = sum(
+            1
+            + len(rule.requires)
+            + 3 * len(rule.consume)
+            + 2 * len(rule.produce)
+            for rule in rules
+        )
+        per_replicate_work = (
+            3 * len(initial)
+            + self.max_steps * rule_step_cost
+            + (self.max_steps + 1) * len(invariants)
+        )
+        work_units = self.replicates * per_replicate_work
         if work_units > _MAX_WORK_UNITS:
             raise SimulationModelError("simulation work budget exceeds v1 limit")
 
