@@ -67,8 +67,11 @@ def parse_context_program_proposal(
         value = json.loads(text, object_pairs_hook=_strict_object)
     except ContextProgramProposalError:
         raise
-    except json.JSONDecodeError as exc:
-        raise ContextProgramProposalError("program proposal is invalid JSON") from exc
+    except (json.JSONDecodeError, ValueError) as exc:
+        # CPython raises plain ValueError for integers beyond its configured
+        # digit limit; model output must fail as a bounded proposal rather than
+        # leak interpreter-specific parsing behavior.
+        raise ContextProgramProposalError("program proposal is invalid bounded JSON") from exc
     if not isinstance(value, dict) or set(value) != {"instructions", "output_bindings"}:
         raise ContextProgramProposalError(
             "program proposal must contain exactly instructions and output_bindings"
