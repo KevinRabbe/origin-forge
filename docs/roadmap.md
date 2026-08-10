@@ -476,13 +476,38 @@ See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, tru
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
-## Phase 27 — Code Mode and Programmatic Context Experiments — PLANNED
+## Phase 27 — Code Mode and Programmatic Context Experiments — DONE
 
-Benchmark sandboxed model-written mini-workflows that combine multiple authorized operations without returning to the model between every operation. Enable only where measured reliability or cost improves.
+Implemented a governed programmatic-context experiment substrate without introducing arbitrary model-written code execution:
 
-Also evaluate bounded programmatic context access over governed APIs such as artifact/run search, failed-attempt lookup, Entity context, memory search, Skill description and Tool discovery instead of dumping long histories into one model context. Do not expose unrestricted SQL, arbitrary filesystem traversal, hidden persistent scratch state, or generic process authority.
+- infrastructure-owned `CTXREQ-*`, `CTXCAT-*`, `CTXPROG-*`, `CTXEXEC-*`, `CTXPKG-*`, and `CTXEXP-*` identities;
+- model-proposable inert straight-line programs over exact content-addressed read-only operation catalogs;
+- infrastructure-owned request/catalog/identity/budget binding, with a strict proposal parser that rejects candidate-supplied authority metadata, duplicate JSON keys, unknown operations, forward references, rebinding and pathological values;
+- no Python/JavaScript/shell/SQL/filesystem/network/process language surface, loops, recursion, dynamic operation names or generic Phase-13 `call_tool`;
+- exact adapter fingerprints/schema hashes, call/response limits, READ_ONLY effect enforcement and replay classification;
+- pre-dispatch scalar/JSON, per-call input, aggregate input, per-response, aggregate result and final-context bounds that prevent reference amplification and pathological serialization work;
+- one real governed `runtime.run_show@1` adapter exposing only task-scoped terminal Run evidence through an explicit stable projection;
+- canonical content-addressed per-step traces with exact input/output hashes and reconstructable final context packages;
+- deterministic replay verification for `DETERMINISTIC` adapters and explicit refusal of exact-replay claims for `REVISION_BOUND` adapters;
+- immutable no-overwrite programmatic-context persistence with symlink/root containment, duplicate-key rejection, byte/count limits and canonical/hash revalidation;
+- regression-dominant paired baseline-vs-programmatic experiments over success, quality, model calls, tokens, context bytes, wall time and resource units;
+- experiment classification revalidation preventing forged case/report verdicts and preventing two failed variants from winning solely through lower cost;
+- read-only status/list/show CLI with all creation/execution/generic-code/tool/filesystem/SQL/network/process/Task/activation/promotion/signing/merge/release flags false;
+- no Phase-26 trusted promotion adapter added by Phase 27 and no automatic activation path.
 
-Long-lived work should prefer durable specialist jobs plus fresh isolated model invocations over persistent autonomous model processes with private evolving memory. The durable job/evidence persists; each model invocation receives a reconstructable bounded package. Recursive delegation may never amplify authority beyond the parent contract.
+Core rule:
+
+```text
+model proposal → frozen read-only catalog → bounded interpreter → context evidence → benchmark
+```
+
+The accepted v1 deliberately stops short of a general-purpose code mode. Future operation adapters or richer program control flow require independent evidence that they improve reliability/cost without widening authority. Long-lived work continues to use durable Origin Forge state plus fresh bounded model invocations rather than a persistent autonomous process with private memory.
+
+See `docs/phase-27-code-mode-programmatic-context.md` for the detailed contracts, replay boundary, resource limits, benchmark policy and exclusions.
+
+**Exit condition met:** Origin Forge can execute a model-proposable finite read-only mini-program over an exact infrastructure-owned operation catalog, persist/reconstruct/replay-check the resulting context evidence, compare it against conventional context using regression-dominant metrics, and keep generic code/process/filesystem/Task/activation/promotion/signing/merge/release authority outside the experiment.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 28 — Cross-Media Watermarking — PLANNED
 
