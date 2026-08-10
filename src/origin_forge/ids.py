@@ -61,6 +61,7 @@ class IdKind(StrEnum):
     CONTEXT_PROGRAM = "CTXPROG"
     CONTEXT_EXECUTION = "CTXEXEC"
     CONTEXT_PACKAGE = "CTXPKG"
+    CONTEXT_EXPERIMENT = "CTXEXP"
 
 
 def new_id(kind: IdKind) -> str:
