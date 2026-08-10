@@ -5,6 +5,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from .harness_workshop_evaluation import WorkshopEvaluationReport, WorkshopVerdict
+from .harness_workshop_evaluators import require_trusted_workshop_evaluator
 from .harness_workshop_models import (
     HarnessComponentKind,
     HarnessImprovementCandidate,
@@ -131,6 +132,7 @@ def audit_workshop_evaluation(
     )
     try:
         plan.bind_candidate(candidate)
+        require_trusted_workshop_evaluator(plan)
         if candidate.component_kind is HarnessComponentKind.SKILL:
             if not isinstance(evaluation, SkillWorkshopEvaluation):
                 raise HarnessWorkshopModelError(
