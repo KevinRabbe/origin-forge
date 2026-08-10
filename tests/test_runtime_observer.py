@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -162,6 +163,50 @@ class RuntimeObserverTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeObserverError, "capture set mismatch"):
             self._adapter(script).execute(request)
+
+    def test_sparse_oversized_capture_is_rejected_before_read(self) -> None:
+        script = self._script(
+            """
+            import os
+            from pathlib import Path
+            path = Path(os.environ['ORIGIN_FORGE_CAPTURE_DIR']) / 'shot.png'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open('wb') as handle:
+                handle.truncate(128 * 1024 * 1024 + 1)
+            """
+        )
+        request = self._request(
+            (
+                RuntimeCaptureSpec(
+                    "shot",
+                    RuntimeCaptureKind.SCREENSHOT,
+                    "captures/shot.png",
+                    0,
+                ),
+            )
+        )
+        with self.assertRaisesRegex(RuntimeObserverError, "bounded PNG byte limit"):
+            self._adapter(script).execute(request)
+
+    def test_direct_child_exit_cleans_process_group_descendants(self) -> None:
+        script = self._script(
+            """
+            import subprocess
+            import sys
+            subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])
+            print('parent-exits', flush=True)
+            """
+        )
+        started = time.monotonic()
+        execution = self._adapter(script).execute(self._request())
+        elapsed = time.monotonic() - started
+        self.assertEqual(execution.result.exit_kind, RuntimeExitKind.EXITED)
+        self.assertEqual(execution.result.exit_code, 0)
+        self.assertLess(elapsed, 5.0)
+        self.assertIn(
+            b"parent-exits",
+            (execution.workspace_path / "logs" / "stdout.log").read_bytes(),
+        )
 
     def test_log_budget_blocks_without_unbounded_capture(self) -> None:
         script = self._script(
