@@ -92,6 +92,8 @@ class RuntimeObservationCliTests(unittest.TestCase):
         code, listing = self._call("observation-runs")
         self.assertEqual(code, 0)
         self.assertEqual([run["id"] for run in listing["runs"]], [run_id])
+        self.assertIsNotNone(listing["runs"][0]["ended_at"])
+        self.assertNotIn("finished_at", listing["runs"][0])
         code, shown = self._call("run-show", run_id)
         self.assertEqual(code, 0)
         self.assertEqual(shown["run"]["id"], run_id)
