@@ -4,6 +4,7 @@ import hashlib
 
 from .simulation_models import (
     MAX_STORED_VIOLATIONS,
+    MAX_TOTAL_STORED_VIOLATIONS,
     STATE_MAX,
     STATE_MIN,
     SimulationModelError,
@@ -48,12 +49,27 @@ def _eligible(state: dict[str, int], rule: SimulationRule) -> bool:
     return True
 
 
-def _apply_rule(state: dict[str, int], rule: SimulationRule) -> tuple[str, ...]:
+def _remember_original(
+    state: dict[str, int],
+    step_original: dict[str, int],
+    name: str,
+) -> None:
+    if name not in step_original:
+        step_original[name] = state[name]
+
+
+def _apply_rule(
+    state: dict[str, int],
+    rule: SimulationRule,
+    step_original: dict[str, int],
+) -> tuple[str, ...]:
     changed: set[str] = set()
     for name, amount in rule.consume:
+        _remember_original(state, step_original, name)
         state[name] -= amount
         changed.add(name)
     for name, amount in rule.produce:
+        _remember_original(state, step_original, name)
         value = state[name] + amount
         if value < STATE_MIN or value > STATE_MAX:
             raise SimulationEngineError(
@@ -69,6 +85,7 @@ def _record_invariants(
     state: dict[str, int],
     checkpoint: int,
     stored: list[SimulationViolation],
+    storage_limit: int,
 ) -> int:
     count = 0
     for invariant in spec.invariants:
@@ -81,7 +98,7 @@ def _record_invariants(
         if not violated:
             continue
         count += 1
-        if len(stored) < MAX_STORED_VIOLATIONS:
+        if len(stored) < storage_limit:
             stored.append(
                 SimulationViolation(
                     invariant_id=invariant.invariant_id,
@@ -102,6 +119,7 @@ def _state_pairs(state: dict[str, int]) -> tuple[tuple[str, int], ...]:
 def _run_replicate(
     spec: SimulationSpec,
     replicate_index: int,
+    violation_storage_limit: int,
 ) -> SimulationReplicateResult:
     state = dict(spec.initial_state)
     minimum_state = dict(state)
@@ -109,13 +127,15 @@ def _run_replicate(
     attempts = {rule.rule_id: 0 for rule in spec.rules}
     firings = {rule.rule_id: 0 for rule in spec.rules}
     violations: list[SimulationViolation] = []
-    violation_count = _record_invariants(spec, state, 0, violations)
+    violation_count = _record_invariants(
+        spec, state, 0, violations, violation_storage_limit
+    )
     no_progress_steps = 0
     stalled = False
     steps_executed = 0
 
     for step_index in range(spec.max_steps):
-        before_step = state.copy()
+        step_original: dict[str, int] = {}
         for rule in spec.rules:
             if not _eligible(state, rule):
                 continue
@@ -133,7 +153,7 @@ def _run_replicate(
             )
             if not fires:
                 continue
-            changed = _apply_rule(state, rule)
+            changed = _apply_rule(state, rule, step_original)
             firings[rule.rule_id] += 1
             for name in changed:
                 value = state[name]
@@ -143,11 +163,20 @@ def _run_replicate(
                     maximum_state[name] = value
 
         steps_executed = step_index + 1
-        violation_count += _record_invariants(spec, state, steps_executed, violations)
-        if state == before_step:
-            no_progress_steps += 1
-        else:
+        violation_count += _record_invariants(
+            spec,
+            state,
+            steps_executed,
+            violations,
+            violation_storage_limit,
+        )
+        progressed = any(
+            state[name] != original for name, original in step_original.items()
+        )
+        if progressed:
             no_progress_steps = 0
+        else:
+            no_progress_steps += 1
         if no_progress_steps >= spec.stall_steps:
             stalled = True
             break
@@ -176,8 +205,12 @@ def run_simulation(spec: SimulationSpec) -> SimulationResult:
         raise SimulationEngineError(
             "simulation specification does not match the governed v1 engine identity"
         )
+    violation_storage_limit = min(
+        MAX_STORED_VIOLATIONS,
+        max(1, MAX_TOTAL_STORED_VIOLATIONS // spec.replicates),
+    )
     replicates = tuple(
-        _run_replicate(spec, replicate_index)
+        _run_replicate(spec, replicate_index, violation_storage_limit)
         for replicate_index in range(spec.replicates)
     )
     result = SimulationResult(
