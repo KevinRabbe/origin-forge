@@ -23,6 +23,9 @@ from .runtime_observation_models import (
 )
 
 
+_MAX_CAPTURE_BYTES = 128 * 1024 * 1024
+
+
 class RuntimeObserverError(RuntimeError):
     pass
 
@@ -80,8 +83,12 @@ def _read_peak_rss_kib(pid: int) -> int:
 
 
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
-    if process.poll() is not None:
-        return
+    """Terminate every process left in the observation's process group.
+
+    The group may still contain descendants after the direct child exits, so
+    cleanup must not stop merely because ``process.poll()`` is non-None.
+    """
+
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -89,11 +96,10 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     deadline = time.monotonic() + 0.5
     while process.poll() is None and time.monotonic() < deadline:
         time.sleep(0.01)
-    if process.poll() is None:
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
 
 
 def _drain_bounded(
@@ -227,6 +233,11 @@ class LocalProcessRuntimeObserver:
             if path.is_symlink():
                 raise RuntimeObserverError("runtime capture tree contains a symlink")
             if path.is_file():
+                size = path.stat().st_size
+                if size <= 0 or size > _MAX_CAPTURE_BYTES:
+                    raise RuntimeObserverError(
+                        "runtime capture exceeds bounded PNG byte limit"
+                    )
                 try:
                     relative = path.relative_to(workspace).as_posix()
                 except ValueError as exc:
@@ -249,7 +260,12 @@ class LocalProcessRuntimeObserver:
                 raise RuntimeObserverError("runtime capture path is unsafe") from exc
             if path.is_symlink() or not path.is_file():
                 raise RuntimeObserverError("runtime capture is missing or unsafe")
+            size = path.stat().st_size
+            if size <= 0 or size > _MAX_CAPTURE_BYTES:
+                raise RuntimeObserverError("runtime capture exceeds bounded PNG byte limit")
             data = path.read_bytes()
+            if len(data) != size:
+                raise RuntimeObserverError("runtime capture changed while being read")
             inspection = inspect_truecolor8_png(data)
             evidence.append(
                 RuntimeCaptureEvidence(
@@ -335,6 +351,7 @@ class LocalProcessRuntimeObserver:
         except subprocess.TimeoutExpired:
             _terminate_process_group(process)
             process.wait(timeout=2)
+        _terminate_process_group(process)
         stdout_thread.join(timeout=2)
         stderr_thread.join(timeout=2)
         duration_ms = max(0, int((time.monotonic() - started) * 1000))
