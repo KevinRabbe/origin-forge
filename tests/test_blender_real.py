@@ -16,6 +16,18 @@ from origin_forge.blockbench_models import BlockbenchProjectSpec, CuboidSpec, Ve
 from origin_forge.runtime import OriginForgeRuntime
 
 
+_EXPECTED_SOURCE_COMMIT = "fbe6228777e7d9afefcd61a413844e790ae75db7"
+_EXPECTED_ARCHIVE_SHA256 = (
+    "96f6c181a30f4950607839dc84d42a354b250d8a0231b098b59b7bc69c351c48"
+)
+_EXPECTED_RUNTIME_HASH = (
+    "sha256:96528bd441b3c6d095216be58a5165a5ae4c1b7f0679e63dcbe2bd40ebe11676"
+)
+_EXPECTED_RUNNER_SHA256 = (
+    "sha256:c2eb8ebc0523bcfe0675bf8ba0a48018ae811a128551e1a935afde8ceb978746"
+)
+_EXPECTED_VERSION = "Blender 5.2.0 LTS"
+
 _REQUIRED_ENV = (
     "ORIGIN_FORGE_REAL_BLENDER_RUNTIME_ROOT",
     "ORIGIN_FORGE_REAL_BLENDER_EXECUTABLE",
@@ -41,17 +53,13 @@ class RealBlenderIntegrationTests(unittest.TestCase):
         archive_sha = os.environ["ORIGIN_FORGE_REAL_BLENDER_ARCHIVE_SHA256"]
         runner_sha = os.environ["ORIGIN_FORGE_REAL_BLENDER_RUNNER_SHA256"]
 
-        self.assertEqual(
-            source_commit,
-            "fbe6228777e7d9afefcd61a413844e790ae75db7",
-        )
-        self.assertEqual(
-            archive_sha,
-            "96f6c181a30f4950607839dc84d42a354b250d8a0231b098b59b7bc69c351c48",
-        )
-        self.assertEqual(expected_version, "Blender 5.2.0 LTS")
-        self.assertEqual(blender_runtime_tree_hash(runtime_root), runtime_hash)
-        self.assertEqual(blender_runner_v1_fingerprint(), runner_sha)
+        self.assertEqual(source_commit, _EXPECTED_SOURCE_COMMIT)
+        self.assertEqual(archive_sha, _EXPECTED_ARCHIVE_SHA256)
+        self.assertEqual(expected_version, _EXPECTED_VERSION)
+        self.assertEqual(runtime_hash, _EXPECTED_RUNTIME_HASH)
+        self.assertEqual(runner_sha, _EXPECTED_RUNNER_SHA256)
+        self.assertEqual(blender_runtime_tree_hash(runtime_root), _EXPECTED_RUNTIME_HASH)
+        self.assertEqual(blender_runner_v1_fingerprint(), _EXPECTED_RUNNER_SHA256)
 
         project = BlockbenchProjectSpec(
             project_name="origin-forge-real-blender-crate",
@@ -69,9 +77,9 @@ class RealBlenderIntegrationTests(unittest.TestCase):
         profile = BlenderRuntimeProfile(
             runtime_root=runtime_root,
             executable=executable,
-            runtime_hash=runtime_hash,
-            expected_blender_version=expected_version,
-            runner_fingerprint=runner_sha,
+            runtime_hash=_EXPECTED_RUNTIME_HASH,
+            expected_blender_version=_EXPECTED_VERSION,
+            runner_fingerprint=_EXPECTED_RUNNER_SHA256,
         )
 
         with tempfile.TemporaryDirectory() as tempdir:
@@ -81,9 +89,9 @@ class RealBlenderIntegrationTests(unittest.TestCase):
             request = BlenderJobRequest.create(
                 project=project,
                 output_relative_path="exports/crate.glb",
-                runner_fingerprint=runner_sha,
-                runtime_hash=runtime_hash,
-                expected_blender_version=expected_version,
+                runner_fingerprint=_EXPECTED_RUNNER_SHA256,
+                runtime_hash=_EXPECTED_RUNTIME_HASH,
+                expected_blender_version=_EXPECTED_VERSION,
                 budget=BlenderBudget(timeout_seconds=180),
             )
             execution = BlenderAdapter(runtime, profile).execute(request)
@@ -94,9 +102,9 @@ class RealBlenderIntegrationTests(unittest.TestCase):
             self.assertEqual(execution.inspection.texture_count, 0)
             self.assertEqual(execution.inspection.animation_count, 0)
             self.assertGreater(execution.inspection.embedded_bin_bytes, 0)
-            self.assertEqual(execution.blender_version, expected_version)
-            self.assertEqual(execution.runtime_hash, runtime_hash)
-            self.assertEqual(execution.runner_fingerprint, runner_sha)
+            self.assertEqual(execution.blender_version, _EXPECTED_VERSION)
+            self.assertEqual(execution.runtime_hash, _EXPECTED_RUNTIME_HASH)
+            self.assertEqual(execution.runner_fingerprint, _EXPECTED_RUNNER_SHA256)
             self.assertFalse(execution.to_dict()["production_verification_changed"])
             self.assertFalse(execution.to_dict()["canonical_asset_adopted"])
 
