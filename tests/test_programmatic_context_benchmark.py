@@ -137,6 +137,27 @@ class ProgrammaticContextBenchmarkTests(unittest.TestCase):
         self.assertIs(case.verdict, ContextExperimentVerdict.REGRESSED)
         self.assertIn("success", case.regression_reasons)
 
+    def test_two_failed_variants_cannot_create_improvement_from_cost_savings(self) -> None:
+        case = compare_context_case(
+            case_id="case.failed-cheaper",
+            case_hash=HASH_A,
+            environment_hash=HASH_B,
+            baseline=_observation(success=False, quality=0),
+            programmatic=_observation(
+                success=False,
+                quality=0,
+                calls=1,
+                input_tokens=100,
+                output_tokens=100,
+                context_bytes=100,
+                resource_units=1,
+            ),
+            policy=ContextExperimentPolicy(),
+        )
+        self.assertIs(case.verdict, ContextExperimentVerdict.EQUIVALENT)
+        self.assertIn("model_calls", case.improvements)
+        self.assertEqual(case.regression_reasons, ())
+
     def test_cost_increase_beyond_frozen_policy_is_regression(self) -> None:
         case = compare_context_case(
             case_id="case.cost",
