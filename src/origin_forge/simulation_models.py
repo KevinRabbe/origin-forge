@@ -16,6 +16,7 @@ _MAX_REPLICATES = 256
 _MAX_STEPS = 10_000
 _MAX_WORK_UNITS = 5_000_000
 _MAX_VIOLATIONS_PER_REPLICATE = 1024
+_MAX_TOTAL_STORED_VIOLATIONS = 8192
 _STATE_MIN = -2_147_483_648
 _STATE_MAX = 2_147_483_647
 _MAX_QUANTITY = 1_000_000_000
@@ -238,15 +239,20 @@ class SimulationSpec:
         invariants = tuple(sorted(invariants, key=lambda value: value.invariant_id))
         object.__setattr__(self, "invariants", invariants)
 
+        # Upper-bound the implemented Python work rather than only rule count.
+        # The factors include eligibility, original-value tracking, mutation,
+        # range/min/max bookkeeping and per-step progress comparison for fields
+        # a firing may touch. Invariant checks are charged independently.
         rule_step_cost = sum(
             1
             + len(rule.requires)
-            + 3 * len(rule.consume)
-            + 2 * len(rule.produce)
+            + 6 * len(rule.consume)
+            + 5 * len(rule.produce)
             for rule in rules
         )
         per_replicate_work = (
             3 * len(initial)
+            + 2 * len(rules)
             + self.max_steps * rule_step_cost
             + (self.max_steps + 1) * len(invariants)
         )
@@ -489,5 +495,6 @@ class SimulationResult:
 
 
 MAX_STORED_VIOLATIONS = _MAX_VIOLATIONS_PER_REPLICATE
+MAX_TOTAL_STORED_VIOLATIONS = _MAX_TOTAL_STORED_VIOLATIONS
 STATE_MIN = _STATE_MIN
 STATE_MAX = _STATE_MAX
