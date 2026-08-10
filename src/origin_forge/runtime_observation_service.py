@@ -67,6 +67,7 @@ class RuntimeObservationServiceResult:
     stdout_artifact_id: str
     stderr_artifact_id: str
     captures: tuple[RuntimeCaptureArtifactEvidence, ...]
+    missing_capture_ids: tuple[str, ...]
     backend_result_hash: str
     crash_detected: bool
     timed_out: bool
@@ -79,6 +80,7 @@ class RuntimeObservationServiceResult:
             "stdout_artifact_id": self.stdout_artifact_id,
             "stderr_artifact_id": self.stderr_artifact_id,
             "captures": [value.to_dict() for value in self.captures],
+            "missing_capture_ids": list(self.missing_capture_ids),
             "backend_result_hash": self.backend_result_hash,
             "crash_detected": self.crash_detected,
             "timed_out": self.timed_out,
@@ -427,6 +429,8 @@ class RuntimeObservationService:
                     )
                 )
 
+            observed_capture_ids = {value.capture_id for value in execution.result.captures}
+            missing_capture_ids = tuple(sorted(set(spec_by_id) - observed_capture_ids))
             crash_detected = execution.result.exit_kind.value in {"FAILED", "SIGNALED"}
             timed_out = execution.result.exit_kind.value == "TIMEOUT"
             self.runtime.record_verification(
@@ -446,6 +450,7 @@ class RuntimeObservationService:
                     "exit_code": execution.result.exit_code,
                     "crash_detected": crash_detected,
                     "timed_out": timed_out,
+                    "missing_capture_ids": list(missing_capture_ids),
                     "duration_ms": execution.result.performance.duration_ms,
                     "peak_rss_kib": execution.result.performance.peak_rss_kib,
                     "stdout_artifact_id": stdout_artifact_id,
@@ -469,6 +474,7 @@ class RuntimeObservationService:
                 stdout_artifact_id=stdout_artifact_id,
                 stderr_artifact_id=stderr_artifact_id,
                 captures=tuple(capture_results),
+                missing_capture_ids=missing_capture_ids,
                 backend_result_hash=execution.result.content_hash,
                 crash_detected=crash_detected,
                 timed_out=timed_out,
