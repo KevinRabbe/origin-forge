@@ -177,14 +177,6 @@ class ProgrammaticContextInterpreterTests(unittest.TestCase):
             validate_input=_mapping_input,
             validate_output=_mapping_output,
         )
-        program = ContextProgram.create(
-            request=self.request,
-            catalog=ContextOperationCatalog.create((self.lookup,)),
-            budget=ContextProgramBudget(),
-            instructions=(ContextInstruction(0, "result", "context.lookup", "1", ()),),
-            output_bindings=("result",),
-        )
-        # Recreate program against exact catalog used for execution.
         catalog = ContextOperationCatalog.create((self.lookup,))
         program = ContextProgram.create(
             request=self.request,
@@ -240,6 +232,100 @@ class ProgrammaticContextInterpreterTests(unittest.TestCase):
                 program=program,
             )
 
+    def test_repeated_reference_amplification_fails_before_second_adapter_invocation(self) -> None:
+        source = _descriptor("context.source", HASH_A, max_response_bytes=256)
+        sink = _descriptor("context.sink", HASH_D, max_response_bytes=128)
+        catalog = ContextOperationCatalog.create((source, sink))
+        registry = ContextAdapterRegistry()
+        calls = {"sink": 0}
+        registry.register(
+            source,
+            lambda _args: {"payload": "x" * 90},
+            validate_input=_mapping_input,
+            validate_output=_mapping_output,
+        )
+
+        def sink_invoke(_args):
+            calls["sink"] += 1
+            return {"ok": True}
+
+        registry.register(
+            sink,
+            sink_invoke,
+            validate_input=_mapping_input,
+            validate_output=_mapping_output,
+        )
+        program = ContextProgram.create(
+            request=self.request,
+            catalog=catalog,
+            budget=ContextProgramBudget(),
+            instructions=(
+                ContextInstruction(0, "source", "context.source", "1", ()),
+                ContextInstruction(
+                    1,
+                    "sink",
+                    "context.sink",
+                    "1",
+                    (
+                        ContextArgument.ref("left", "source"),
+                        ContextArgument.ref("right", "source"),
+                    ),
+                ),
+            ),
+            output_bindings=("sink",),
+        )
+        with self.assertRaisesRegex(ContextProgramExecutionError, "input exceeded bounded JSON"):
+            ContextProgramInterpreter(registry).execute(
+                request=self.request,
+                catalog=catalog,
+                program=program,
+            )
+        self.assertEqual(calls["sink"], 0)
+
+    def test_aggregate_adapter_input_budget_is_active(self) -> None:
+        descriptor = _descriptor("context.consume", HASH_A, max_calls=2, max_response_bytes=4096)
+        catalog = ContextOperationCatalog.create((descriptor,))
+        registry = ContextAdapterRegistry()
+        registry.register(
+            descriptor,
+            lambda _args: {"ok": True},
+            validate_input=_mapping_input,
+            validate_output=_mapping_output,
+        )
+        program = ContextProgram.create(
+            request=self.request,
+            catalog=catalog,
+            budget=ContextProgramBudget(
+                max_instructions=2,
+                max_invocations=2,
+                max_result_bytes=4096,
+                max_context_bytes=100,
+            ),
+            instructions=(
+                ContextInstruction(
+                    0,
+                    "first",
+                    "context.consume",
+                    "1",
+                    (ContextArgument.literal("payload", "a" * 45),),
+                ),
+                ContextInstruction(
+                    1,
+                    "second",
+                    "context.consume",
+                    "1",
+                    (ContextArgument.literal("payload", "b" * 45),),
+                ),
+            ),
+            output_bindings=("second",),
+        )
+        with self.assertRaisesRegex(ContextProgramExecutionError, "aggregate adapter-input"):
+            ContextProgramInterpreter(registry).execute(
+                request=self.request,
+                catalog=catalog,
+                program=program,
+            )
+
     def test_adapter_float_output_is_rejected_even_if_validator_accepts_it(self) -> None:
         descriptor = _descriptor("context.float", HASH_C)
         catalog = ContextOperationCatalog.create((descriptor,))
@@ -263,6 +349,36 @@ class ProgrammaticContextInterpreterTests(unittest.TestCase):
                 catalog=catalog,
                 program=program,
             )
+
+    def test_adapter_huge_integer_output_is_rejected_before_output_validation(self) -> None:
+        descriptor = _descriptor("context.bigint", HASH_C)
+        catalog = ContextOperationCatalog.create((descriptor,))
+        registry = ContextAdapterRegistry()
+        validation_calls = {"count": 0}
+
+        def validate_output(_value):
+            validation_calls["count"] += 1
+
+        registry.register(
+            descriptor,
+            lambda _args: {"value": 1 << 80},
+            validate_input=_mapping_input,
+            validate_output=validate_output,
+        )
+        program = ContextProgram.create(
+            request=self.request,
+            catalog=catalog,
+            budget=ContextProgramBudget(),
+            instructions=(ContextInstruction(0, "result", "context.bigint", "1", ()),),
+            output_bindings=("result",),
+        )
+        with self.assertRaisesRegex(ContextProgramExecutionError, "invalid bounded JSON"):
+            ContextProgramInterpreter(registry).execute(
+                request=self.request,
+                catalog=catalog,
+                program=program,
+            )
+        self.assertEqual(validation_calls["count"], 0)
 
 
 if __name__ == "__main__":
