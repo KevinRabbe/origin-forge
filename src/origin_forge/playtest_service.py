@@ -107,6 +107,34 @@ class PlaytestService:
         return expected
 
     @staticmethod
+    def _exact_output_path(
+        workspace: Path,
+        returned: Path,
+        *,
+        relative_path: tuple[str, ...],
+        label: str,
+    ) -> Path:
+        expected = workspace.joinpath(*relative_path)
+        returned = Path(returned)
+        parent = expected.parent
+        if parent.is_symlink() or expected.is_symlink() or returned.is_symlink():
+            raise PlaytestServiceError(f"{label} may not use symlinks")
+        try:
+            workspace_resolved = workspace.resolve(strict=True)
+            expected_resolved = expected.resolve(strict=True)
+            expected_resolved.relative_to(workspace_resolved)
+            returned_resolved = returned.resolve(strict=True)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise PlaytestServiceError(
+                f"{label} is not an existing protected playtest output"
+            ) from exc
+        if returned_resolved != expected_resolved:
+            raise PlaytestServiceError(
+                f"{label} must be the exact governed playtest output path"
+            )
+        return expected
+
+    @staticmethod
     def _read_bound_file(
         path: Path,
         *,
@@ -158,15 +186,27 @@ class PlaytestService:
             if scenario_path.read_bytes() != scenario_bytes:
                 raise PlaytestServiceError("persisted playtest scenario bytes drifted")
 
-            self._read_bound_file(
+            stdout_path = self._exact_output_path(
+                workspace,
                 execution.stdout_path,
+                relative_path=("logs", "stdout.log"),
+                label="playtest stdout log",
+            )
+            stderr_path = self._exact_output_path(
+                workspace,
+                execution.stderr_path,
+                relative_path=("logs", "stderr.log"),
+                label="playtest stderr log",
+            )
+            self._read_bound_file(
+                stdout_path,
                 content_hash=execution.stdout_hash,
                 byte_count=execution.stdout_bytes,
                 max_bytes=scenario.max_log_bytes,
                 label="playtest stdout log",
             )
             self._read_bound_file(
-                execution.stderr_path,
+                stderr_path,
                 content_hash=execution.stderr_hash,
                 byte_count=execution.stderr_bytes,
                 max_bytes=scenario.max_log_bytes,
@@ -210,7 +250,7 @@ class PlaytestService:
             )
             stdout_artifact_id = self.lineage.create_artifact(
                 artifact_type="PLAYTEST_STDOUT_LOG",
-                path_or_uri=str(execution.stdout_path),
+                path_or_uri=str(stdout_path),
                 parent_artifact_id=telemetry_artifact_id,
                 created_by_run_id=run_id,
                 tool_versions=tool_versions,
@@ -218,7 +258,7 @@ class PlaytestService:
             )
             stderr_artifact_id = self.lineage.create_artifact(
                 artifact_type="PLAYTEST_STDERR_LOG",
-                path_or_uri=str(execution.stderr_path),
+                path_or_uri=str(stderr_path),
                 parent_artifact_id=telemetry_artifact_id,
                 created_by_run_id=run_id,
                 tool_versions=tool_versions,
