@@ -15,6 +15,10 @@ from .simulation_models import (
 )
 
 
+ENGINE_ID = "origin-forge-deterministic-sim"
+ENGINE_VERSION = "1"
+
+
 class SimulationEngineError(RuntimeError):
     pass
 
@@ -134,9 +138,7 @@ def _run_replicate(
                     maximum_state[name] = value
 
         steps_executed = step_index + 1
-        violation_count += _record_invariants(
-            spec, state, steps_executed, violations
-        )
+        violation_count += _record_invariants(spec, state, steps_executed, violations)
         if state == before_step:
             no_progress_steps += 1
         else:
@@ -145,7 +147,7 @@ def _run_replicate(
             stalled = True
             break
 
-    replicate = SimulationReplicateResult(
+    return SimulationReplicateResult(
         replicate_index=replicate_index,
         steps_executed=steps_executed,
         stalled=stalled,
@@ -158,7 +160,6 @@ def _run_replicate(
         violations=tuple(violations),
         violations_truncated=violation_count > len(violations),
     )
-    return replicate
 
 
 def run_simulation(spec: SimulationSpec) -> SimulationResult:
@@ -166,6 +167,10 @@ def run_simulation(spec: SimulationSpec) -> SimulationResult:
 
     if not isinstance(spec, SimulationSpec):
         raise TypeError("spec must be a SimulationSpec")
+    if (spec.engine_id, spec.engine_version) != (ENGINE_ID, ENGINE_VERSION):
+        raise SimulationEngineError(
+            "simulation specification does not match the governed v1 engine identity"
+        )
     replicates = tuple(
         _run_replicate(spec, replicate_index)
         for replicate_index in range(spec.replicates)
@@ -173,8 +178,8 @@ def run_simulation(spec: SimulationSpec) -> SimulationResult:
     result = SimulationResult(
         session_id=spec.session_id,
         spec_hash=spec.content_hash,
-        engine_id=spec.engine_id,
-        engine_version=spec.engine_version,
+        engine_id=ENGINE_ID,
+        engine_version=ENGINE_VERSION,
         replicates=replicates,
     )
     try:
