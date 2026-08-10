@@ -110,6 +110,18 @@ class HarnessWorkshopCliTests(unittest.TestCase):
                 "reports": 0,
             },
         )
+        self.assertEqual(
+            value["trusted_evaluator_protocols"]["SKILL_BENCHMARK"],
+            ["paired-skill-ab-v1"],
+        )
+        for family in (
+            "PROMPT_BENCHMARK",
+            "CONTEXT_BENCHMARK",
+            "ROUTING_BENCHMARK",
+            "SPECIALIST_BENCHMARK",
+            "MINI_WORKFLOW_BENCHMARK",
+        ):
+            self.assertEqual(value["trusted_evaluator_protocols"][family], [])
         for key, enabled in value.items():
             if key.endswith("_enabled"):
                 self.assertFalse(enabled, key)
