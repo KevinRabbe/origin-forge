@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -99,6 +100,7 @@ def test_service_records_missing_capture_ids_without_losing_crash_evidence() -> 
         assert result.missing_capture_ids == ("late-shot",)
         assert result.to_dict()["missing_capture_ids"] == ["late-shot"]
         verification = runtime.list_verifications("RUN", result.run_id)[0]
-        assert verification["evidence"]["missing_capture_ids"] == ["late-shot"]
+        evidence = json.loads(verification["evidence_json"])
+        assert evidence["missing_capture_ids"] == ["late-shot"]
         assert runtime.get_task(task)["status"] == TaskStatus.RUNNING.value
         assert runtime.list_verifications("TASK", task) == []
