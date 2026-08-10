@@ -4,6 +4,7 @@ import unittest
 
 from origin_forge.simulation_engine import SimulationEngineError, run_simulation
 from origin_forge.simulation_models import (
+    MAX_TOTAL_STORED_VIOLATIONS,
     STATE_MAX,
     SimulationInvariant,
     SimulationRule,
@@ -82,6 +83,29 @@ class SimulationEngineTests(unittest.TestCase):
         self.assertFalse(result.violations_truncated)
         self.assertEqual([value.checkpoint for value in result.violations], [3, 4])
         self.assertEqual([value.observed for value in result.violations], [3, 4])
+
+    def test_retained_violations_have_global_result_cap(self) -> None:
+        invariants = tuple(
+            SimulationInvariant(f"limit-{index:03d}", "value", minimum=1)
+            for index in range(64)
+        )
+        spec = SimulationSpec.create(
+            seed=40,
+            initial_state=(("value", 0),),
+            rules=(SimulationRule("never", 0, 0, produce=(("value", 1),)),),
+            invariants=invariants,
+            replicates=16,
+            max_steps=20,
+            stall_steps=20,
+        )
+        result = run_simulation(spec)
+        self.assertEqual(
+            sum(len(replicate.violations) for replicate in result.replicates),
+            MAX_TOTAL_STORED_VIOLATIONS,
+        )
+        for replicate in result.replicates:
+            self.assertEqual(replicate.violation_count, 64 * 21)
+            self.assertTrue(replicate.violations_truncated)
 
     def test_zero_net_firing_still_counts_as_no_state_progress(self) -> None:
         spec = SimulationSpec.create(
