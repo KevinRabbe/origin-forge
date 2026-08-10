@@ -53,6 +53,7 @@ jobs:
           if [ -z "$actual_commit" ]; then
             actual_commit="$(git ls-remote https://github.com/blender/blender.git "refs/tags/${source_tag}" | awk 'NR==1 {print $1}')"
           fi
+          echo "PROBE_BLENDER_TAG_COMMIT=$actual_commit"
           test "$actual_commit" = "$source_commit"
 
           checksum_file="$(pwd)/.external/blender-${version}.sha256"
@@ -61,6 +62,7 @@ jobs:
             --output "$checksum_file" \
             "$release_root/blender-${version}.sha256"
           official_sha="$(grep -F "$archive_name" "$checksum_file" | awk 'NR==1 {print $1}')"
+          echo "PROBE_BLENDER_OFFICIAL_SHA256=$official_sha"
           test "$official_sha" = "$archive_sha256"
 
           curl --fail --location --proto '=https' --tlsv1.2 \
@@ -68,22 +70,31 @@ jobs:
             "$release_root/$archive_name"
           echo "$archive_sha256  $archive" | sha256sum --check --strict
           archive_size="$(stat -c '%s' "$archive")"
+          echo "PROBE_BLENDER_ARCHIVE_SIZE=$archive_size"
 
           extract_root="$(pwd)/.external/extracted"
           runtime_root="$(pwd)/.external/blender-runtime"
           mkdir -p "$extract_root" "$runtime_root"
           tar -xJf "$archive" -C "$extract_root"
           source_root="$extract_root/blender-${version}-linux-x64"
+          echo "PROBE_BLENDER_EXTRACTED_ROOT=$source_root"
           test -x "$source_root/blender"
+          source_symlink_count="$(find "$source_root" -type l | wc -l)"
+          echo "PROBE_BLENDER_SOURCE_SYMLINKS=$source_symlink_count"
           cp -aL "$source_root"/. "$runtime_root"/
-          test -z "$(find "$runtime_root" -type l -print -quit)"
+          remaining_symlink="$(find "$runtime_root" -type l -print -quit)"
+          echo "PROBE_BLENDER_RUNTIME_FIRST_SYMLINK=${remaining_symlink:-NONE}"
+          test -z "$remaining_symlink"
 
           executable="$runtime_root/blender"
           test -x "$executable"
           version_output="$(env -i PATH=/usr/bin:/bin HOME="$(pwd)" LANG=C.UTF-8 LC_ALL=C.UTF-8 "$executable" --version)"
+          printf '%s\n' "$version_output" | sed 's/^/PROBE_BLENDER_VERSION_OUTPUT: /'
           first_line="$(printf '%s\n' "$version_output" | head -n 1)"
+          echo "PROBE_BLENDER_FIRST_LINE=$first_line"
           test "$first_line" = "Blender $version"
           build_hash="$(printf '%s\n' "$version_output" | sed -n 's/^[[:space:]]*build hash: //p' | head -n 1)"
+          echo "PROBE_BLENDER_BUILD_HASH=$build_hash"
           test "$build_hash" = "$expected_build_hash"
 
           runtime_hash="$(PYTHONPATH=src python - "$runtime_root" <<'PY'
