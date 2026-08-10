@@ -41,11 +41,13 @@ jobs:
         run: |
           set -euo pipefail
           version="5.2.0"
+          version_line="Blender 5.2.0 LTS"
           source_tag="v5.2.0"
           source_commit="fbe6228777e7d9afefcd61a413844e790ae75db7"
           expected_build_hash="fbe6228777e7"
           archive_name="blender-5.2.0-linux-x64.tar.xz"
           archive_sha256="96f6c181a30f4950607839dc84d42a354b250d8a0231b098b59b7bc69c351c48"
+          archive_size_expected="384441228"
           release_root="https://download.blender.org/release/Blender5.2"
 
           mkdir -p .external
@@ -71,6 +73,7 @@ jobs:
           echo "$archive_sha256  $archive" | sha256sum --check --strict
           archive_size="$(stat -c '%s' "$archive")"
           echo "PROBE_BLENDER_ARCHIVE_SIZE=$archive_size"
+          test "$archive_size" = "$archive_size_expected"
 
           extract_root="$(pwd)/.external/extracted"
           runtime_root="$(pwd)/.external/blender-runtime"
@@ -92,7 +95,7 @@ jobs:
           printf '%s\n' "$version_output" | sed 's/^/PROBE_BLENDER_VERSION_OUTPUT: /'
           first_line="$(printf '%s\n' "$version_output" | head -n 1)"
           echo "PROBE_BLENDER_FIRST_LINE=$first_line"
-          test "$first_line" = "Blender $version"
+          test "$first_line" = "$version_line"
           build_hash="$(printf '%s\n' "$version_output" | sed -n 's/^[[:space:]]*build hash: //p' | head -n 1)"
           echo "PROBE_BLENDER_BUILD_HASH=$build_hash"
           test "$build_hash" = "$expected_build_hash"
@@ -111,6 +114,7 @@ jobs:
           )"
 
           echo "PIN_BLENDER_VERSION=$version"
+          echo "PIN_BLENDER_VERSION_LINE=$version_line"
           echo "PIN_BLENDER_SOURCE_TAG=$source_tag"
           echo "PIN_BLENDER_SOURCE_COMMIT=$source_commit"
           echo "PIN_BLENDER_BUILD_HASH=$build_hash"
@@ -122,7 +126,7 @@ jobs:
           echo "ORIGIN_FORGE_REAL_BLENDER_RUNTIME_ROOT=$runtime_root" >> "$GITHUB_ENV"
           echo "ORIGIN_FORGE_REAL_BLENDER_EXECUTABLE=$executable" >> "$GITHUB_ENV"
           echo "ORIGIN_FORGE_REAL_BLENDER_RUNTIME_HASH=$runtime_hash" >> "$GITHUB_ENV"
-          echo "ORIGIN_FORGE_REAL_BLENDER_VERSION=Blender $version" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_BLENDER_VERSION=$version_line" >> "$GITHUB_ENV"
           echo "ORIGIN_FORGE_REAL_BLENDER_SOURCE_COMMIT=$source_commit" >> "$GITHUB_ENV"
           echo "ORIGIN_FORGE_REAL_BLENDER_ARCHIVE_SHA256=$archive_sha256" >> "$GITHUB_ENV"
           echo "ORIGIN_FORGE_REAL_BLENDER_RUNNER_SHA256=$runner_sha" >> "$GITHUB_ENV"
