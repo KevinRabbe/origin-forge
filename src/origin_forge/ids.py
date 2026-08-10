@@ -43,6 +43,8 @@ class IdKind(StrEnum):
     AUDIO_WORKSPACE = "AUDIO"
     AUDIO_OPERATION = "AUDOP"
     AUDIO_PROFILE = "AUDPROF"
+    RUNTIME_OBSERVATION_WORKSPACE = "OBSWS"
+    RUNTIME_OBSERVATION = "OBS"
 
 
 def new_id(kind: IdKind) -> str:
