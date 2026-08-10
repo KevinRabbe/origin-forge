@@ -44,11 +44,13 @@ class _FakePlaytestBackend:
         outcome: PlaytestOutcome = PlaytestOutcome.FAILED,
         reported_workspace: Path | None = None,
         corrupt_stdout_hash: bool = False,
+        escaped_stdout: bool = False,
     ):
         self.runtime = runtime
         self.outcome = outcome
         self.reported_workspace = reported_workspace
         self.corrupt_stdout_hash = corrupt_stdout_hash
+        self.escaped_stdout = escaped_stdout
 
     def execute(self, scenario: PlaytestScenario) -> PlaytestHarnessExecution:
         workspace = self.runtime.state_dir / "playtests" / scenario.workspace_id
@@ -65,6 +67,10 @@ class _FakePlaytestBackend:
         stderr_path = workspace / "logs" / "stderr.log"
         stdout_path.write_bytes(stdout)
         stderr_path.write_bytes(stderr)
+        reported_stdout_path = stdout_path
+        if self.escaped_stdout:
+            reported_stdout_path = self.runtime.state_dir / "unrelated-playtest-stdout.log"
+            reported_stdout_path.write_bytes(stdout)
         events = (
             PlaytestTelemetryEvent(
                 0, 100, PlaytestTelemetryKind.PROGRESSION, "spawn"
@@ -100,7 +106,7 @@ class _FakePlaytestBackend:
             scenario=scenario,
             telemetry=telemetry,
             workspace_path=self.reported_workspace or workspace,
-            stdout_path=stdout_path,
+            stdout_path=reported_stdout_path,
             stderr_path=stderr_path,
             stdout_hash=("sha256:" + "0" * 64) if self.corrupt_stdout_hash else _hash(stdout),
             stderr_hash=_hash(stderr),
@@ -227,6 +233,24 @@ class PlaytestServiceTests(unittest.TestCase):
                 ),
             ).execute(self.task, self._scenario())
         self._assert_task_observation_only(before, self.runtime.get_task(self.task))
+        runs = [
+            run
+            for run in self.runtime.list_runs(self.task)
+            if run["role"] == PlaytestService.RUN_ROLE
+        ]
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], RunStatus.FAILED.value)
+        self.assertEqual(self.runtime.list_verifications("TASK", self.task), [])
+
+    def test_log_path_escape_fails_before_artifact_persistence(self) -> None:
+        lineage = OriginForgeLineage(self.runtime)
+        self.assertEqual(lineage.list_artifacts(), [])
+        with self.assertRaisesRegex(PlaytestServiceError, "exact governed"):
+            PlaytestService(
+                self.runtime,
+                _FakePlaytestBackend(self.runtime, escaped_stdout=True),
+            ).execute(self.task, self._scenario())
+        self.assertEqual(lineage.list_artifacts(), [])
         runs = [
             run
             for run in self.runtime.list_runs(self.task)
