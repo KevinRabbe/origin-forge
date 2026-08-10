@@ -100,8 +100,8 @@ class HarnessWorkshopStoreTests(unittest.TestCase):
         decision = WorkshopDecision.create(
             audit=audit,
             evaluation=report,
-            outcome=WorkshopDecisionOutcome.APPROVE_FOR_PROMOTION,
-            rationale="Evidence is structurally valid and improved; activation remains separate.",
+            outcome=WorkshopDecisionOutcome.DEFER,
+            rationale="No trusted prompt evaluator adapter exists; evidence is retained without promotion eligibility.",
         )
         return candidate, plan, report, audit, decision
 
@@ -120,6 +120,7 @@ class HarnessWorkshopStoreTests(unittest.TestCase):
             self.assertEqual(envelope["content_hash"], expected_hash)
             self.assertEqual(envelope["object_id"], object_id)
             self.assertEqual(envelope["object_type"], category)
+        self.assertFalse(decision.to_dict()["promotion_eligible"])
 
     def test_object_is_immutable_no_overwrite_even_for_identical_payload(self) -> None:
         candidate, *_ = self._objects()
