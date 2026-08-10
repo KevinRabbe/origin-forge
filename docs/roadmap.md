@@ -393,32 +393,58 @@ See `docs/phase-23-runtime-observation.md` for the detailed v1 contract, exclusi
 
 **Exit condition met:** one immutable repository head proves on Python 3.12 and 3.13 that Origin Forge can launch an exact trusted target, bound logs/runtime outcomes/performance evidence, capture and independently validate only declared screenshots/timed video frames, emit deterministic baseline-regression evidence, persist/read that evidence, terminate descendant process state, and leave production Task/adoption/signing/merge/release authority unchanged.
 
-## Phase 24 — Automated Playtesting — PLANNED
+## Phase 24 — Automated Playtesting — DONE
 
-Add synthetic players/bots and telemetry for suitable games: deaths, encounter duration, damage, shortages, soft locks, pathfinding failures, progression stalls, and related runtime outcomes.
+Implemented a governed automated-playtesting substrate for suitable games:
+
+- infrastructure-owned `PLAYSCEN-*`, `PLAY-*`, and `PLAYWS-*` identities;
+- immutable content-addressed scenarios with exact harness/target identity and executable hash binding;
+- semantic whitelisted `SET_AXIS`, `PRESS`, `RELEASE`, and `WAIT` controls rather than generic host input injection;
+- a real cooperative no-shell target-specific harness with fixed executable/argv, minimal infrastructure-owned environment, bounded concurrent logs, timeout and POSIX process-group cleanup;
+- strict bounded scenario-bound telemetry for deaths, encounters, damage, shortages, soft locks, pathfinding failures, progression and runtime outcome;
+- deterministic encounter/progression/gameplay analysis that remains evidence rather than semantic game-quality authority;
+- explicit separation between a successful playtest observation and a failed/timed-out game session;
+- independently revalidated exact workspace, scenario path/bytes, log paths/hashes/sizes and backend exit/telemetry consistency;
+- adversarial rejection of workspace escape, escaped/aliased log paths, symlinked scenario evidence, hash drift and backend process-state disagreement before Artifact persistence;
+- durable scenario/telemetry/summary/log Artifacts plus Run-level `playtest-structure` Verification;
+- read-only operator inspection;
+- no production Task verification/completion, canonical adoption, signing, merge, release, generic keyboard/mouse, model-authored executable code, or autonomous self-improvement authority.
+
+The v1 reward-hacking boundary explicitly keeps the synthetic player, telemetry producer, evaluator and production Task verifier as separate authority surfaces. Metric improvement is evidence, not proof of legitimate gameplay improvement, and any later optimization/refinement loop must operate against frozen capabilities and independent evaluation.
+
+See `docs/phase-24-automated-playtesting.md` for the detailed contract, threat boundary and acceptance tests.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 25 — Simulation Layer — PLANNED
 
 Add cheap pre-implementation simulation for economy, loot, crafting, progression, spawning, combat balance, skill trees, and resource distribution.
 
-## Phase 26 — Skill Workshop — PLANNED
+## Phase 26 — Skill & Harness Workshop — PLANNED
 
-Govern operational learning:
+Govern operational learning and harness refinement without live self-modification:
 
 ```text
-observed reusable pattern
-→ Skill proposal
-→ isolated evaluation
+verified trajectories / Dream candidates
+→ minimal improvement candidate
+→ isolated paired evaluation
 → regression suite
+→ independent audit
 → approval
-→ new signed Skill version
+→ new immutable governed component version
 ```
 
-Dream Cycle candidates may enter this pipeline, but active agents and Dream processes never silently replace governing Skills.
+Introduce a first-class Harness Improvement Candidate that can propose exactly one bounded target such as a Skill, prompt, context-selection strategy, routing policy, specialist contract, or sandboxed mini-workflow. Each candidate must bind its source trajectory/evidence hashes, target component/version, hypothesis, smallest relevant diff, expected metric effect, evaluation plan and known risks.
 
-## Phase 27 — Code Mode Experiments — PLANNED
+Old-vs-candidate evaluation must measure success/regression together with model calls, tokens, wall time and resource cost. A candidate cannot choose its own acceptance metric, verify itself, activate itself, or silently replace the governing component. Dream Cycle findings may enter this pipeline, but active agents and Dream processes remain proposal-only.
 
-Benchmark sandboxed model-written mini-workflows that combine multiple tool operations without returning to the model between every operation. Enable only where measured reliability or cost improves.
+## Phase 27 — Code Mode and Programmatic Context Experiments — PLANNED
+
+Benchmark sandboxed model-written mini-workflows that combine multiple authorized operations without returning to the model between every operation. Enable only where measured reliability or cost improves.
+
+Also evaluate bounded programmatic context access over governed APIs such as artifact/run search, failed-attempt lookup, Entity context, memory search, Skill description and Tool discovery instead of dumping long histories into one model context. Do not expose unrestricted SQL, arbitrary filesystem traversal, hidden persistent scratch state, or generic process authority.
+
+Long-lived work should prefer durable specialist jobs plus fresh isolated model invocations over persistent autonomous model processes with private evolving memory. The durable job/evidence persists; each model invocation receives a reconstructable bounded package. Recursive delegation may never amplify authority beyond the parent contract.
 
 ## Phase 28 — Cross-Media Watermarking — PLANNED
 
