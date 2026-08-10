@@ -1,8 +1,8 @@
 # Phase 22 — Audio
 
-Status: **IN PROGRESS**
+Status: **DONE**
 
-Phase 22 adds deterministic/local sound effects, FFmpeg processing, music generation, text-to-speech, and audio validation/provenance without turning an audio runtime, model, or processor into production authority.
+Phase 22 adds deterministic/local sound effects, FFmpeg processing, structured music, text-to-speech, and audio validation/provenance without turning an audio runtime, model, or processor into production authority.
 
 ## Core rule
 
@@ -79,21 +79,13 @@ PROCESS_AUDIO
 
 Requests do not contain shell commands, arbitrary FFmpeg arguments/filter graphs, Python source, network URLs, plugin-install directives, or unrestricted host paths.
 
-`AudioOperationResult` must bind the exact operation/workspace/request/backend/profile/model identities and declare only the requested outputs. A successful backend response is not sufficient: output bytes are independently decoded and canonicalized before durable evidence is recorded.
+`AudioOperationResult` binds the exact operation/workspace/request/backend/profile/model identities and declares only the requested outputs. A successful backend response is not sufficient: output bytes are independently decoded and canonicalized before durable evidence is recorded.
 
 ## 4. Deterministic local SFX
 
 The v0 SFX substrate includes an infrastructure-owned procedural renderer for small deterministic effects. It uses structured bounded synthesis specifications rather than prompt-to-code generation.
 
-Initial primitives may include:
-
-- square/triangle oscillators;
-- seeded integer noise;
-- bounded amplitude/envelope parameters;
-- deterministic sequencing/mixing;
-- exact sample-rate/channel/duration budgets.
-
-The renderer uses integer arithmetic where practical and emits canonical PCM16 WAV. A model may later propose a structured SFX specification, but deterministic infrastructure validates and renders it.
+Implemented primitives include bounded square/triangle oscillators, seeded integer noise, deterministic envelopes, sequencing/mixing, and exact sample-rate/channel/duration/PCM-byte budgets. The renderer emits canonical PCM16 WAV. A model may later propose a structured SFX specification, but deterministic infrastructure validates and renders it.
 
 ## 5. Deterministic structured music
 
@@ -103,17 +95,9 @@ Neural text-to-music is a separate backend implementation, not the canonical mus
 
 ## 6. FFmpeg processing boundary
 
-FFmpeg is treated as a one-shot external processor behind a fixed Origin Forge adapter.
+FFmpeg is treated as a one-shot external processor behind a fixed Origin Forge adapter. Callers do **not** supply arbitrary command-line tokens or filter strings.
 
-The initial adapter exposes only infrastructure-defined processing profiles. Callers do **not** supply arbitrary command-line tokens or filter strings.
-
-A v0 canonical-processing profile may perform only bounded operations such as:
-
-- exact input WAV -> PCM16 WAV;
-- resample to an allowed sample rate;
-- mono/stereo channel normalization;
-- metadata stripping;
-- deterministic/bitexact-oriented codec/container flags where supported.
+The initial adapter supports bounded PCM16 WAV processing such as resampling, mono/stereo normalization, metadata stripping, and deterministic/bitexact-oriented codec/container flags where supported.
 
 The process boundary requires:
 
@@ -128,24 +112,26 @@ The process boundary requires:
 - post-process symlink/root containment checks;
 - independent WAV decode/hash/canonicalization.
 
-FFmpeg success or exit code 0 is process evidence only.
+The real evidence profile pins FFmpeg release 8.1.2, upstream tag `n8.1.2`, and exact source commit `38b88335f99e76ed89ff3c93f877fdefce736c13`. The evidence workflow builds a network-disabled/autodetection-disabled runtime, hashes the built executable, and executes the governed adapter/service path. FFmpeg success or exit code 0 remains process evidence only.
 
 ## 7. Text-to-speech boundary
 
-TTS is a replaceable local provider contract. The initial real-provider candidate is Piper through its current supported CLI/API surface, but Origin Forge does not bundle or silently install it.
+TTS is a replaceable local provider contract. The initial real provider is Piper through its governed v1.6.0 C++ CLI runtime. Origin Forge does not bundle or silently install Piper or voices.
 
 A governed TTS profile freezes:
 
-- runtime identity/version/hash;
+- runtime identity/version/tree hash;
 - exact voice/model file hash;
 - exact voice configuration hash;
-- speaker/language identity where applicable;
-- synthesis parameters and output budget;
-- target canonical sample rate/channels.
+- exact license-document hash and license ID;
+- target sample rate/channels;
+- fixed infrastructure-owned synthesis controls and output budget.
 
-Voice/model licensing is reviewed per profile. The active Piper runtime is GPLv3, so it remains an external governed capability rather than a core library dependency.
+The real evidence profile pins Piper v1.6.0 at exact source commit `f04d52c5528ac7cf2d73757f57990ff490f75005`, exact espeak-ng commit `212928b394a96e8fd2096616bfd54e17845c48f6`, ONNX Runtime 1.22.0 with frozen archive size/SHA-512, and the `en_US-joe-medium` voice from exact piper-voices commit `375a0fe641dea077c2a47b4e9a056d6da521eed3`. The voice ONNX/config/license bytes are independently hashed and the profile records `CC0-1.0` license evidence.
 
-TTS output is independently parsed/canonicalized before Artifact evidence is created. Text synthesis never implies semantic intelligibility or pronunciation verification.
+Piper v1.6.0's C++ WAV writer intentionally emits a streaming RIFF/WAVE form with placeholder RIFF/data sizes and mono IEEE-float32 samples. Origin Forge keeps its shared canonical WAV parser strictly PCM16. A Piper-specific adapter-boundary normalizer accepts only the exact governed streaming shape (or already-canonical PCM16 for deterministic fake runners), derives the true payload length from EOF, rejects malformed/non-finite/unbounded samples, deterministically quantizes finite float32 samples to PCM16, then sends only canonical PCM16 WAV into shared Artifact/Verification evidence.
+
+TTS output is therefore independently normalized, parsed, hashed and structurally validated before Artifact evidence is created. Text synthesis never implies semantic intelligibility or pronunciation verification.
 
 ## 8. Neural SFX/music provider boundary
 
@@ -161,7 +147,7 @@ frozen request/profile
 
 Provider-specific Python environments, model weights, licenses, device requirements and caches are external evidence inputs. They are never model-selected or downloaded during a production operation.
 
-Research-only/non-commercial model weights are not promoted to a general production default merely because an evidence run succeeds.
+Research-only/non-commercial model weights are not promoted to a general production default merely because an evidence run succeeds. Phase 22 closes without requiring a neural SFX/music provider.
 
 ## 9. Durable evidence services
 
@@ -169,18 +155,17 @@ Research-only/non-commercial model weights are not promoted to a general product
 
 - exact request Artifact;
 - backend/process result Artifact;
-- raw external output evidence where policy permits;
 - canonical PCM16 WAV Artifact;
 - deterministic structural audio Verification;
 - exact runtime/profile/model/source identities.
 
-The service must independently require the backend-reported workspace to be exactly `.origin-forge/audio-workspaces/<workspace_id>` before trusting persisted request/result/output bytes.
+The service independently requires the backend-reported workspace to be exactly `.origin-forge/audio-workspaces/<workspace_id>` before trusting persisted request/result/output bytes.
 
 A successful audio Run may increment Task attempts, but it may not transition the production Task, create a Task PASS, merge, release, or adopt an output automatically.
 
 ## 10. Create-only adoption
 
-A later `GeneratedAudioAdopter` may publish an audio Artifact only when exact structural PASS evidence is present and current source bytes still match the frozen evidence.
+`GeneratedAudioAdopter` publishes an audio Artifact only when exactly one matching structural PASS is present and current source bytes still match frozen evidence.
 
 Adoption is create-only:
 
@@ -209,8 +194,8 @@ Phase 22 distinguishes:
 
 1. **Codec/substrate proof** — standard-library WAV parsing/canonicalization and deterministic synthesis tests.
 2. **Fake-process protocol proof** — adversarial process/backend tests prove isolation, exact binding and authority separation.
-3. **Real FFmpeg proof** — one pinned real FFmpeg runtime processes exact frozen audio through a governed profile and the result is independently canonicalized.
-4. **Real TTS proof** — one pinned real TTS runtime + exact reviewed voice produces bounded speech that passes structural validation.
+3. **Real FFmpeg proof** — a pinned real FFmpeg runtime processes exact frozen audio through a governed profile and the result is independently canonicalized.
+4. **Real TTS proof** — a pinned Piper runtime + exact reviewed voice produces bounded speech through the governed service and the result is independently normalized/canonicalized/validated.
 5. **Neural SFX/music proof** — optional provider-specific real model evidence after license/runtime review.
 6. **Quality evaluation** — separate paired/replayable intelligibility/aesthetic/fit evaluation before default provider/profile promotion.
 
@@ -233,13 +218,13 @@ Phase 22 components may not:
 
 ## Exit condition
 
-Phase 22 is complete when:
+Phase 22 is complete because:
 
 - canonical PCM16 WAV parsing/canonicalization is exact-head green;
 - deterministic local SFX and structured music rendering are independently reproducible;
 - bounded audio operation/evidence/adoption authority separation is exact-head green;
-- at least one pinned real FFmpeg processing path executes through the governed boundary and its output is independently validated;
-- at least one pinned real TTS runtime/voice executes through the governed boundary and its output is independently validated;
-- neural SFX/music providers remain replaceable and are not required for Phase 22 closure unless a production-suitable licensed profile is explicitly approved.
+- a pinned real FFmpeg processing path executes through the governed boundary and its output is independently validated;
+- a pinned real Piper runtime/voice executes through the governed boundary and its streaming float output is independently normalized and validated;
+- neural SFX/music providers remain replaceable and are not required for closure absent an explicitly approved production-suitable licensed profile.
 
 Quality promotion remains a separate measured decision.
