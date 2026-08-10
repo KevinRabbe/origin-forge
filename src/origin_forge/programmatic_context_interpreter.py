@@ -20,6 +20,12 @@ from .programmatic_context_models import (
 from .runtime_observation_models import canonical_bytes, content_hash
 
 
+_MAX_ADAPTER_INPUT_BYTES = 64 * 1024
+_MAX_JSON_INT = 9_223_372_036_854_775_807
+_MAX_JSON_NODES = 4096
+_MAX_JSON_DEPTH = 12
+
+
 class ContextProgramExecutionError(RuntimeError):
     pass
 
@@ -27,6 +33,66 @@ class ContextProgramExecutionError(RuntimeError):
 ContextAdapter = Callable[[Mapping[str, object]], object]
 ContextValidator = Callable[[Mapping[str, object]], None]
 ContextOutputValidator = Callable[[object], None]
+
+
+def _preflight_json(
+    value: object,
+    *,
+    byte_limit: int,
+    depth: int = 0,
+    nodes: list[int] | None = None,
+    text_bytes: list[int] | None = None,
+) -> None:
+    """Reject pathological JSON scalars before json.dumps can amplify work."""
+
+    if nodes is None:
+        nodes = [0]
+    if text_bytes is None:
+        text_bytes = [0]
+    nodes[0] += 1
+    if nodes[0] > _MAX_JSON_NODES:
+        raise ContextProgramExecutionError("context JSON exceeds node limit")
+    if depth > _MAX_JSON_DEPTH:
+        raise ContextProgramExecutionError("context JSON exceeds depth limit")
+    if value is None or type(value) is bool:
+        return
+    if type(value) is int:
+        if not -_MAX_JSON_INT <= value <= _MAX_JSON_INT:
+            raise ContextProgramExecutionError("context JSON integer exceeds signed-64-bit bound")
+        return
+    if isinstance(value, float):
+        raise ContextProgramExecutionError("context JSON may not contain floating-point values")
+    if isinstance(value, str):
+        text_bytes[0] += len(value.encode("utf-8"))
+        if text_bytes[0] > byte_limit:
+            raise ContextProgramExecutionError("context JSON text exceeds byte budget")
+        return
+    if isinstance(value, list):
+        for item in value:
+            _preflight_json(
+                item,
+                byte_limit=byte_limit,
+                depth=depth + 1,
+                nodes=nodes,
+                text_bytes=text_bytes,
+            )
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ContextProgramExecutionError("context JSON keys must be strings")
+            text_bytes[0] += len(key.encode("utf-8"))
+            if text_bytes[0] > byte_limit:
+                raise ContextProgramExecutionError("context JSON text exceeds byte budget")
+            _preflight_json(
+                item,
+                byte_limit=byte_limit,
+                depth=depth + 1,
+                nodes=nodes,
+                text_bytes=text_bytes,
+            )
+        return
+    raise ContextProgramExecutionError("context data must contain only exact JSON types")
 
 
 @dataclass(frozen=True)
@@ -110,7 +176,11 @@ class ContextProgramInterpreter:
 
     @staticmethod
     def _canonical_value(value: object, *, byte_limit: int) -> tuple[object, bytes]:
-        text = canonical_json(value, byte_limit=byte_limit)
+        _preflight_json(value, byte_limit=byte_limit)
+        try:
+            text = canonical_json(value, byte_limit=byte_limit)
+        except ProgrammaticContextModelError as exc:
+            raise ContextProgramExecutionError("context JSON failed bounded canonicalization") from exc
         data = text.encode("utf-8")
         return json.loads(text), data
 
@@ -136,6 +206,8 @@ class ContextProgramInterpreter:
         bindings: dict[str, object] = {}
         traces: list[ContextStepTrace] = []
         total_result_bytes = 0
+        total_input_bytes = 0
+        aggregate_input_limit = min(program.budget.max_result_bytes, 2 * 1024 * 1024)
 
         for instruction in program.instructions:
             descriptor = catalog.descriptor(
@@ -157,11 +229,30 @@ class ContextProgramInterpreter:
                         raise ContextProgramExecutionError(
                             "program referenced an unavailable binding"
                         ) from exc
-                    # Copy through canonical JSON so adapters never receive a mutable alias
-                    # to interpreter-owned evidence from an earlier step.
-                    arguments[argument.name] = json.loads(canonical_bytes(referenced))
+                    # Copy through bounded canonical JSON so adapters never receive a
+                    # mutable alias or an unbounded amplification of earlier evidence.
+                    referenced_copy, _ = self._canonical_value(
+                        referenced,
+                        byte_limit=min(descriptor.max_response_bytes, _MAX_ADAPTER_INPUT_BYTES),
+                    )
+                    arguments[argument.name] = referenced_copy
 
-            input_bytes = canonical_bytes(arguments)
+            per_call_input_limit = min(descriptor.max_response_bytes, _MAX_ADAPTER_INPUT_BYTES)
+            try:
+                _, input_bytes = self._canonical_value(
+                    arguments,
+                    byte_limit=per_call_input_limit,
+                )
+            except ContextProgramExecutionError as exc:
+                raise ContextProgramExecutionError(
+                    f"context adapter input exceeded bounded JSON contract at step {instruction.index}"
+                ) from exc
+            total_input_bytes += len(input_bytes)
+            if total_input_bytes > aggregate_input_limit:
+                raise ContextProgramExecutionError(
+                    "program exceeded aggregate adapter-input byte budget"
+                )
+
             try:
                 registered.validate_input(arguments)
             except Exception as exc:
@@ -177,20 +268,20 @@ class ContextProgramInterpreter:
                 ) from exc
 
             try:
-                registered.validate_output(raw_output)
-            except Exception as exc:
-                raise ContextProgramExecutionError(
-                    f"context adapter output validation failed at step {instruction.index}"
-                ) from exc
-
-            try:
                 output, output_bytes = self._canonical_value(
                     raw_output,
                     byte_limit=descriptor.max_response_bytes,
                 )
-            except ProgrammaticContextModelError as exc:
+            except ContextProgramExecutionError as exc:
                 raise ContextProgramExecutionError(
                     f"context adapter returned invalid bounded JSON at step {instruction.index}"
+                ) from exc
+
+            try:
+                registered.validate_output(output)
+            except Exception as exc:
+                raise ContextProgramExecutionError(
+                    f"context adapter output validation failed at step {instruction.index}"
                 ) from exc
 
             total_result_bytes += len(output_bytes)
@@ -217,10 +308,17 @@ class ContextProgramInterpreter:
             binding: bindings[binding]
             for binding in program.output_bindings
         }
-        values_json = canonical_json(
-            final_values,
-            byte_limit=program.budget.max_context_bytes,
-        )
+        try:
+            final_value, _ = self._canonical_value(
+                final_values,
+                byte_limit=program.budget.max_context_bytes,
+            )
+            values_json = canonical_json(
+                final_value,
+                byte_limit=program.budget.max_context_bytes,
+            )
+        except ContextProgramExecutionError as exc:
+            raise ContextProgramExecutionError("final context package exceeded bounded JSON contract") from exc
         package = ContextPackage(
             package_id=new_id(IdKind.CONTEXT_PACKAGE),
             request_id=request.request_id,
