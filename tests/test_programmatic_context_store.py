@@ -6,6 +6,12 @@ import unittest
 from pathlib import Path
 
 from origin_forge.ids import IdKind, new_id
+from origin_forge.programmatic_context_benchmark import (
+    ContextExperimentObservation,
+    ContextExperimentPolicy,
+    ContextExperimentReport,
+    compare_context_case,
+)
 from origin_forge.programmatic_context_interpreter import (
     ContextAdapterRegistry,
     ContextProgramInterpreter,
@@ -31,6 +37,7 @@ from origin_forge.runtime_observation_models import canonical_bytes
 HASH_A = "sha256:" + "a" * 64
 HASH_B = "sha256:" + "b" * 64
 HASH_C = "sha256:" + "c" * 64
+HASH_D = "sha256:" + "d" * 64
 
 
 class ProgrammaticContextStoreTests(unittest.TestCase):
@@ -87,16 +94,33 @@ class ProgrammaticContextStoreTests(unittest.TestCase):
             catalog=catalog,
             program=program,
         )
-        return request, catalog, program, result.package, result.trace
+        baseline = ContextExperimentObservation(True, 900, 3, 3000, 500, 12000, 1000, 100, HASH_D)
+        programmatic = ContextExperimentObservation(True, 900, 2, 2000, 400, 8000, 1000, 90, HASH_C)
+        policy = ContextExperimentPolicy()
+        case = compare_context_case(
+            case_id="store.case",
+            case_hash=HASH_A,
+            environment_hash=HASH_B,
+            baseline=baseline,
+            programmatic=programmatic,
+            policy=policy,
+        )
+        experiment = ContextExperimentReport.create(
+            program=program,
+            policy=policy,
+            cases=(case,),
+        )
+        return request, catalog, program, result.package, result.trace, experiment
 
     def test_publish_and_load_all_context_objects(self) -> None:
-        request, catalog, program, package, execution = self._objects()
+        request, catalog, program, package, execution, experiment = self._objects()
         published = (
             ("requests", request.request_id, request.content_hash, self.store.publish_request(request)),
             ("catalogs", catalog.catalog_id, catalog.content_hash, self.store.publish_catalog(catalog)),
             ("programs", program.program_id, program.content_hash, self.store.publish_program(program)),
             ("packages", package.package_id, package.content_hash, self.store.publish_package(package)),
             ("executions", execution.execution_id, execution.content_hash, self.store.publish_execution(execution)),
+            ("experiments", experiment.experiment_id, experiment.content_hash, self.store.publish_experiment(experiment)),
         )
         for category, object_id, expected_hash, path in published:
             self.assertTrue(path.is_file())
