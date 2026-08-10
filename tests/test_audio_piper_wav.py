@@ -96,9 +96,9 @@ class PiperStreamingWavTests(unittest.TestCase):
         with self.assertRaisesRegex(WavError, "frame aligned"):
             canonicalize_piper_output_wav(raw)
 
-        two_frames = _piper_stream_wav((0.0, 0.0), sample_rate=8_000)
+        nine_frames = _piper_stream_wav((0.0,) * 9, sample_rate=8_000)
         with self.assertRaisesRegex(WavError, "duration"):
-            canonicalize_piper_output_wav(two_frames, max_duration_ms=0)
+            canonicalize_piper_output_wav(nine_frames, max_duration_ms=1)
 
         with self.assertRaisesRegex(WavError, "byte limit"):
             canonicalize_piper_output_wav(_piper_stream_wav((0.0,)), max_bytes=44)
