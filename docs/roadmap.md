@@ -416,9 +416,34 @@ See `docs/phase-24-automated-playtesting.md` for the detailed contract, threat b
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
-## Phase 25 — Simulation Layer — PLANNED
+## Phase 25 — Simulation Layer — DONE
 
-Add cheap pre-implementation simulation for economy, loot, crafting, progression, spawning, combat balance, skill trees, and resource distribution.
+Implemented the first governed cheap pre-implementation simulation substrate:
+
+- infrastructure-format `SIMSPEC-*`, `SIM-*`, and `SIMWS-*` identities;
+- immutable content-addressed specifications with exact `origin-forge-deterministic-sim:1` engine binding;
+- finite signed-int32 state vectors and bounded declarative transition rules only;
+- no Python/JavaScript/shell/arbitrary-expression/callback/process/network execution surface;
+- deterministic `(priority, rule_id)` evaluation and SHA-256 probability draws over seed/replicate/step/rule identity rather than hidden runtime RNG state;
+- explicit prerequisite, consumption and production semantics with overflow fail-closed behavior;
+- implementation-aware 5,000,000-unit work budgeting over rule fields, mutation/bookkeeping and invariants;
+- bounded replicates, steps, variables, rules and invariants;
+- initial and post-full-step invariant checkpoints with exact violation counts, explicit truncation, at most 1,024 stored details per replicate and 8,192 across one governed result;
+- no-progress/stall evidence based on net whole-step state change;
+- independently bound result evidence rejecting inconsistent extrema, rule attempt/firing counts, unknown/mismatched invariant evidence, impossible checkpoints and duplicate/noncanonical stored violations;
+- deterministic exact aggregate metrics using integer/rational evidence rather than floating-point acceptance semantics;
+- protected fresh simulation workspaces and exact canonical `spec.json`, `result.json`, and `summary.json` evidence paths;
+- 16 MiB per-file durable simulation evidence limit;
+- durable `SIMULATION_SPEC`, `SIMULATION_RESULT`, and `SIMULATION_SUMMARY` Artifacts plus Run-level `simulation-structure` Verification;
+- read-only `simulation_cli` inspection;
+- explicit separation between negative simulation findings and simulator infrastructure failure;
+- no production Task verification/completion, semantic balance authority, automatic tuning, config/asset adoption, signing, merge, release, or live self-improvement authority.
+
+Phase 25 remains a cheap abstract evidence layer. Phase 24 runtime playtesting remains the stronger surface for real application behavior, and later Phase-26 refinement may consume frozen simulation metrics only under independent evaluation/acceptance authority.
+
+See `docs/phase-25-simulation-layer.md` for the detailed v1 transition semantics, deterministic draw schedule, resource/evidence bounds, structural binding rules and exclusions.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 26 — Skill & Harness Workshop — PLANNED
 
