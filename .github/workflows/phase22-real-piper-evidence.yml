@@ -1,0 +1,224 @@
+name: Phase 22 real Piper evidence
+
+on:
+  pull_request:
+    types: [edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  real-piper-gate:
+    if: >-
+      github.event.pull_request.number == 31 &&
+      contains(github.event.pull_request.body, '<!-- phase22-real-piper-evidence -->')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout exact Origin Forge PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify exact Origin Forge head
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.head.sha }}"
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+          echo "PIN_ORIGIN_FORGE_HEAD=$actual"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Checkout exact Piper source tag
+        uses: actions/checkout@v4
+        with:
+          repository: OHF-Voice/piper1-gpl
+          ref: v1.6.0
+          path: .external/piper
+          fetch-depth: 1
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Verify Piper source and freeze ONNX Runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          piper_commit="f04d52c5528ac7cf2d73757f57990ff490f75005"
+          piper_tag="v1.6.0"
+          piper_version="1.6.0"
+          espeak_commit="212928b394a96e8fd2096616bfd54e17845c48f6"
+          ort_version="1.22.0"
+          ort_size="7798730"
+          ort_sha512="c49d927a39dc27fcdf3b41436806af74c24c79ead09289d986c359fc1380ea363cf83d4085212b8972cb752a0fa8b9b1a06b82ad19e2d4dd6e22e44c79050386"
+
+          actual_commit="$(git -C .external/piper rev-parse HEAD)"
+          actual_tag="$(git -C .external/piper describe --tags --exact-match HEAD)"
+          actual_version="$(python - <<'PY'
+          import re
+          from pathlib import Path
+          text = Path('.external/piper/setup.py').read_text(encoding='utf-8')
+          match = re.search(r'version="([0-9]+\.[0-9]+\.[0-9]+)"', text)
+          if not match:
+              raise SystemExit('Piper setup.py version missing')
+          print(match.group(1))
+          PY
+          )"
+          test "$actual_commit" = "$piper_commit"
+          test "$actual_tag" = "$piper_tag"
+          test "$actual_version" = "$piper_version"
+
+          mkdir -p .external/ort
+          ort_archive="$(pwd)/.external/onnxruntime-linux-x64-${ort_version}.tgz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$ort_archive" \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ort_version}/onnxruntime-linux-x64-${ort_version}.tgz"
+          test "$(stat -c '%s' "$ort_archive")" = "$ort_size"
+          echo "$ort_sha512  $ort_archive" | sha512sum --check --strict
+          tar -xzf "$ort_archive" -C .external/ort
+          ort_dir="$(pwd)/.external/ort/onnxruntime-linux-x64-${ort_version}"
+          test -f "$ort_dir/include/onnxruntime_c_api.h"
+          test -f "$ort_dir/lib/libonnxruntime.so.${ort_version}"
+
+          echo "PIN_PIPER_SOURCE_TAG=$piper_tag"
+          echo "PIN_PIPER_SOURCE_COMMIT=$piper_commit"
+          echo "PIN_PIPER_VERSION=$piper_version"
+          echo "PIN_PIPER_ESPEAK_COMMIT=$espeak_commit"
+          echo "PIN_PIPER_ORT_VERSION=$ort_version"
+          echo "PIN_PIPER_ORT_SIZE=$ort_size"
+          echo "PIN_PIPER_ORT_SHA512=$ort_sha512"
+          echo "PIPER_SOURCE_COMMIT=$piper_commit" >> "$GITHUB_ENV"
+          echo "PIPER_VERSION=$piper_version" >> "$GITHUB_ENV"
+          echo "PIPER_ESPEAK_COMMIT=$espeak_commit" >> "$GITHUB_ENV"
+          echo "PIPER_ORT_SHA512=$ort_sha512" >> "$GITHUB_ENV"
+          echo "PIPER_ORT_DIR=$ort_dir" >> "$GITHUB_ENV"
+
+      - name: Build pinned Piper runtime tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_dir="$(pwd)/.external/piper-build"
+          runtime_root="$(pwd)/.external/piper-runtime"
+          cmake -S .external/piper/libpiper -B "$build_dir" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$runtime_root" \
+            -DONNXRUNTIME_DIR="$PIPER_ORT_DIR" \
+            '-DCMAKE_INSTALL_RPATH=$ORIGIN;$ORIGIN/lib;$ORIGIN/..;$ORIGIN/../lib'
+          cmake --build "$build_dir" --parallel 2
+          cmake --install "$build_dir"
+
+          actual_espeak="$(git -C "$build_dir/espeak_ng/src/espeak_ng_external" rev-parse HEAD)"
+          test "$actual_espeak" = "$PIPER_ESPEAK_COMMIT"
+
+          while IFS= read -r -d '' link; do
+            target="$(readlink -f "$link")"
+            test -f "$target"
+            temp="${link}.materialized"
+            cp --dereference --preserve=mode,timestamps "$target" "$temp"
+            rm "$link"
+            mv "$temp" "$link"
+          done < <(find "$runtime_root" -type l -print0)
+          test -z "$(find "$runtime_root" -type l -print -quit)"
+
+          executable="$runtime_root/bin/piper_exe"
+          espeak_data="$runtime_root/espeak-ng-data"
+          test -x "$executable"
+          test -d "$espeak_data"
+          version="$(env -i PATH=/usr/bin:/bin HOME="$(pwd)" LANG=C.UTF-8 LC_ALL=C.UTF-8 "$executable" --version)"
+          test "$version" = "$PIPER_VERSION"
+
+          runtime_hash="$(PYTHONPATH=src python - "$runtime_root" <<'PY'
+          import sys
+          from pathlib import Path
+          from origin_forge.adapters.audio_piper import piper_runtime_tree_hash
+          print(piper_runtime_tree_hash(Path(sys.argv[1])))
+          PY
+          )"
+
+          echo "PIN_PIPER_RUNTIME_HASH=$runtime_hash"
+          echo "ORIGIN_FORGE_REAL_PIPER_RUNTIME_ROOT=$runtime_root" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_EXECUTABLE=$executable" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_ESPEAK_DATA=$espeak_data" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_VERSION=$PIPER_VERSION" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_SOURCE_COMMIT=$PIPER_SOURCE_COMMIT" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_RUNTIME_HASH=$runtime_hash" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_ORT_SHA512=$PIPER_ORT_SHA512" >> "$GITHUB_ENV"
+
+      - name: Freeze exact Joe voice and license evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          voice_commit="375a0fe641dea077c2a47b4e9a056d6da521eed3"
+          voice_tag="v1.0.0"
+          model_sha256="58afce0321b8d9c46d7cdf9c16500cc55a793b4220212dba6b70fb788b3baf06"
+          model_size="63201294"
+          config_size="4794"
+          license_size="280"
+          voice_path="en/en_US/joe/medium"
+
+          git lfs version
+          GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch "$voice_tag" \
+            https://huggingface.co/rhasspy/piper-voices .external/piper-voices
+          actual_commit="$(git -C .external/piper-voices rev-parse HEAD)"
+          test "$actual_commit" = "$voice_commit"
+          git -C .external/piper-voices lfs pull \
+            --include="$voice_path/en_US-joe-medium.onnx" --exclude=""
+
+          model="$(pwd)/.external/piper-voices/$voice_path/en_US-joe-medium.onnx"
+          config="$(pwd)/.external/piper-voices/$voice_path/en_US-joe-medium.onnx.json"
+          license="$(pwd)/.external/piper-voices/$voice_path/MODEL_CARD"
+          test -f "$model"
+          test -f "$config"
+          test -f "$license"
+          test "$(stat -c '%s' "$model")" = "$model_size"
+          test "$(stat -c '%s' "$config")" = "$config_size"
+          test "$(stat -c '%s' "$license")" = "$license_size"
+          actual_model_sha="$(sha256sum "$model" | awk '{print $1}')"
+          test "$actual_model_sha" = "$model_sha256"
+          config_sha="$(sha256sum "$config" | awk '{print $1}')"
+          license_sha="$(sha256sum "$license" | awk '{print $1}')"
+
+          python - "$config" "$license" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          config = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          if config.get('audio', {}).get('sample_rate') != 22050:
+              raise SystemExit('unexpected Joe voice sample rate')
+          if config.get('num_speakers') != 1:
+              raise SystemExit('unexpected Joe voice speaker count')
+          card = Path(sys.argv[2]).read_text(encoding='utf-8')
+          if '* License: CC0' not in card:
+              raise SystemExit('Joe model card no longer declares CC0')
+          PY
+
+          echo "PIN_PIPER_VOICE_TAG=$voice_tag"
+          echo "PIN_PIPER_VOICE_REPO_COMMIT=$voice_commit"
+          echo "PIN_PIPER_VOICE_MODEL_SHA256=sha256:$actual_model_sha"
+          echo "PIN_PIPER_VOICE_CONFIG_SHA256=sha256:$config_sha"
+          echo "PIN_PIPER_VOICE_LICENSE_ID=CC0-1.0"
+          echo "PIN_PIPER_VOICE_LICENSE_SHA256=sha256:$license_sha"
+
+          echo "ORIGIN_FORGE_REAL_PIPER_VOICE_REPO_COMMIT=$voice_commit" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_VOICE_MODEL=$model" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_VOICE_CONFIG=$config" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_VOICE_LICENSE=$license" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_VOICE_MODEL_SHA256=sha256:$actual_model_sha" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_VOICE_CONFIG_SHA256=sha256:$config_sha" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_VOICE_LICENSE_SHA256=sha256:$license_sha" >> "$GITHUB_ENV"
+          echo "ORIGIN_FORGE_REAL_PIPER_VOICE_LICENSE_ID=CC0-1.0" >> "$GITHUB_ENV"
+
+      - name: Run frozen real Piper governed gate
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -W error::ResourceWarning -m unittest discover -s tests \
+            -p "test_audio_piper_real.py" -v

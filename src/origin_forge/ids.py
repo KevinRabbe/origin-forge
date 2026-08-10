@@ -39,6 +39,9 @@ class IdKind(StrEnum):
     IMAGE_WORKSPACE = "IMAGE"
     IMAGE_OPERATION = "IMGOP"
     VISION_INSPECTION = "VISION"
+    AUDIO_WORKSPACE = "AUDIO"
+    AUDIO_OPERATION = "AUDOP"
+    AUDIO_PROFILE = "AUDPROF"
 
 
 def new_id(kind: IdKind) -> str:
