@@ -445,23 +445,36 @@ See `docs/phase-25-simulation-layer.md` for the detailed v1 transition semantics
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
-## Phase 26 — Skill & Harness Workshop — PLANNED
+## Phase 26 — Skill & Harness Workshop — DONE
 
-Govern operational learning and harness refinement without live self-modification:
+Implemented a governed improvement-candidate workshop without live self-modification:
+
+- infrastructure-owned `HIC-*`, `HPLAN-*`, `HREP-*`, `HAUD-*`, and `HDEC-*` identities;
+- one bounded immutable target candidate over exact baseline/source-evidence hashes and inert canonical JSON payload data;
+- independently frozen evaluation plans whose metrics, thresholds, evaluator protocol/evidence and cost ceilings are not candidate-controlled;
+- exact regression-dominant task-metric and model-call/token/wall-time/resource-cost reports;
+- infrastructure-owned trusted evaluator registry with exactly one promotion-capable v1 adapter: Phase-12 `paired-skill-ab-v1` Skill evaluation;
+- fail-closed unsupported prompt/context/routing/specialist/mini-workflow evaluator families that may retain evidence but cannot create promotion eligibility;
+- conservative Phase-12 Skill verdict composition so Phase 26 may become stricter but cannot reinterpret a Phase-12 regression/equivalence as stronger evidence;
+- independent structural audits with exact candidate/plan/evaluation binding and explicit structural-vs-semantic separation;
+- decision-time revalidation of candidate/plan/audit/evaluator authority, including exact Phase-12 evidence for Skill promotion, so forged `PASS` audit objects cannot amplify authority;
+- `APPROVE_FOR_PROMOTION`, `REJECT`, and `DEFER` decisions where approval is only eligibility evidence and never activation authority;
+- proposal-only Phase-15 Dream bridge preserving exact Dream ID/hash/type/downstream-gate evidence without satisfying that gate;
+- immutable bounded symlink-safe canonical Workshop persistence with no-overwrite publication and load/list revalidation;
+- read-only Workshop CLI exposing evidence and trusted-evaluator state;
+- no active Skill/prompt/routing/context mutation, candidate activation, Task completion/verification, signing, merge, release, generic executable mini-workflow or model-weight authority.
+
+Core rule:
 
 ```text
-verified trajectories / Dream candidates
-→ minimal improvement candidate
-→ isolated paired evaluation
-→ regression suite
-→ independent audit
-→ approval
-→ new immutable governed component version
+proposal → independent plan → trusted evidence → audit → promotion eligibility → STOP
 ```
 
-Introduce a first-class Harness Improvement Candidate that can propose exactly one bounded target such as a Skill, prompt, context-selection strategy, routing policy, specialist contract, or sandboxed mini-workflow. Each candidate must bind its source trajectory/evidence hashes, target component/version, hypothesis, smallest relevant diff, expected metric effect, evaluation plan and known risks.
+See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules, decision-time authority checks and exclusions.
 
-Old-vs-candidate evaluation must measure success/regression together with model calls, tokens, wall time and resource cost. A candidate cannot choose its own acceptance metric, verify itself, activate itself, or silently replace the governing component. Dream Cycle findings may enter this pipeline, but active agents and Dream processes remain proposal-only.
+**Exit condition met:** Origin Forge can turn exact verified evidence into bounded independently evaluated improvement candidates, preserve stronger upstream Skill evidence, fail closed when no governed evaluator exists, record audited promotion eligibility without activating the candidate, and keep production truth/authority outside the Workshop.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 27 — Code Mode and Programmatic Context Experiments — PLANNED
 
