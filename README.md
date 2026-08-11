@@ -1,112 +1,177 @@
 # Origin Forge
 
-Origin Forge is a local autonomous production infrastructure for turning human intent into verified, versioned software and game assets using replaceable AI models and deterministic tools.
+Origin Forge is local production infrastructure for turning human intent into verified, versioned software and game assets using replaceable AI models, deterministic tools, durable state, and explicit authority boundaries.
 
-The project is intentionally broader than a coding agent. Its long-term goal is to coordinate code, 2D art, 3D assets, image generation, audio, testing, simulation, provenance, and project knowledge behind one durable production harness.
+The system is broader than a coding agent. It coordinates code, 2D/3D media, image and vision workflows, audio, runtime observation, playtesting, simulation, provenance, project knowledge, governed improvement research, and a local production cockpit behind one durable harness.
 
 ## Core idea
 
 ```text
 Human intent
     ↓
-Goals + constraints
+Goal / Flow / Task
     ↓
 Durable production state
     ↓
-Manager
+Bounded context + governed Skills
     ↓
-Fresh bounded Executor
+Fresh Executor
     ↓
-Tools + Skills + Models
+Patch / media / evidence proposal
     ↓
-Independent Auditor
+Independent deterministic verification
     ↓
-Verified state
+Verified durable state + provenance
     ↓
-Versioned product
+Human review / eventual merge
 ```
 
 ## Architectural laws
 
-1. **Models are replaceable.** Project truth must never depend on one model or provider.
-2. **Infrastructure owns state.** Goals, tasks, decisions, artifacts, permissions, provenance, and verification are deterministic system state.
+1. **Models are replaceable.** Project truth must not depend on one model or provider.
+2. **Infrastructure owns state.** Goals, Tasks, Decisions, Artifacts, permissions, provenance, and verification are deterministic system state.
 3. **Verified state beats conversation history.** Raw reasoning is disposable; verified facts and outcomes persist.
-4. **Models propose; tools verify.** Compiler, tests, runtime evidence, and structured project state outrank model claims.
-5. **Every meaningful change is reversible.** Autonomous work happens in isolated workspaces/worktrees before merge.
-6. **Use deterministic software whenever possible.** AI handles ambiguity and judgment; conventional tools handle deterministic operations.
-7. **Context is a scarce resource.** Load only task-relevant state, skills, schemas, and source context.
-8. **Long-running autonomy is a state-management problem.** Use Manager → Executor → Auditor → Verified State, not one endless chat session.
-9. **Authority is explicit.** Agents receive capabilities, not unrestricted machine access.
-10. **Identity is permanent.** Company/product provenance is independent of whichever model created an artifact.
+4. **Models propose; independent tools verify.** Tests, compilers, validators, runtime evidence, and structured state outrank model claims.
+5. **Meaningful changes are reversible.** Autonomous work happens in isolated workspaces/worktrees before adoption or merge.
+6. **Deterministic software is preferred whenever possible.** AI handles ambiguity and judgment; conventional tools handle deterministic operations.
+7. **Context is a scarce resource.** Load only task-relevant state, Skills, schemas, and source context.
+8. **Long-running autonomy is state management.** Use Manager → Executor → Auditor → Verified State, not one endless chat session.
+9. **Authority is explicit.** Components receive capabilities, not unrestricted machine access.
+10. **Identity is permanent.** Product provenance is independent of whichever model created an Artifact.
 
 ## Current status
 
-Origin Forge is in **Phase 9 — Governed Skills**.
+Origin Forge is approaching its **v0.1 First Useful Release**. Phases 0–30 are merged, including the first bounded local production cockpit from Phase 30.
 
-Phase 1 established the durable control plane and causal lineage. Phase 2 connected a replaceable local coding model through read-only context and structured patch proposals. Phase 3 added isolated Git worktree application plus independent deterministic content audit. Phase 4 separated `AUDITED` from `VERIFIED` and defined a backend-neutral sandbox contract. Phase 5 implemented the first real sandbox backend using Podman. Phase 6 connected those components into a snapshot-first single coding attempt. Phase 7 added bounded retry/resume/model escalation. Phase 8 added deterministic automatic source-context selection. Phase 9 now adds bounded reusable procedural knowledge without increasing model authority.
+The v0.1 release-readiness work has been re-rooted onto the actual Phase-30 merge commit. The package version remains `0.1.0.dev0` while the release-readiness exact-head Python 3.12/3.13 gate and the explicit version/license/tag decisions remain pending.
 
-Project Skills live under `.origin-forge/skills/<name>/` and contain only `SKILL.md` plus `skill.toml` in this phase. Skills are deterministically selected from durable Task evidence, SHA-256 fingerprinted, recorded on the Executor Run, and captured as a `SKILL_BUNDLE` artifact before the model response. A Skill changes **how the bounded Executor reasons**, not what it is allowed to do.
+### What exists now
 
-Projects with no Skills preserve the prior request shape and behavior. Phase 9 deliberately excludes Skill scripts, external Skill installation, self-modifying Skills, automatic promotion, and other executable Skill content.
+- durable SQLite Goal / Flow / Task / Run / Verification state;
+- isolated Git workspaces and deterministic patch application/audit;
+- governed sandbox verification and bounded retry orchestration;
+- deterministic source context, governed Skills, structural code intelligence, and Project Intelligence / Design Bible state;
+- cryptographic provenance plus cross-media fingerprints;
+- governed Pixelorama, Blender, image/vision, audio, runtime-observation, playtesting, and simulation evidence layers;
+- Dream/memory consolidation, Skill/harness workshop experiments, programmatic-context experiments, and training/fine-tuning research substrate;
+- a bounded loopback-only read-only production cockpit over runtime, causal history, Project Intelligence, model/resource configuration, provenance, and Dream/memory state.
 
-Automatic source context remains snapshot-local: Origin Forge creates the isolated Git Workspace first, scans only tracked UTF-8 text inside that Workspace, applies hard scan and selection budgets, ranks files from durable Task terms, and then feeds the selected paths through the normal `ContextBuilder`. Uncommitted changes in the user's live checkout remain outside the model's view.
+The system still deliberately excludes automatic merge/release authority, unrestricted shell/filesystem/model execution, UI-driven production mutation, implicit Artifact adoption/signing, and model self-verification.
 
-There is still **no automatic merge, arbitrary shell surface, unlimited retry loop, model-controlled filesystem search, or Skill-granted authority escalation**.
+## Quick start
+
+Requires Python 3.12+.
+
+```bash
+python -m pip install -e .
+origin-forge init --name my-project
+origin-forge status
+```
+
+Initialization is the explicit project-state creation boundary. Packaged attempt/cockpit commands do not silently initialize a missing project.
+
+The main CLI exposes the durable control-plane and governed worker/sandbox operations:
+
+```bash
+origin-forge --help
+origin-forge goal --help
+origin-forge task --help
+origin-forge run --help
+origin-forge verify --help
+origin-forge sandbox --help
+```
+
+The first complete coding path is exposed as **one bounded attempt**, not an unbounded autonomous retry loop:
+
+```bash
+origin-forge-attempt TASK-... --auto-context
+```
+
+or with explicit snapshot-local context:
+
+```bash
+origin-forge-attempt TASK-... \
+  --file src/example.py \
+  --file tests/test_example.py
+```
+
+The command uses the existing snapshot-first orchestrator: isolated Workspace → model proposal → deterministic apply → independent audit → governed sandbox verification. It does not merge, push, release, recursively retry itself, or create missing Origin Forge project state.
+
+After Phase-30 state is initialized and quiescent, the installed read-only cockpit entrypoint is:
+
+```bash
+origin-forge-cockpit snapshot
+origin-forge-cockpit serve --port 8765
+```
+
+The cockpit binds only to `127.0.0.1`, exposes fixed GET routes, and does not create/migrate runtime state, load models, execute tools, mutate Tasks, adopt/sign Artifacts, promote Dream memory, merge, or release.
+
+`origin-forge status` remains an authoritative control-plane status path using the normal runtime/store lifecycle. Use `origin-forge-cockpit snapshot` when the requirement is specifically bounded non-creating inspection.
+
+See the [v0.1 operator guide](docs/v0.1-operator-guide.md) for the installed command boundary and end-to-end local workflow.
+
+## v0.1 release gate
+
+A v0.1 release requires, at minimum:
+
+- Phase 30 merged from an exact immutable Python 3.12/3.13 green head;
+- release packaging/entrypoint tests green on top of that merge;
+- README and release metadata synchronized to the merged tree;
+- a deliberate license decision before any public distribution that requires one;
+- a final tagged release commit with no unresolved review/CI failures.
+
+Until those gates are satisfied, `0.1.0.dev0` is intentional.
+
+See the [v0.1 release-readiness contract](docs/v0.1-release-readiness.md), [v0.1 acceptance matrix](docs/v0.1-acceptance-matrix.md), and [changelog](CHANGELOG.md) for the explicit pre-release boundary.
 
 ## Documentation
 
+Start with:
+
 - [Architecture](docs/architecture.md)
-- [Phase 0 Implementation Specification](docs/phase-0-spec.md)
-- [Phase 1 Runtime Notes](docs/phase-1-notes.md)
-- [Phase 2 Worker Notes](docs/phase-2-notes.md)
-- [Phase 3 Isolation Notes](docs/phase-3-notes.md)
-- [Phase 4 Sandbox Notes](docs/phase-4-notes.md)
-- [Phase 5 Podman Sandbox Notes](docs/phase-5-notes.md)
-- [Phase 6 Bounded Orchestration Notes](docs/phase-6-notes.md)
-- [Phase 7 Retry Policy Notes](docs/phase-7-notes.md)
-- [Phase 8 Context Discovery Notes](docs/phase-8-notes.md)
-- [Phase 9 Governed Skills Notes](docs/phase-9-notes.md)
 - [Core Model](docs/core-model.md)
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
 - [Roadmap](docs/roadmap.md)
+- [Phase 30 — Full Production Interface](docs/phase-30-full-production-interface.md)
+- [v0.1 Operator Guide](docs/v0.1-operator-guide.md)
+- [v0.1 Release Readiness](docs/v0.1-release-readiness.md)
+- [v0.1 Acceptance Matrix](docs/v0.1-acceptance-matrix.md)
+- [Changelog](CHANGELOG.md)
 - [Research Influences](docs/research-influences.md)
 
-## Initial technology direction
+The repository also contains per-phase implementation contracts and evidence notes under `docs/`.
 
-The implementation currently uses or targets:
+## Technology direction
 
-- Python for the harness
-- SQLite for durable state
-- Git for versioning and isolated work
-- llama.cpp-compatible local inference
-- Podman as the first real sandbox backend for executing AI-modified code
-- replaceable sandbox backends behind a common verification contract
-- snapshot-first bounded orchestration
-- durable bounded retry/resume/model-escalation policy
-- deterministic tracked-file context discovery
-- governed instruction-only Skills with deterministic selection and provenance
-- Tree-sitter + LSP for later structural code intelligence where they measurably improve context quality
-- Pixelorama for 2D production
-- Blockbench for 3D production
-- rFXGen + FFmpeg for audio tooling
-- replaceable local adapters for image, vision, music, and speech models
+The implementation uses or targets:
+
+- Python for the harness;
+- SQLite for durable state;
+- Git for versioning and isolated work;
+- llama.cpp-compatible local inference;
+- Podman as the first sandbox backend;
+- Tree-sitter/LSP for structural code intelligence;
+- Pixelorama for bounded 2D editor integration;
+- Blender behind the editor-independent 3D contract;
+- FFmpeg and Piper for governed audio processing/TTS;
+- replaceable local adapters for image, vision, audio, and model workloads.
 
 These are implementation choices, not permanent architectural dependencies.
 
 ## Development rule
 
-A new feature should only remain in Origin Forge if it measurably improves at least one of:
+A feature should remain in Origin Forge only if it measurably improves at least one of:
 
-- capability
-- reliability
-- efficiency
-- observability
-- control
-- safety
+- capability;
+- reliability;
+- efficiency;
+- observability;
+- control;
+- safety.
 
 Complexity by itself is not progress.
 
 ## License
 
-Not selected yet. The repository may remain personal infrastructure, become open source, or later support a commercial product. Licensing will be chosen deliberately before any public release that requires it.
+No license has been selected yet. Licensing is a deliberate release decision and is not inferred by the codebase.

@@ -2,18 +2,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
 from .adapters.llamacpp import LlamaCppAdapter
 from .config import load_config
 from .orchestration import AttemptOutcome, BoundedTaskOrchestrator
+from .production_read_guard import ProductionReadGuardError, ensure_production_runtime_readable
 from .runtime import OriginForgeRuntime
 from .sandbox_factory import create_sandbox_backend
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m origin_forge.orchestration_cli")
+    parser = argparse.ArgumentParser(prog="origin-forge-attempt")
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     parser.add_argument("task_id")
     context = parser.add_mutually_exclusive_group(required=True)
@@ -46,6 +48,28 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _require_initialized_state(runtime: OriginForgeRuntime) -> None:
+    try:
+        ensure_production_runtime_readable(runtime)
+    except ProductionReadGuardError as exc:
+        raise RuntimeError(
+            "Origin Forge project is not ready for a bounded attempt; initialize/migrate it with the authoritative control plane and finish any active writer first: "
+            + str(exc)
+        ) from exc
+
+
+def _error(exc: Exception) -> int:
+    print(
+        json.dumps(
+            {"error": type(exc).__name__, "detail": str(exc)},
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        file=sys.stderr,
+    )
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -53,26 +77,31 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--seed-file requires --auto-context")
 
     runtime = OriginForgeRuntime(args.project_root)
-    config = load_config(runtime.project_root)
-    backend = create_sandbox_backend(runtime, config)
-    model = LlamaCppAdapter(
-        base_url=args.base_url,
-        model=args.model,
-        api_key=args.api_key,
-        timeout_seconds=args.timeout,
-        max_tokens=args.max_tokens,
-        temperature=args.temperature,
-        allow_remote=args.allow_remote,
-    )
-    result = BoundedTaskOrchestrator(runtime, model, backend).execute(
-        args.task_id,
-        selected_paths=args.files,
-        auto_context=args.auto_context,
-        context_seed_paths=args.seed_files,
-        structural_context=args.structural_context,
-        semantic_context=args.semantic_context,
-        model_profile=args.model,
-    )
+    try:
+        _require_initialized_state(runtime)
+        config = load_config(runtime.project_root)
+        backend = create_sandbox_backend(runtime, config)
+        model = LlamaCppAdapter(
+            base_url=args.base_url,
+            model=args.model,
+            api_key=args.api_key,
+            timeout_seconds=args.timeout,
+            max_tokens=args.max_tokens,
+            temperature=args.temperature,
+            allow_remote=args.allow_remote,
+        )
+        result = BoundedTaskOrchestrator(runtime, model, backend).execute(
+            args.task_id,
+            selected_paths=args.files,
+            auto_context=args.auto_context,
+            context_seed_paths=args.seed_files,
+            structural_context=args.structural_context,
+            semantic_context=args.semantic_context,
+            model_profile=args.model,
+        )
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        return _error(exc)
+
     print(json.dumps(asdict(result), indent=2, sort_keys=True, default=str))
     if result.outcome == AttemptOutcome.SUCCEEDED:
         return 0
