@@ -15,7 +15,7 @@ from origin_forge.production_task_activation import (
 )
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.service import StaleRevision, utc_now
-from origin_forge.state import TaskStatus
+from origin_forge.state import RunStatus, TaskStatus
 
 
 class ProductionTaskActivationTests(unittest.TestCase):
@@ -149,7 +149,7 @@ class ProductionTaskActivationTests(unittest.TestCase):
         self.runtime.transition_task(required, TaskStatus.READY, expected_revision=0)
         self.runtime.transition_task(required, TaskStatus.RUNNING, expected_revision=1)
         run_id = self.runtime.start_run(required, role="EXECUTOR")
-        self.runtime.finish_run(run_id, TaskStatus.SUCCEEDED.value)
+        self.runtime.finish_run(run_id, RunStatus.SUCCEEDED)
         self.runtime.record_verification(
             "TASK",
             required,
