@@ -410,7 +410,7 @@ Implemented a governed automated-playtesting substrate for suitable games:
 - read-only operator inspection;
 - no production Task verification/completion, canonical adoption, signing, merge, release, generic keyboard/mouse, model-authored executable code, or autonomous self-improvement authority.
 
-The v1 reward-hacking boundary explicitly keeps the synthetic player, telemetry producer, evaluator and production Task verifier as separate authority surfaces. Metric improvement is evidence, not proof of legitimate gameplay improvement, and any later optimization/refinement loop must operate against frozen capabilities and independent evaluation.
+The v1 reward-hacking boundary explicitly keeps the synthetic player, telemetry producer, evaluator and production Task verifier as separate authority surfaces. Metric improvement is evidence, not proof of legitimate gameplay improvement, and any later optimization/refinement loop must operate against frozen capabilities and independent evaluation/acceptance authority.
 
 See `docs/phase-24-automated-playtesting.md` for the detailed contract, threat boundary and acceptance tests.
 
@@ -591,6 +591,29 @@ See `docs/phase-30-full-production-interface.md` for the detailed read-side muta
 **Exit condition met:** exact implementation head `1246fa9f7e9df8aa09c31b5c6e1cf8667f3759fa` passed normal GitHub Actions run `31456921293` on Python 3.12 and Python 3.13 with unrelated heavyweight evidence workflows skipped/disarmed; Origin Forge can inspect the accepted v1 production state through bounded non-creating projections without transferring production authority to the UI.
 
 **Merge gate:** the canonical DONE/documentation head created after that implementation proof must itself pass the normal Python 3.12/3.13 matrix before ready-for-review transition and SHA-guarded merge.
+
+## Phase 31 — Governed Production Planning & Dependency Graph — DONE
+
+Implemented the Manager-side planning substrate needed to turn one durable Goal into a bounded cross-domain dependency graph without giving a Planner model production authority:
+
+- infrastructure-owned `PLINPUT-*`, `PLPROP-*`, `PLAUD-*`, and `PLMAT-*` identities;
+- frozen Goal-revision/hash-bound PlanningInput evidence with bounded verified/design-rule refs, Project Intelligence identity, capability catalog, and model/resource policy hashes;
+- strict proposal-local PlanStep/PlanProposal contracts with duplicate-key-aware JSON parsing, finite task/edge/depth limits, capability binding, and deterministic DAG/topological evidence;
+- independent structural PlanAudit recomputation;
+- canonical same-Flow `REQUIRES_SUCCESS` Task dependencies in SQLite with foreign keys, uniqueness, self-edge, same-Flow, and recursive cycle defenses;
+- immutable normalized planning input/proposal/audit/materialization evidence;
+- explicit one-transaction audited-plan materialization allocating infrastructure-owned Flow/Task IDs and rolling back all partial state on failure;
+- deterministic dependency readiness requiring canonical Task `SUCCEEDED` plus Task Verification `PASS`, with explicit waiting/failed/invalid/active/terminal evidence and no Task transition side effect;
+- one-shot Task-less `PLANNER` Runs using the existing Phase-14 scheduled model/resource boundary, exact request/response/proposal evidence, and no implicit audit/materialization;
+- Phase-30 immutable-SQLite-guard-based read-only planning evidence, graph, and readiness inspection with exact materialized Task/dependency drift detection;
+- read-only `origin-forge-plan` module CLI exposing status/show/graph/readiness only;
+- no automatic Task execution, recursive replanning, hidden queue, model self-verification, Artifact adoption/signing, Project Intelligence mutation, arbitrary model tool execution, cockpit mutation, merge, or release authority.
+
+See `docs/phase-31-governed-production-planning.md` for the detailed implemented contract, evidence model, readiness semantics, model boundary, inspection surface, and slice-by-slice CI evidence.
+
+**Exit condition met in implementation:** Phase-31 slices 31A–31G independently passed the normal Python 3.12/3.13 matrix through code head `eedd8a8699a57a856b9451c1be273e14edf856e4`; the canonical documentation/roadmap closure head created after those proofs must itself pass the final normal matrix before SHA-guarded merge.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ---
 
