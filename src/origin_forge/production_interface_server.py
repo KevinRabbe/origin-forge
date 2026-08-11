@@ -18,6 +18,9 @@ _DETAIL_KINDS = {
     "task": IdKind.TASK,
     "run": IdKind.RUN,
     "verification": IdKind.VERIFICATION,
+    "decision": IdKind.DECISION,
+    "change": IdKind.CHANGE,
+    "artifact": IdKind.ARTIFACT,
     "entity": IdKind.ENTITY,
     "rule": IdKind.DESIGN_RULE,
 }
@@ -40,18 +43,8 @@ class ProductionInterfaceRouter:
     @staticmethod
     def _response(status: int, content_type: str, body: bytes) -> ProductionInterfaceResponse:
         if len(body) > _MAX_RESPONSE_BYTES:
-            return ProductionInterfaceResponse(
-                500,
-                "text/plain; charset=utf-8",
-                b"response exceeds interface byte limit\n",
-                ProductionInterfaceRouter._security_headers(),
-            )
-        return ProductionInterfaceResponse(
-            status,
-            content_type,
-            body,
-            ProductionInterfaceRouter._security_headers(),
-        )
+            return ProductionInterfaceResponse(500, "text/plain; charset=utf-8", b"response exceeds interface byte limit\n", ProductionInterfaceRouter._security_headers())
+        return ProductionInterfaceResponse(status, content_type, body, ProductionInterfaceRouter._security_headers())
 
     @staticmethod
     def _security_headers() -> tuple[tuple[str, str], ...]:
@@ -81,19 +74,10 @@ class ProductionInterfaceRouter:
             return self._response(500, "text/plain; charset=utf-8", b"snapshot unavailable\n")
 
         if path == "/":
-            return self._response(
-                200,
-                "text/html; charset=utf-8",
-                render_overview(snapshot).encode("utf-8"),
-            )
+            return self._response(200, "text/html; charset=utf-8", render_overview(snapshot).encode("utf-8"))
         if path == "/api/snapshot":
-            payload = dict(snapshot.to_dict())
-            payload["content_hash"] = snapshot.content_hash
-            return self._response(
-                200,
-                "application/json; charset=utf-8",
-                (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"),
-            )
+            payload = dict(snapshot.to_dict()); payload["content_hash"] = snapshot.content_hash
+            return self._response(200, "application/json; charset=utf-8", (json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"))
 
         parts = path.split("/")
         if len(parts) != 3 or parts[0] != "" or not parts[1] or not parts[2]:
@@ -113,44 +97,23 @@ class _InterfaceHTTPServer(HTTPServer):
     allow_reuse_address = False
 
 
-def create_production_interface_server(
-    runtime: OriginForgeRuntime,
-    *,
-    port: int = 0,
-) -> HTTPServer:
+def create_production_interface_server(runtime: OriginForgeRuntime, *, port: int = 0) -> HTTPServer:
     if type(port) is not int or not 0 <= port <= 65535:
         raise ValueError("port must be an integer from 0 to 65535")
     router = ProductionInterfaceRouter(runtime)
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-
-        def do_GET(self) -> None:  # noqa: N802
-            self._dispatch("GET")
-
-        def do_POST(self) -> None:  # noqa: N802
-            self._dispatch("POST")
-
-        def do_PUT(self) -> None:  # noqa: N802
-            self._dispatch("PUT")
-
-        def do_PATCH(self) -> None:  # noqa: N802
-            self._dispatch("PATCH")
-
-        def do_DELETE(self) -> None:  # noqa: N802
-            self._dispatch("DELETE")
-
+        def do_GET(self) -> None: self._dispatch("GET")  # noqa: N802
+        def do_POST(self) -> None: self._dispatch("POST")  # noqa: N802
+        def do_PUT(self) -> None: self._dispatch("PUT")  # noqa: N802
+        def do_PATCH(self) -> None: self._dispatch("PATCH")  # noqa: N802
+        def do_DELETE(self) -> None: self._dispatch("DELETE")  # noqa: N802
         def _dispatch(self, method: str) -> None:
             response = router.route(method, self.path)
-            self.send_response(response.status)
-            self.send_header("Content-Type", response.content_type)
-            self.send_header("Content-Length", str(len(response.body)))
-            for key, value in response.headers:
-                self.send_header(key, value)
-            self.end_headers()
-            self.wfile.write(response.body)
-
-        def log_message(self, format: str, *args: object) -> None:
-            return
+            self.send_response(response.status); self.send_header("Content-Type", response.content_type); self.send_header("Content-Length", str(len(response.body)))
+            for key, value in response.headers: self.send_header(key, value)
+            self.end_headers(); self.wfile.write(response.body)
+        def log_message(self, format: str, *args: object) -> None: return
 
     return _InterfaceHTTPServer(("127.0.0.1", port), Handler)
