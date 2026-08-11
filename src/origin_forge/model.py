@@ -7,7 +7,7 @@ from typing import Any, Protocol, runtime_checkable
 @dataclass(frozen=True)
 class ModelRequest:
     run_id: str
-    task_id: str
+    task_id: str | None
     instructions: str
     context: dict[str, Any]
     response_schema: dict[str, Any]

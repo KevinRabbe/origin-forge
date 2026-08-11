@@ -287,12 +287,114 @@ CREATE INDEX idx_design_rules_project_status_category
 ON design_rules(project_id, status, category, title, id);
 """
 
+MIGRATION_006 = r"""
+CREATE TABLE task_dependencies (
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    required_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    dependency_type TEXT NOT NULL DEFAULT 'REQUIRES_SUCCESS'
+        CHECK (dependency_type = 'REQUIRES_SUCCESS'),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(task_id, required_task_id),
+    CHECK(task_id != required_task_id)
+);
+
+CREATE INDEX idx_task_dependencies_required
+ON task_dependencies(required_task_id, task_id);
+
+CREATE TRIGGER task_dependencies_same_flow_insert
+BEFORE INSERT ON task_dependencies
+BEGIN
+    SELECT CASE
+        WHEN (SELECT flow_id FROM tasks WHERE id = NEW.task_id)
+             != (SELECT flow_id FROM tasks WHERE id = NEW.required_task_id)
+        THEN RAISE(ABORT, 'task dependencies must belong to the same flow')
+    END;
+END;
+
+CREATE TRIGGER task_dependencies_no_cycle_insert
+BEFORE INSERT ON task_dependencies
+BEGIN
+    SELECT CASE WHEN EXISTS (
+        WITH RECURSIVE requirements(task_id) AS (
+            SELECT required_task_id
+            FROM task_dependencies
+            WHERE task_id = NEW.required_task_id
+            UNION
+            SELECT td.required_task_id
+            FROM task_dependencies td
+            JOIN requirements r ON td.task_id = r.task_id
+        )
+        SELECT 1 FROM requirements WHERE task_id = NEW.task_id
+    ) THEN RAISE(ABORT, 'task dependency would create a cycle') END;
+END;
+"""
+
+MIGRATION_007 = r"""
+CREATE TABLE planning_inputs (
+    planning_input_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE RESTRICT,
+    goal_revision INTEGER NOT NULL CHECK (goal_revision >= 0),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+    content_hash TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_planning_inputs_goal
+ON planning_inputs(project_id, goal_id, created_at, planning_input_id);
+
+CREATE TABLE plan_proposals (
+    proposal_id TEXT PRIMARY KEY,
+    planning_input_id TEXT NOT NULL REFERENCES planning_inputs(planning_input_id) ON DELETE RESTRICT,
+    schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+    content_hash TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_plan_proposals_input
+ON plan_proposals(planning_input_id, created_at, proposal_id);
+
+CREATE TABLE plan_audits (
+    audit_id TEXT PRIMARY KEY,
+    planning_input_id TEXT NOT NULL REFERENCES planning_inputs(planning_input_id) ON DELETE RESTRICT,
+    proposal_id TEXT NOT NULL REFERENCES plan_proposals(proposal_id) ON DELETE RESTRICT,
+    status TEXT NOT NULL CHECK (status IN ('PASS', 'FAIL')),
+    schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+    content_hash TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_plan_audits_proposal
+ON plan_audits(proposal_id, created_at, audit_id);
+
+CREATE TABLE plan_materializations (
+    materialization_id TEXT PRIMARY KEY,
+    planning_input_id TEXT NOT NULL REFERENCES planning_inputs(planning_input_id) ON DELETE RESTRICT,
+    proposal_id TEXT NOT NULL UNIQUE REFERENCES plan_proposals(proposal_id) ON DELETE RESTRICT,
+    audit_id TEXT NOT NULL UNIQUE REFERENCES plan_audits(audit_id) ON DELETE RESTRICT,
+    goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE RESTRICT,
+    flow_id TEXT NOT NULL UNIQUE REFERENCES flows(id) ON DELETE RESTRICT,
+    schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+    content_hash TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_plan_materializations_goal
+ON plan_materializations(goal_id, created_at, materialization_id);
+"""
+
 MIGRATIONS = (
     Migration(1, MIGRATION_001),
     Migration(2, MIGRATION_002),
     Migration(3, MIGRATION_003),
     Migration(4, MIGRATION_004),
     Migration(5, MIGRATION_005),
+    Migration(6, MIGRATION_006),
+    Migration(7, MIGRATION_007),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version

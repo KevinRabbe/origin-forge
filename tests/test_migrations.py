@@ -34,7 +34,7 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 5)
+            self.assertEqual(SCHEMA_VERSION, 7)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -50,6 +50,27 @@ class MigrationTests(unittest.TestCase):
                     row["name"]
                     for row in upgraded.execute("PRAGMA index_list(entity_relations)")
                 }
+                dependency_indexes = {
+                    row["name"]
+                    for row in upgraded.execute("PRAGMA index_list(task_dependencies)")
+                }
+                dependency_triggers = {
+                    row["name"]
+                    for row in upgraded.execute(
+                        """SELECT name FROM sqlite_master
+                           WHERE type = 'trigger' AND tbl_name = 'task_dependencies'"""
+                    )
+                }
+                planning_indexes = {
+                    row["name"]
+                    for table in (
+                        "planning_inputs",
+                        "plan_proposals",
+                        "plan_audits",
+                        "plan_materializations",
+                    )
+                    for row in upgraded.execute(f"PRAGMA index_list({table})")
+                }
             self.assertIn("revision", workspace_columns)
             self.assertIn("base_commit", workspace_columns)
             for table in (
@@ -57,9 +78,29 @@ class MigrationTests(unittest.TestCase):
                 "entity_relations",
                 "entity_bindings",
                 "design_rules",
+                "task_dependencies",
+                "planning_inputs",
+                "plan_proposals",
+                "plan_audits",
+                "plan_materializations",
             ):
                 self.assertIn(table, tables)
             self.assertIn("idx_entity_relations_active_unique", relation_indexes)
+            self.assertIn("idx_task_dependencies_required", dependency_indexes)
+            self.assertEqual(
+                dependency_triggers,
+                {
+                    "task_dependencies_same_flow_insert",
+                    "task_dependencies_no_cycle_insert",
+                },
+            )
+            for index in (
+                "idx_planning_inputs_goal",
+                "idx_plan_proposals_input",
+                "idx_plan_audits_proposal",
+                "idx_plan_materializations_goal",
+            ):
+                self.assertIn(index, planning_indexes)
 
 
 if __name__ == "__main__":
