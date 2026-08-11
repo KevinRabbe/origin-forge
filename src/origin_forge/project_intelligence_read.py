@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from .ids import IdKind, validate_id
+from .production_read_guard import ensure_production_runtime_readable
 from .runtime import OriginForgeRuntime
 
 
@@ -48,6 +49,7 @@ class ProjectIntelligenceReadService:
     def __init__(self, runtime: OriginForgeRuntime):
         if not isinstance(runtime, OriginForgeRuntime):
             raise TypeError("runtime must be an OriginForgeRuntime")
+        ensure_production_runtime_readable(runtime)
         self.runtime = runtime
 
     @property
