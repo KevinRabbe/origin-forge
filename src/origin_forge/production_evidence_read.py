@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from .ids import IdKind, validate_id
-from .production_read_guard import ensure_production_runtime_readable
+from .production_read_guard import (
+    ensure_production_runtime_readable,
+    production_read_connection,
+)
 from .runtime import OriginForgeRuntime
 
 
@@ -74,11 +77,18 @@ class ProductionEvidenceReadService:
 
     @property
     def project_id(self) -> str:
-        return self.runtime.project_id()
+        with production_read_connection(self.runtime) as conn:
+            row = conn.execute(
+                "SELECT id FROM projects WHERE root_path = ?",
+                (str(self.runtime.project_root),),
+            ).fetchone()
+        if row is None:
+            raise KeyError(str(self.runtime.project_root))
+        return str(row["id"])
 
     def counts(self) -> dict[str, int]:
         project_id = self.project_id
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             decisions = int(
                 conn.execute(
                     "SELECT COUNT(*) FROM decisions WHERE project_id = ?", (project_id,)
@@ -116,7 +126,7 @@ class ProductionEvidenceReadService:
 
     def list_decisions(self, *, limit: int = 256) -> tuple[dict[str, object], ...]:
         limit = _limit(limit)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             rows = conn.execute(
                 """SELECT id, goal_id, task_id, title, decision, rationale, status,
                           supersedes_decision_id, created_at
@@ -128,7 +138,7 @@ class ProductionEvidenceReadService:
 
     def list_changes(self, *, limit: int = 512) -> tuple[dict[str, object], ...]:
         limit = _limit(limit)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             rows = conn.execute(
                 """SELECT c.id, c.task_id, c.decision_id, c.run_id, c.summary,
                           c.change_type, c.before_ref, c.after_ref, c.status, c.created_at
@@ -144,7 +154,7 @@ class ProductionEvidenceReadService:
 
     def list_artifacts(self, *, limit: int = 512) -> tuple[dict[str, object], ...]:
         limit = _limit(limit)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             rows = conn.execute(
                 """SELECT id, change_id, type, path_or_uri, content_hash,
                           parent_artifact_id, created_by_run_id, model_id, status, created_at
@@ -158,7 +168,7 @@ class ProductionEvidenceReadService:
         self, *, limit: int = 1024
     ) -> tuple[dict[str, object], ...]:
         limit = _limit(limit)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             rows = conn.execute(
                 """SELECT v.id, v.target_id, v.verification_type, v.verifier,
                           v.status, v.run_id, v.created_at
@@ -187,7 +197,7 @@ class ProductionEvidenceReadService:
     def get_decision(self, decision_id: str) -> dict[str, object]:
         if not validate_id(decision_id, IdKind.DECISION):
             raise KeyError(decision_id)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             row = conn.execute(
                 """SELECT id, goal_id, task_id, title, decision, rationale, status,
                           supersedes_decision_id, created_at
@@ -201,7 +211,7 @@ class ProductionEvidenceReadService:
     def get_change(self, change_id: str) -> dict[str, object]:
         if not validate_id(change_id, IdKind.CHANGE):
             raise KeyError(change_id)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             row = conn.execute(
                 """SELECT c.id, c.task_id, c.decision_id, c.run_id, c.summary,
                           c.change_type, c.before_ref, c.after_ref, c.status, c.created_at
@@ -219,7 +229,7 @@ class ProductionEvidenceReadService:
     def get_artifact(self, artifact_id: str) -> dict[str, object]:
         if not validate_id(artifact_id, IdKind.ARTIFACT):
             raise KeyError(artifact_id)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             row = conn.execute(
                 """SELECT id, change_id, type, path_or_uri, content_hash,
                           parent_artifact_id, created_by_run_id, model_id, status, created_at
