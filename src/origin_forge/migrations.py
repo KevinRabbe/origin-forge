@@ -287,12 +287,55 @@ CREATE INDEX idx_design_rules_project_status_category
 ON design_rules(project_id, status, category, title, id);
 """
 
+MIGRATION_006 = r"""
+CREATE TABLE task_dependencies (
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    required_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    dependency_type TEXT NOT NULL DEFAULT 'REQUIRES_SUCCESS'
+        CHECK (dependency_type = 'REQUIRES_SUCCESS'),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(task_id, required_task_id),
+    CHECK(task_id != required_task_id)
+);
+
+CREATE INDEX idx_task_dependencies_required
+ON task_dependencies(required_task_id, task_id);
+
+CREATE TRIGGER task_dependencies_same_flow_insert
+BEFORE INSERT ON task_dependencies
+BEGIN
+    SELECT CASE
+        WHEN (SELECT flow_id FROM tasks WHERE id = NEW.task_id)
+             != (SELECT flow_id FROM tasks WHERE id = NEW.required_task_id)
+        THEN RAISE(ABORT, 'task dependencies must belong to the same flow')
+    END;
+END;
+
+CREATE TRIGGER task_dependencies_no_cycle_insert
+BEFORE INSERT ON task_dependencies
+BEGIN
+    SELECT CASE WHEN EXISTS (
+        WITH RECURSIVE requirements(task_id) AS (
+            SELECT required_task_id
+            FROM task_dependencies
+            WHERE task_id = NEW.required_task_id
+            UNION
+            SELECT td.required_task_id
+            FROM task_dependencies td
+            JOIN requirements r ON td.task_id = r.task_id
+        )
+        SELECT 1 FROM requirements WHERE task_id = NEW.task_id
+    ) THEN RAISE(ABORT, 'task dependency would create a cycle') END;
+END;
+"""
+
 MIGRATIONS = (
     Migration(1, MIGRATION_001),
     Migration(2, MIGRATION_002),
     Migration(3, MIGRATION_003),
     Migration(4, MIGRATION_004),
     Migration(5, MIGRATION_005),
+    Migration(6, MIGRATION_006),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version
