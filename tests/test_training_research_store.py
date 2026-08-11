@@ -25,6 +25,16 @@ from origin_forge.training_research_models import (
     TrainingTrajectory,
     TrainingTrajectoryOutcome,
 )
+from origin_forge.training_research_policy import (
+    GovernedTrainingEligibilityAudit,
+    GovernedTrainingTrajectory,
+    RUNTIME_REDACTED_PRODUCER_FINGERPRINT,
+    RUNTIME_REDACTED_PRODUCER_ID,
+    RUNTIME_REDACTED_PRODUCER_VERSION,
+    V1_ELIGIBILITY_POLICY_FINGERPRINT,
+    V1_ELIGIBILITY_POLICY_ID,
+    V1_ELIGIBILITY_POLICY_VERSION,
+)
 from origin_forge.training_research_store import (
     TrainingResearchStore,
     TrainingResearchStoreError,
@@ -39,11 +49,41 @@ HASH_E = "sha256:" + "e" * 64
 HASH_F = "sha256:" + "f" * 64
 
 
-def _trajectory(*, protected: bool = False) -> TrainingTrajectory:
+def _source_refs(*, task_id: str, run_id: str, protected: bool) -> tuple[TrainingEvidenceRef, ...]:
+    return (
+        TrainingEvidenceRef(
+            TrainingEvidenceType.TASK,
+            task_id,
+            HASH_A,
+            2,
+            ResearchDisclosureClass.ALLOWED,
+        ),
+        TrainingEvidenceRef(
+            TrainingEvidenceType.RUN,
+            run_id,
+            HASH_B,
+            None,
+            ResearchDisclosureClass.ALLOWED,
+        ),
+        TrainingEvidenceRef(
+            TrainingEvidenceType.VERIFICATION,
+            new_id(IdKind.VERIFICATION),
+            HASH_C,
+            None,
+            (
+                ResearchDisclosureClass.PROTECTED
+                if protected
+                else ResearchDisclosureClass.ALLOWED
+            ),
+        ),
+    )
+
+
+def _trajectory(*, protected: bool = False) -> GovernedTrainingTrajectory:
     project_id = new_id(IdKind.PROJECT)
     task_id = new_id(IdKind.TASK)
     run_id = new_id(IdKind.RUN)
-    return TrainingTrajectory.create(
+    return GovernedTrainingTrajectory.create(
         project_id=project_id,
         task_id=task_id,
         run_id=run_id,
@@ -53,52 +93,45 @@ def _trajectory(*, protected: bool = False) -> TrainingTrajectory:
         model_profile="coding-small",
         model_hash=HASH_E,
         example={"input": {"task": "repair"}, "target": {"result": "verified"}},
-        source_refs=(
-            TrainingEvidenceRef(
-                TrainingEvidenceType.TASK,
-                task_id,
-                HASH_A,
-                2,
-                ResearchDisclosureClass.ALLOWED,
-            ),
-            TrainingEvidenceRef(
-                TrainingEvidenceType.RUN,
-                run_id,
-                HASH_B,
-                None,
-                ResearchDisclosureClass.ALLOWED,
-            ),
-            TrainingEvidenceRef(
-                TrainingEvidenceType.VERIFICATION,
-                new_id(IdKind.VERIFICATION),
-                HASH_C,
-                None,
-                (
-                    ResearchDisclosureClass.PROTECTED
-                    if protected
-                    else ResearchDisclosureClass.ALLOWED
-                ),
-            ),
-        ),
+        source_refs=_source_refs(task_id=task_id, run_id=run_id, protected=protected),
+        producer_id=RUNTIME_REDACTED_PRODUCER_ID,
+        producer_version=RUNTIME_REDACTED_PRODUCER_VERSION,
+        producer_fingerprint=RUNTIME_REDACTED_PRODUCER_FINGERPRINT,
     )
 
 
-def _audit(trajectory: TrainingTrajectory) -> TrainingEligibilityAudit:
-    return TrainingEligibilityAudit.create(
-        trajectory=trajectory,
-        policy_id="verified-trajectory-v1",
-        policy_version="1",
-        policy_fingerprint=HASH_F,
+def _generic_trajectory() -> TrainingTrajectory:
+    project_id = new_id(IdKind.PROJECT)
+    task_id = new_id(IdKind.TASK)
+    run_id = new_id(IdKind.RUN)
+    return TrainingTrajectory.create(
+        project_id=project_id,
+        task_id=task_id,
+        run_id=run_id,
+        leakage_group_hash=HASH_D,
+        outcome=TrainingTrajectoryOutcome.VERIFIED_SUCCESS,
+        objective="Generic manually assembled research record.",
+        model_profile="coding-small",
+        model_hash=HASH_E,
+        example={"input": {"task": "manual"}, "target": {"result": "claimed"}},
+        source_refs=_source_refs(task_id=task_id, run_id=run_id, protected=False),
     )
 
 
-def _dataset(trajectory: TrainingTrajectory, audit: TrainingEligibilityAudit) -> TrainingDatasetManifest:
+def _audit(trajectory: TrainingTrajectory) -> GovernedTrainingEligibilityAudit:
+    return GovernedTrainingEligibilityAudit.create(trajectory=trajectory)
+
+
+def _dataset(
+    trajectory: TrainingTrajectory,
+    audit: TrainingEligibilityAudit,
+) -> TrainingDatasetManifest:
     return TrainingDatasetManifest.create(
         trajectories=(trajectory,),
         audits=(audit,),
-        policy_id="verified-trajectory-v1",
-        policy_version="1",
-        policy_fingerprint=HASH_F,
+        policy_id=V1_ELIGIBILITY_POLICY_ID,
+        policy_version=V1_ELIGIBILITY_POLICY_VERSION,
+        policy_fingerprint=V1_ELIGIBILITY_POLICY_FINGERPRINT,
         split_salt_hash=HASH_A,
     )
 
@@ -241,6 +274,24 @@ class TrainingResearchStoreTests(unittest.TestCase):
         wrong_split = type(entry.split).TEST if entry.split.value != "TEST" else type(entry.split).TRAIN
         with self.assertRaisesRegex(TrainingResearchModelError, "split assignment is inconsistent"):
             replace(dataset, entries=(replace(entry, split=wrong_split),))
+        self.assertEqual(self.store.list_objects("datasets"), ())
+
+    def test_generic_manual_trajectory_cannot_enter_durable_v1_dataset(self) -> None:
+        trajectory = _generic_trajectory()
+        audit = TrainingEligibilityAudit.create(
+            trajectory=trajectory,
+            policy_id=V1_ELIGIBILITY_POLICY_ID,
+            policy_version=V1_ELIGIBILITY_POLICY_VERSION,
+            policy_fingerprint=V1_ELIGIBILITY_POLICY_FINGERPRINT,
+        )
+        self.assertTrue(audit.eligible)
+        dataset = _dataset(trajectory, audit)
+        with self.assertRaisesRegex(TrainingResearchModelError, "trusted governed trajectories"):
+            self.store.publish_dataset(
+                dataset,
+                trajectories=(trajectory,),
+                audits=(audit,),
+            )
         self.assertEqual(self.store.list_objects("datasets"), ())
 
     def test_forged_report_classification_is_rejected_before_persistence(self) -> None:
