@@ -200,6 +200,11 @@ class CodeBoundedRetryDispatchValidator:
     def payload_schema_hash(self) -> str:
         return self._base.payload_schema_hash
 
+    def schema_dict(self) -> dict[str, object]:
+        """Return the inert exact payload schema exposed to bounded planners."""
+
+        return self._base.schema_dict()
+
     def validate(
         self,
         payload: dict[str, Any],
