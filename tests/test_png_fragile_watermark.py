@@ -12,10 +12,7 @@ from origin_forge.media_fingerprint_models import (
     MediaFingerprintModelError,
 )
 from origin_forge.media_fingerprint_store import MediaFingerprintStore
-from origin_forge.media_watermark_models import (
-    WatermarkDetectionStatus,
-    WatermarkResult,
-)
+from origin_forge.media_watermark_models import WatermarkDetectionStatus
 from origin_forge.pixelorama_models import PixelPlane
 from origin_forge.pixelorama_png import encode_rgba8_png
 from origin_forge.png_fragile_watermark import (
@@ -69,6 +66,7 @@ class PngFragileWatermarkTests(unittest.TestCase):
         self.assertTrue(payload["format_validated"])
         self.assertFalse(payload["authorship_proven"])
         self.assertFalse(payload["cryptographic_provenance_verified"])
+        self.assertFalse(payload["parent_lineage_verified"])
         self.assertFalse(payload["canonical_asset_adopted"])
         self.assertFalse(payload["production_task_verified"])
 
@@ -151,6 +149,10 @@ class PngFragileWatermarkTests(unittest.TestCase):
         with self.assertRaisesRegex(MediaFingerprintModelError, "exact plan"):
             result.bind_plan(other_plan)
 
+        forged = replace(result, status=WatermarkDetectionStatus.MISMATCH)
+        with self.assertRaisesRegex(MediaFingerprintModelError, "incorrectly matches"):
+            forged.bind_plan(self.plan)
+
     def test_plan_and_detection_result_persist_as_immutable_evidence(self) -> None:
         derivative = embed_png_fragile_metadata(
             plan=self.plan,
@@ -163,7 +165,7 @@ class PngFragileWatermarkTests(unittest.TestCase):
             runtime.initialize("phase28-watermark-store-test")
             store = MediaFingerprintStore(runtime)
             plan_path = store.publish_watermark_plan(self.plan)
-            result_path = store.publish_watermark_result(result)
+            result_path = store.publish_watermark_result(result, plan=self.plan)
             self.assertTrue(plan_path.is_file())
             self.assertTrue(result_path.is_file())
             loaded = store.load("watermark-results", result.result_id)
