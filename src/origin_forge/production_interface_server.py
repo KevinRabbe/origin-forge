@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Callable
 from urllib.parse import urlsplit
 
 from .ids import IdKind, validate_id
@@ -19,6 +18,8 @@ _DETAIL_KINDS = {
     "task": IdKind.TASK,
     "run": IdKind.RUN,
     "verification": IdKind.VERIFICATION,
+    "entity": IdKind.ENTITY,
+    "rule": IdKind.DESIGN_RULE,
 }
 
 
