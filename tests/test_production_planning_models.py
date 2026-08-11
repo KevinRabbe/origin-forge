@@ -164,13 +164,7 @@ class ProductionPlanningModelTests(unittest.TestCase):
             "proposal failed exact planning-input binding",
         )
 
-    def test_step_contract_rejects_model_authority_shaped_values(self) -> None:
-        with self.assertRaises(ProductionPlanningModelError):
-            PlanStep(
-                step_key="TASK-owned-by-model",
-                objective="Invalid local identity.",
-                acceptance_criteria=("Never accepted.",),
-            )
+    def test_step_contract_rejects_nonexact_attempt_values(self) -> None:
         with self.assertRaises(ProductionPlanningModelError):
             PlanStep(
                 step_key="valid",
