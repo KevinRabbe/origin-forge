@@ -11,7 +11,7 @@ from .runtime import OriginForgeRuntime, RuntimeInvariantError
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m origin_forge.production_interface_cli",
+        prog="origin-forge-cockpit",
         description="Read-only Origin Forge production cockpit.",
     )
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
