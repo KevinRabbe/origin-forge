@@ -16,6 +16,14 @@ from .training_research_models import (
     TrainingResearchModelError,
     TrainingTrajectory,
 )
+from .training_research_policy import (
+    GovernedTrainingEligibilityAudit,
+    GovernedTrainingTrajectory,
+    V1_ELIGIBILITY_POLICY_FINGERPRINT,
+    V1_ELIGIBILITY_POLICY_ID,
+    V1_ELIGIBILITY_POLICY_VERSION,
+    is_v1_trusted_trajectory,
+)
 
 
 _SCHEMA_VERSION = 1
@@ -225,12 +233,44 @@ class TrainingResearchStore:
     ) -> Path:
         trajectory_values = tuple(trajectories)
         audit_values = tuple(audits)
+        if not trajectory_values or not all(
+            isinstance(item, GovernedTrainingTrajectory)
+            and is_v1_trusted_trajectory(item)
+            for item in trajectory_values
+        ):
+            raise TrainingResearchModelError(
+                "durable v1 dataset requires only trusted governed trajectories"
+            )
+        if not audit_values or not all(
+            isinstance(item, GovernedTrainingEligibilityAudit)
+            for item in audit_values
+        ):
+            raise TrainingResearchModelError(
+                "durable v1 dataset requires governed eligibility audits"
+            )
+        if (
+            value.policy_id != V1_ELIGIBILITY_POLICY_ID
+            or value.policy_version != V1_ELIGIBILITY_POLICY_VERSION
+            or value.policy_fingerprint != V1_ELIGIBILITY_POLICY_FINGERPRINT
+        ):
+            raise TrainingResearchModelError(
+                "durable v1 dataset policy identity drifted"
+            )
+        for audit in audit_values:
+            if (
+                audit.policy_id != V1_ELIGIBILITY_POLICY_ID
+                or audit.policy_version != V1_ELIGIBILITY_POLICY_VERSION
+                or audit.policy_fingerprint != V1_ELIGIBILITY_POLICY_FINGERPRINT
+            ):
+                raise TrainingResearchModelError(
+                    "durable v1 dataset audit policy identity drifted"
+                )
         expected = TrainingDatasetManifest.create(
             trajectories=trajectory_values,
             audits=audit_values,
-            policy_id=value.policy_id,
-            policy_version=value.policy_version,
-            policy_fingerprint=value.policy_fingerprint,
+            policy_id=V1_ELIGIBILITY_POLICY_ID,
+            policy_version=V1_ELIGIBILITY_POLICY_VERSION,
+            policy_fingerprint=V1_ELIGIBILITY_POLICY_FINGERPRINT,
             split_salt_hash=value.split_salt_hash,
         )
         if expected.entries != value.entries:
