@@ -32,12 +32,12 @@ class ProjectIntelligenceReadTests(unittest.TestCase):
 
     def _graph(self) -> tuple[str, str, str]:
         actor = self.mutable.create_entity(
-            EntityKind.CHARACTER,
+            EntityKind.COMPONENT,
             "Factory Guard",
             description="Slow armored enemy",
             metadata={"private-note": "not for cockpit"},
         )
-        weapon = self.mutable.create_entity(EntityKind.ITEM, "Mechanical Hammer")
+        weapon = self.mutable.create_entity(EntityKind.ASSET, "Mechanical Hammer")
         self.mutable.create_relation(
             actor,
             RelationType.USES,
@@ -46,7 +46,7 @@ class ProjectIntelligenceReadTests(unittest.TestCase):
         )
         self.mutable.create_binding(
             actor,
-            BindingType.EXTERNAL,
+            BindingType.EXTERNAL_REF,
             "design://factory-guard",
             metadata={"private-binding": "not for cockpit"},
         )
@@ -54,7 +54,7 @@ class ProjectIntelligenceReadTests(unittest.TestCase):
             DesignRuleCategory.GAMEPLAY,
             "Heavy silhouette",
             "Factory guards must read as heavy at a glance.",
-            DesignRuleAuthority.REQUIRED,
+            DesignRuleAuthority.HARD_CONSTRAINT,
             scope_entity_ids=(actor,),
         )
         return actor, weapon, rule
