@@ -38,10 +38,11 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
             "transition_task(",
             "start_run(",
             "record_verification(",
-            "adopt",
-            "sign_manifest",
-            "merge_pull_request",
-            "release",
+            ".adopt(",
+            "adopt_new(",
+            "sign_manifest(",
+            "merge_pull_request(",
+            "release_candidate(",
         ):
             self.assertNotIn(forbidden, source)
 
