@@ -59,6 +59,66 @@ def _linked_table(headers: tuple[str, ...], rows: Iterable[tuple[str, object, tu
     return f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table>"
 
 
+def _model_resource_panel(snapshot: ProductionInterfaceSnapshot) -> str:
+    value = snapshot.model_resources
+    enabled = value.get("enabled") is True
+    body = ["<h2>Model / Resource Monitor</h2>"]
+    body.append(
+        _table(
+            ("Field", "Value"),
+            (
+                ("Configured", enabled),
+                ("Config version", value.get("config_version")),
+                ("Fresh inspection state", value.get("inspection_state_is_fresh")),
+                ("Model loading authorized", value.get("model_loading_authorized")),
+                ("Resource leasing authorized", value.get("resource_leasing_authorized")),
+                ("Routing mutation authorized", value.get("routing_mutation_authorized")),
+            ),
+        )
+    )
+    resource = value.get("resource_status")
+    if isinstance(resource, Mapping):
+        gpus = resource.get("gpus")
+        gpu_count = len(gpus) if isinstance(gpus, list) else 0
+        body.append("<h3>Configured Capacity</h3>")
+        body.append(
+            _table(
+                ("CPU slots", "Free CPU", "RAM MiB", "Free RAM", "Active leases", "GPUs"),
+                ((resource.get("cpu_slots"), resource.get("free_cpu_slots"), resource.get("ram_mib"), resource.get("free_ram_mib"), resource.get("active_lease_count"), gpu_count),),
+            )
+        )
+    profiles = value.get("profiles")
+    if isinstance(profiles, list):
+        body.append("<h3>Model Profiles</h3>")
+        body.append(
+            _table(
+                ("Profile", "Role", "Model", "Runtime", "Model hash"),
+                (
+                    (profile.get("profile_id"), profile.get("role"), profile.get("model_id"), profile.get("runtime_id"), profile.get("model_hash"))
+                    for profile in profiles
+                    if isinstance(profile, Mapping)
+                ),
+            )
+        )
+    policies = value.get("policies")
+    if isinstance(policies, list):
+        body.append("<h3>Selection Policies</h3>")
+        body.append(
+            _table(
+                ("Role", "Requested", "Selected", "Fallback would be used", "Currently schedulable"),
+                (
+                    (policy.get("role"), policy.get("requested_profile_id"), policy.get("selected_profile_id"), policy.get("fallback_would_be_used"), policy.get("currently_schedulable"))
+                    for policy in policies
+                    if isinstance(policy, Mapping)
+                ),
+            )
+        )
+    body.append(
+        "<p class=\"muted\">This is fresh configuration/admission inspection state. It does not mean any model is loaded or any resource lease is active.</p>"
+    )
+    return "".join(body)
+
+
 def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
     if not isinstance(snapshot, ProductionInterfaceSnapshot):
         raise TypeError("snapshot must be a ProductionInterfaceSnapshot")
@@ -135,6 +195,7 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
             (("rule", row["id"], (row["category"], row["authority"], row["status"], row["title"], row["statement"])) for row in snapshot.design_rules),
         )
     )
+    body.append(_model_resource_panel(snapshot))
     return _page("Origin Forge Production Cockpit", "".join(body))
 
 
