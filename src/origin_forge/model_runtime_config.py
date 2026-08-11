@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from enum import StrEnum
@@ -73,7 +74,11 @@ def _positive_timeout(value: object, label: str) -> float:
         normalized = float(value)
     except (TypeError, ValueError) as exc:
         raise ModelRuntimeConfigError(f"{label} must be a positive number") from exc
-    if normalized <= 0 or normalized > _MAX_TIMEOUT_SECONDS:
+    if (
+        not math.isfinite(normalized)
+        or normalized <= 0
+        or normalized > _MAX_TIMEOUT_SECONDS
+    ):
         raise ModelRuntimeConfigError(
             f"{label} must be > 0 and <= {_MAX_TIMEOUT_SECONDS}"
         )
