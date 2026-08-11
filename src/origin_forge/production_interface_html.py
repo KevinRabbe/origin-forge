@@ -106,6 +106,35 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
             (("verification", row["id"], (row["target_id"], row["verification_type"], row["status"], row["verifier"])) for row in snapshot.task_verifications),
         )
     )
+
+    body.append("<h2>Project Intelligence — Entities</h2>")
+    body.append(
+        _linked_table(
+            ("ID", "Kind", "Status", "Name", "Description"),
+            (("entity", row["id"], (row["kind"], row["status"], row["name"], row["description"])) for row in snapshot.entities),
+        )
+    )
+    body.append("<h2>Project Intelligence — Relations</h2>")
+    body.append(
+        _table(
+            ("Source", "Relation", "Target", "Status", "Rationale"),
+            ((row["source_entity_id"], row["relation_type"], row["target_entity_id"], row["status"], row["rationale"]) for row in snapshot.entity_relations),
+        )
+    )
+    body.append("<h2>Project Intelligence — Bindings</h2>")
+    body.append(
+        _table(
+            ("Entity", "Type", "Target", "Status", "Hash"),
+            ((row["entity_id"], row["binding_type"], row["target_ref"], row["status"], row["target_hash"]) for row in snapshot.entity_bindings),
+        )
+    )
+    body.append("<h2>Design Bible</h2>")
+    body.append(
+        _linked_table(
+            ("ID", "Category", "Authority", "Status", "Title", "Statement"),
+            (("rule", row["id"], (row["category"], row["authority"], row["status"], row["title"], row["statement"])) for row in snapshot.design_rules),
+        )
+    )
     return _page("Origin Forge Production Cockpit", "".join(body))
 
 
@@ -151,6 +180,34 @@ def render_detail(snapshot: ProductionInterfaceSnapshot, kind: str, object_id: s
         row = _find(snapshot.runs, object_id)
     elif kind == "verification":
         row = _find(snapshot.task_verifications, object_id)
+    elif kind == "entity":
+        row = _find(snapshot.entities, object_id)
+        related = "<h2>Relations</h2>" + _table(
+            ("Source", "Relation", "Target", "Status", "Rationale"),
+            (
+                (value["source_entity_id"], value["relation_type"], value["target_entity_id"], value["status"], value["rationale"])
+                for value in snapshot.entity_relations
+                if value["source_entity_id"] == object_id or value["target_entity_id"] == object_id
+            ),
+        )
+        related += "<h2>Bindings</h2>" + _table(
+            ("Type", "Target", "Status", "Hash"),
+            (
+                (value["binding_type"], value["target_ref"], value["status"], value["target_hash"])
+                for value in snapshot.entity_bindings
+                if value["entity_id"] == object_id
+            ),
+        )
+        related += "<h2>Scoped Design Rules</h2>" + _linked_table(
+            ("ID", "Category", "Authority", "Status", "Title"),
+            (
+                ("rule", value["id"], (value["category"], value["authority"], value["status"], value["title"]))
+                for value in snapshot.design_rules
+                if object_id in value["scope_entity_ids"]
+            ),
+        )
+    elif kind == "rule":
+        row = _find(snapshot.design_rules, object_id)
     else:
         raise KeyError(kind)
     body = f"<h1>{_e(kind.title())}</h1>{_record_table(row)}{related}"
