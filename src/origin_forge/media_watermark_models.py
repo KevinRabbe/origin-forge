@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -8,10 +9,19 @@ from .media_fingerprint_models import MediaFingerprintModelError, WatermarkPlan
 from .runtime_observation_models import content_hash, validate_sha256
 
 
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:+/@-]{0,127}$")
+
+
 class WatermarkDetectionStatus(StrEnum):
     DETECTED = "DETECTED"
     NOT_DETECTED = "NOT_DETECTED"
     MISMATCH = "MISMATCH"
+
+
+def _token(value: str, label: str) -> str:
+    if not isinstance(value, str) or not _TOKEN_RE.fullmatch(value):
+        raise MediaFingerprintModelError(f"{label} must be a bounded identity token")
+    return value
 
 
 @dataclass(frozen=True)
@@ -34,10 +44,8 @@ class WatermarkResult:
             raise MediaFingerprintModelError("plan_id must be a WMPLAN ID")
         validate_sha256(self.plan_hash, "watermark plan_hash")
         validate_sha256(self.derivative_hash, "watermark derivative_hash")
-        if not isinstance(self.detector_id, str) or not self.detector_id:
-            raise MediaFingerprintModelError("watermark detector_id is invalid")
-        if not isinstance(self.detector_version, str) or not self.detector_version:
-            raise MediaFingerprintModelError("watermark detector_version is invalid")
+        object.__setattr__(self, "detector_id", _token(self.detector_id, "detector_id"))
+        object.__setattr__(self, "detector_version", _token(self.detector_version, "detector_version"))
         validate_sha256(self.detector_fingerprint, "watermark detector_fingerprint")
         if not isinstance(self.status, WatermarkDetectionStatus):
             raise MediaFingerprintModelError("watermark detection status is invalid")
@@ -98,6 +106,20 @@ class WatermarkResult:
             or self.detector_fingerprint != plan.detector_fingerprint
         ):
             raise MediaFingerprintModelError("watermark result detector identity drifted")
+        if self.status is WatermarkDetectionStatus.DETECTED:
+            if self.observed_payload_hash != plan.payload_hash:
+                raise MediaFingerprintModelError(
+                    "DETECTED watermark result does not match planned payload hash"
+                )
+        elif self.status is WatermarkDetectionStatus.MISMATCH:
+            if self.observed_payload_hash == plan.payload_hash:
+                raise MediaFingerprintModelError(
+                    "MISMATCH watermark result incorrectly matches planned payload hash"
+                )
+        elif self.observed_payload_hash is not None:
+            raise MediaFingerprintModelError(
+                "NOT_DETECTED watermark result contains observed payload evidence"
+            )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -113,6 +135,7 @@ class WatermarkResult:
             "format_validated": self.format_validated,
             "authorship_proven": False,
             "cryptographic_provenance_verified": False,
+            "parent_lineage_verified": False,
             "canonical_asset_adopted": False,
             "production_task_verified": False,
         }
