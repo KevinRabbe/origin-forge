@@ -22,7 +22,7 @@ from .production_work_order_audit import (
     WorkOrderCurrentnessStatus,
     inspect_work_order_currentness,
 )
-from .production_work_order_models import content_hash
+from .production_work_order_models import canonical_bytes, content_hash
 from .production_work_order_store import (
     ProductionWorkOrderStore,
     ProductionWorkOrderStoreError,
@@ -115,8 +115,7 @@ class CodeBoundedRetryInputBinder:
             )
         if (
             work_order.selected_adapter_id != self.descriptor.adapter_id
-            or work_order.dispatch_contract_id
-            != self.descriptor.dispatch_contract_id
+            or work_order.dispatch_contract_id != self.descriptor.dispatch_contract_id
         ):
             raise DispatchBindingError(
                 "bounded-retry binder does not match WorkOrder adapter/contract"
@@ -161,11 +160,10 @@ class CodeBoundedRetryInputBinder:
                 raise DispatchBindingError(
                     "automatic bounded-retry binding may not carry selected_paths"
                 )
-        else:
-            if not selected or seeds:
-                raise DispatchBindingError(
-                    "manual bounded-retry binding requires selected_paths and no seeds"
-                )
+        elif not selected or seeds:
+            raise DispatchBindingError(
+                "manual bounded-retry binding requires selected_paths and no seeds"
+            )
 
         return {
             "task_id": work_order.task_id,
@@ -194,8 +192,7 @@ class DispatchInputBinderRegistry:
         if len(ids) != len(set(ids)):
             raise ValueError("binder registry contains duplicate binder IDs")
         relations = [
-            (value.adapter_id, value.dispatch_contract_id)
-            for value in descriptors
+            (value.adapter_id, value.dispatch_contract_id) for value in descriptors
         ]
         if len(relations) != len(set(relations)):
             raise ValueError("binder registry contains ambiguous adapter/contract bindings")
@@ -358,6 +355,40 @@ def create_dispatch_binding(
     )
 
 
+def _binding_with_id(
+    bundle: InputResolutionBundle,
+    binder: DispatchInputBinder,
+    projection: object,
+    binding_id: str,
+) -> DispatchBinding:
+    descriptor = binder.descriptor
+    return DispatchBinding(
+        dispatch_binding_id=binding_id,
+        work_order_id=bundle.work_order_id,
+        work_order_hash=bundle.work_order_hash,
+        work_order_audit_id=bundle.work_order_audit_id,
+        work_order_audit_hash=bundle.work_order_audit_hash,
+        input_resolution_id=bundle.input_resolution_id,
+        input_resolution_hash=bundle.content_hash,
+        task_id=bundle.task_id,
+        task_revision=bundle.task_revision,
+        task_content_hash=bundle.task_content_hash,
+        route_decision_id=bundle.route_decision_id,
+        route_decision_hash=bundle.route_decision_hash,
+        selected_adapter_id=bundle.selected_adapter_id,
+        selected_adapter_fingerprint=bundle.selected_adapter_fingerprint,
+        dispatch_catalog_id=bundle.dispatch_catalog_id,
+        dispatch_catalog_hash=bundle.dispatch_catalog_hash,
+        dispatch_contract_id=bundle.dispatch_contract_id,
+        dispatch_contract_hash=bundle.dispatch_contract_hash,
+        binder_id=descriptor.binder_id,
+        binder_fingerprint=descriptor.binder_fingerprint,
+        request_type_id=descriptor.request_type_id,
+        request_schema_hash=descriptor.request_schema_hash,
+        request_projection_json=canonical_bytes(projection).decode("utf-8"),
+    )
+
+
 def _evaluate_binding_audit(
     store: ProductionWorkOrderStore,
     resolver_registry: WorkOrderInputResolverRegistry,
@@ -373,34 +404,11 @@ def _evaluate_binding_audit(
         work_order = _require_bundle_revalidates(store, resolver_registry, bundle)
         binder = binder_registry.binder_for(bundle)
         projection = binder.bind(work_order, bundle)
-        expected = DispatchBinding(
-            dispatch_binding_id=binding.dispatch_binding_id,
-            work_order_id=bundle.work_order_id,
-            work_order_hash=bundle.work_order_hash,
-            work_order_audit_id=bundle.work_order_audit_id,
-            work_order_audit_hash=bundle.work_order_audit_hash,
-            input_resolution_id=bundle.input_resolution_id,
-            input_resolution_hash=bundle.content_hash,
-            task_id=bundle.task_id,
-            task_revision=bundle.task_revision,
-            task_content_hash=bundle.task_content_hash,
-            route_decision_id=bundle.route_decision_id,
-            route_decision_hash=bundle.route_decision_hash,
-            selected_adapter_id=bundle.selected_adapter_id,
-            selected_adapter_fingerprint=bundle.selected_adapter_fingerprint,
-            dispatch_catalog_id=bundle.dispatch_catalog_id,
-            dispatch_catalog_hash=bundle.dispatch_catalog_hash,
-            dispatch_contract_id=bundle.dispatch_contract_id,
-            dispatch_contract_hash=bundle.dispatch_contract_hash,
-            binder_id=binder.descriptor.binder_id,
-            binder_fingerprint=binder.descriptor.binder_fingerprint,
-            request_type_id=binder.descriptor.request_type_id,
-            request_schema_hash=binder.descriptor.request_schema_hash,
-            request_projection_json=DispatchBinding.create(
-                bundle,
-                binder.descriptor,
-                request_projection=projection,
-            ).request_projection_json,
+        expected = _binding_with_id(
+            bundle,
+            binder,
+            projection,
+            binding.dispatch_binding_id,
         )
         if expected.to_dict() != binding.to_dict():
             raise DispatchBindingError(
@@ -458,24 +466,42 @@ def audit_dispatch_binding_frozen(
     )
 
 
-def _binding_audit_revalidates(
-    store: ProductionWorkOrderStore,
-    resolver_registry: WorkOrderInputResolverRegistry,
-    binder_registry: DispatchInputBinderRegistry,
+def _frozen_binding_audit_matches(
     bundle: InputResolutionBundle,
     binding: DispatchBinding,
     audit: DispatchBindingAudit,
 ) -> bool:
-    if not isinstance(audit, DispatchBindingAudit):
+    """Revalidate only frozen relations; live source/binder state is separate."""
+
+    if (
+        not isinstance(bundle, InputResolutionBundle)
+        or not isinstance(binding, DispatchBinding)
+        or not isinstance(audit, DispatchBindingAudit)
+        or audit.status is not BindingAuditStatus.PASS
+    ):
         return False
-    expected = _evaluate_binding_audit(
-        store,
-        resolver_registry,
-        binder_registry,
-        bundle,
-        binding,
-        audit_id=audit.binding_audit_id,
-    )
+    try:
+        expected = DispatchBindingAudit(
+            binding_audit_id=audit.binding_audit_id,
+            dispatch_binding_id=binding.dispatch_binding_id,
+            dispatch_binding_hash=binding.content_hash,
+            input_resolution_id=bundle.input_resolution_id,
+            input_resolution_hash=bundle.content_hash,
+            work_order_id=binding.work_order_id,
+            work_order_hash=binding.work_order_hash,
+            work_order_audit_id=binding.work_order_audit_id,
+            work_order_audit_hash=binding.work_order_audit_hash,
+            resolver_registry_fingerprint=bundle.resolver_registry_fingerprint,
+            binder_id=binding.binder_id,
+            binder_fingerprint=binding.binder_fingerprint,
+            request_type_id=binding.request_type_id,
+            request_schema_hash=binding.request_schema_hash,
+            request_content_hash=binding.request_content_hash,
+            status=BindingAuditStatus.PASS,
+            failure_reason=None,
+        )
+    except (DispatchBindingModelError, TypeError, ValueError):
+        return False
     return expected.to_dict() == audit.to_dict()
 
 
@@ -492,7 +518,10 @@ def inspect_dispatch_binding_currentness(
     if not isinstance(audit, DispatchBindingAudit):
         raise TypeError("audit must be a DispatchBindingAudit")
 
-    def result(status: DispatchBindingCurrentnessStatus, detail: str | None) -> DispatchBindingCurrentness:
+    def result(
+        status: DispatchBindingCurrentnessStatus,
+        detail: str | None,
+    ) -> DispatchBindingCurrentness:
         return DispatchBindingCurrentness(
             binding.dispatch_binding_id,
             audit.binding_audit_id,
@@ -502,11 +531,17 @@ def inspect_dispatch_binding_currentness(
             detail,
         )
 
+    if not _frozen_binding_audit_matches(bundle, binding, audit):
+        return result(
+            DispatchBindingCurrentnessStatus.INVALID_AUDIT,
+            "binding audit does not match the exact frozen binding/bundle relation",
+        )
     if bundle.resolver_registry_fingerprint != resolver_registry.fingerprint:
         return result(
             DispatchBindingCurrentnessStatus.RESOLVER_DRIFT,
             "resolver registry fingerprint no longer matches frozen input resolution",
         )
+
     try:
         binder = binder_registry.binder_for(bundle)
     except (DispatchBindingError, TypeError, ValueError) as exc:
@@ -523,18 +558,6 @@ def inspect_dispatch_binding_currentness(
         return result(
             DispatchBindingCurrentnessStatus.BINDER_DRIFT,
             "binding binder identity/schema no longer matches trusted registry",
-        )
-    if not _binding_audit_revalidates(
-        store,
-        resolver_registry,
-        binder_registry,
-        bundle,
-        binding,
-        audit,
-    ) or audit.status is not BindingAuditStatus.PASS:
-        return result(
-            DispatchBindingCurrentnessStatus.INVALID_AUDIT,
-            "binding audit does not independently revalidate as PASS",
         )
 
     try:
@@ -589,5 +612,23 @@ def inspect_dispatch_binding_currentness(
         return result(
             DispatchBindingCurrentnessStatus.STALE_INPUT,
             "current resolved input bundle differs from frozen resolution",
+        )
+
+    try:
+        expected_binding = _binding_with_id(
+            expected_bundle,
+            binder,
+            binder.bind(work_order, expected_bundle),
+            binding.dispatch_binding_id,
+        )
+    except (DispatchBindingError, DispatchBindingModelError, TypeError, ValueError) as exc:
+        return result(
+            DispatchBindingCurrentnessStatus.BINDER_DRIFT,
+            f"{type(exc).__name__}: {exc}",
+        )
+    if expected_binding.to_dict() != binding.to_dict():
+        return result(
+            DispatchBindingCurrentnessStatus.INVALID_AUDIT,
+            "binding request does not independently reconstruct from current trusted binder",
         )
     return result(DispatchBindingCurrentnessStatus.CURRENT_READY, None)
