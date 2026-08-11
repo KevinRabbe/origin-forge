@@ -119,11 +119,7 @@ class ProductionCapabilityStoreTests(unittest.TestCase):
 
     def test_catalog_payload_tamper_is_detected(self) -> None:
         self.store.publish_catalog(self.catalog)
-        path = (
-            self.store.root
-            / "catalogs"
-            / f"{self.catalog.catalog_id}.json"
-        )
+        path = self.store.root / "catalogs" / f"{self.catalog.catalog_id}.json"
         envelope = json.loads(path.read_text(encoding="utf-8"))
         envelope["payload"]["capabilities"][0]["summary"] = "tampered"
         path.write_text(
@@ -135,11 +131,7 @@ class ProductionCapabilityStoreTests(unittest.TestCase):
 
     def test_duplicate_json_keys_fail_closed(self) -> None:
         self.store.publish_catalog(self.catalog)
-        path = (
-            self.store.root
-            / "catalogs"
-            / f"{self.catalog.catalog_id}.json"
-        )
+        path = self.store.root / "catalogs" / f"{self.catalog.catalog_id}.json"
         path.write_text(
             '{"schema_version":1,"schema_version":1,"object_type":"catalogs"}',
             encoding="utf-8",
@@ -168,6 +160,7 @@ class ProductionCapabilityStoreTests(unittest.TestCase):
         self.assertEqual(current.to_dict(), decision.to_dict())
 
     def test_category_symlink_is_rejected(self) -> None:
+        self.store.publish_catalog(self.catalog)
         self.store._ensure_root()
         outside = self.runtime.project_root / "outside"
         outside.mkdir()
