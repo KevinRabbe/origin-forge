@@ -567,11 +567,30 @@ See `docs/phase-29-training-finetuning-research.md` for the detailed trusted-pro
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
-## Phase 30 — Full Production Interface — PLANNED
+## Phase 30 — Full Production Interface — DONE
 
-Build the polished visual environment around proven infrastructure: project/entity browser, Goal/Flow/Task graph, Design Bible, Artifact previews, verification evidence, provenance inspector, model/resource monitor, Dream/memory-generation inspector, and causal “why does this exist?” history.
+Implemented the first bounded local production cockpit over proven Origin Forge infrastructure without creating a second truth or mutation layer:
 
-The UI stays late so early architecture is not distorted around a premature frontend.
+- content-addressed bounded Goal / Flow / Task / Run / Task-Verification snapshots with explicit counts/truncation;
+- dedicated immutable, non-creating core SQLite read guard requiring existing contained config/database, exact current schema, exact repository→project binding, and quiescent journal state;
+- fail-closed uninitialized, stale-schema, aliased, symlinked, actively-written, and changing-database inspection paths with no automatic migration/checkpoint/repair;
+- SELECT-only Project Intelligence / Design Bible projection through the same immutable DB boundary;
+- causal Decision → Change → Artifact metadata → Verification-summary navigation;
+- fresh non-loading model/resource configuration/admission monitoring with zero lease/routing mutation authority and no default-config creation;
+- non-creating bounded public provenance inspection with canonical/hash validation while withholding secret material, DER/signature bytes, arbitrary Artifact bytes, Skill/tool lists, and fresh trust/currentness claims;
+- non-creating bounded Dream/memory inspection with canonical/hash/containment validation while withholding raw evidence refs/finding messages and all promotion/execution authority;
+- escaped static HTML under a strict no-script/no-form/no-network CSP;
+- fixed loopback-only `127.0.0.1` HTTP routes with no arbitrary static/project file serving, conservative snapshot/response bounds, and controlled fail-closed overflow;
+- operator surface limited to `snapshot` and `serve`;
+- metadata-only Artifact inspection in v1; arbitrary byte/media previews remain outside the accepted surface;
+- Verification evidence/metrics and approved command arrays remain withheld from the cockpit;
+- no Task mutation/completion/retry, model/tool execution, Artifact adoption/signing, Dream promotion, merge, release, or remote/multi-user hosting authority.
+
+See `docs/phase-30-full-production-interface.md` for the detailed read-side mutation boundary, presentation/network contract, authority exclusions, and closure proof.
+
+**Exit condition met:** exact implementation head `1246fa9f7e9df8aa09c31b5c6e1cf8667f3759fa` passed normal GitHub Actions run `31456921293` on Python 3.12 and Python 3.13 with unrelated heavyweight evidence workflows skipped/disarmed; Origin Forge can inspect the accepted v1 production state through bounded non-creating projections without transferring production authority to the UI.
+
+**Merge gate:** the canonical DONE/documentation head created after that implementation proof must itself pass the normal Python 3.12/3.13 matrix before ready-for-review transition and SHA-guarded merge.
 
 ---
 

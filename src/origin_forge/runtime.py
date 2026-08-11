@@ -10,12 +10,31 @@ from .service import OriginForgeStore
 from .state import FlowStatus, GoalStatus, RunStatus, TaskStatus
 
 
+_MAX_READ_LIMIT = 100_000
+
+
 class RuntimeInvariantError(RuntimeError):
     pass
 
 
 def _row_dict(row) -> dict[str, Any]:
     return dict(row)
+
+
+def _read_limit(value: int | None) -> int | None:
+    if value is None:
+        return None
+    if type(value) is not int or not 1 <= value <= _MAX_READ_LIMIT:
+        raise ValueError(f"read limit must be an integer from 1 to {_MAX_READ_LIMIT}")
+    return value
+
+
+def _with_limit(sql: str, params: list[Any], limit: int | None) -> tuple[str, list[Any]]:
+    normalized = _read_limit(limit)
+    if normalized is not None:
+        sql += " LIMIT ?"
+        params.append(normalized)
+    return sql, params
 
 
 class OriginForgeRuntime:
@@ -67,16 +86,24 @@ class OriginForgeRuntime:
             priority=priority,
         )
 
-    def list_goals(self) -> list[dict[str, Any]]:
+    def list_goals(self, *, limit: int | None = None) -> list[dict[str, Any]]:
+        project_id = self.project_id()
+        sql, params = _with_limit(
+            "SELECT * FROM goals WHERE project_id = ? ORDER BY created_at, rowid",
+            [project_id],
+            limit,
+        )
+        with self.store.session() as conn:
+            return [_row_dict(row) for row in conn.execute(sql, params)]
+
+    def count_goals(self) -> int:
         project_id = self.project_id()
         with self.store.session() as conn:
-            return [
-                _row_dict(row)
-                for row in conn.execute(
-                    "SELECT * FROM goals WHERE project_id = ? ORDER BY created_at, rowid",
-                    (project_id,),
-                )
-            ]
+            return int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM goals WHERE project_id = ?", (project_id,)
+                ).fetchone()[0]
+            )
 
     def get_goal(self, goal_id: str) -> dict[str, Any]:
         project_id = self.project_id()
@@ -122,7 +149,9 @@ class OriginForgeRuntime:
         self.get_goal(goal_id)
         return self.store.create_flow(goal_id, controller=controller)
 
-    def list_flows(self, goal_id: str | None = None) -> list[dict[str, Any]]:
+    def list_flows(
+        self, goal_id: str | None = None, *, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         project_id = self.project_id()
         params: list[Any] = [project_id]
         sql = """SELECT f.* FROM flows f
@@ -133,8 +162,22 @@ class OriginForgeRuntime:
             sql += " AND f.goal_id = ?"
             params.append(goal_id)
         sql += " ORDER BY f.created_at, f.rowid"
+        sql, params = _with_limit(sql, params, limit)
         with self.store.session() as conn:
             return [_row_dict(row) for row in conn.execute(sql, params)]
+
+    def count_flows(self, goal_id: str | None = None) -> int:
+        project_id = self.project_id()
+        params: list[Any] = [project_id]
+        sql = """SELECT COUNT(*) FROM flows f
+                 JOIN goals g ON g.id = f.goal_id
+                 WHERE g.project_id = ?"""
+        if goal_id is not None:
+            self.get_goal(goal_id)
+            sql += " AND f.goal_id = ?"
+            params.append(goal_id)
+        with self.store.session() as conn:
+            return int(conn.execute(sql, params).fetchone()[0])
 
     def get_flow(self, flow_id: str) -> dict[str, Any]:
         project_id = self.project_id()
@@ -203,7 +246,9 @@ class OriginForgeRuntime:
             priority=priority,
         )
 
-    def list_tasks(self, flow_id: str | None = None) -> list[dict[str, Any]]:
+    def list_tasks(
+        self, flow_id: str | None = None, *, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         project_id = self.project_id()
         params: list[Any] = [project_id]
         sql = """SELECT t.* FROM tasks t
@@ -215,8 +260,23 @@ class OriginForgeRuntime:
             sql += " AND t.flow_id = ?"
             params.append(flow_id)
         sql += " ORDER BY t.created_at, t.rowid"
+        sql, params = _with_limit(sql, params, limit)
         with self.store.session() as conn:
             return [_row_dict(row) for row in conn.execute(sql, params)]
+
+    def count_tasks(self, flow_id: str | None = None) -> int:
+        project_id = self.project_id()
+        params: list[Any] = [project_id]
+        sql = """SELECT COUNT(*) FROM tasks t
+                 JOIN flows f ON f.id = t.flow_id
+                 JOIN goals g ON g.id = f.goal_id
+                 WHERE g.project_id = ?"""
+        if flow_id is not None:
+            self.get_flow(flow_id)
+            sql += " AND t.flow_id = ?"
+            params.append(flow_id)
+        with self.store.session() as conn:
+            return int(conn.execute(sql, params).fetchone()[0])
 
     def get_task(self, task_id: str) -> dict[str, Any]:
         project_id = self.project_id()
@@ -291,7 +351,9 @@ class OriginForgeRuntime:
             self.get_task(row["task_id"])
         return _row_dict(row)
 
-    def list_runs(self, task_id: str | None = None) -> list[dict[str, Any]]:
+    def list_runs(
+        self, task_id: str | None = None, *, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         project_id = self.project_id()
         params: list[Any] = [project_id]
         sql = """SELECT r.* FROM runs r
@@ -304,8 +366,24 @@ class OriginForgeRuntime:
             sql += " AND r.task_id = ?"
             params.append(task_id)
         sql += " ORDER BY r.started_at, r.rowid"
+        sql, params = _with_limit(sql, params, limit)
         with self.store.session() as conn:
             return [_row_dict(row) for row in conn.execute(sql, params)]
+
+    def count_runs(self, task_id: str | None = None) -> int:
+        project_id = self.project_id()
+        params: list[Any] = [project_id]
+        sql = """SELECT COUNT(*) FROM runs r
+                 JOIN tasks t ON t.id = r.task_id
+                 JOIN flows f ON f.id = t.flow_id
+                 JOIN goals g ON g.id = f.goal_id
+                 WHERE g.project_id = ?"""
+        if task_id is not None:
+            self.get_task(task_id)
+            sql += " AND r.task_id = ?"
+            params.append(task_id)
+        with self.store.session() as conn:
+            return int(conn.execute(sql, params).fetchone()[0])
 
     def record_verification(
         self,
@@ -344,7 +422,7 @@ class OriginForgeRuntime:
         )
 
     def list_verifications(
-        self, target_type: str, target_id: str
+        self, target_type: str, target_id: str, *, limit: int | None = None
     ) -> list[dict[str, Any]]:
         kind = target_type.upper()
         if kind == "GOAL":
@@ -357,16 +435,29 @@ class OriginForgeRuntime:
             self.get_run(target_id)
         else:
             raise ValueError(f"unsupported Phase 1 verification target: {target_type}")
+        sql, params = _with_limit(
+            """SELECT * FROM verifications
+               WHERE target_type = ? AND target_id = ?
+               ORDER BY created_at, rowid""",
+            [kind, target_id],
+            limit,
+        )
         with self.store.session() as conn:
-            return [
-                _row_dict(row)
-                for row in conn.execute(
-                    """SELECT * FROM verifications
-                       WHERE target_type = ? AND target_id = ?
-                       ORDER BY created_at, rowid""",
-                    (kind, target_id),
-                )
-            ]
+            return [_row_dict(row) for row in conn.execute(sql, params)]
+
+    def count_task_verifications(self) -> int:
+        project_id = self.project_id()
+        with self.store.session() as conn:
+            return int(
+                conn.execute(
+                    """SELECT COUNT(*) FROM verifications v
+                       JOIN tasks t ON t.id = v.target_id
+                       JOIN flows f ON f.id = t.flow_id
+                       JOIN goals g ON g.id = f.goal_id
+                       WHERE v.target_type = 'TASK' AND g.project_id = ?""",
+                    (project_id,),
+                ).fetchone()[0]
+            )
 
     def recovery_findings(self):
         return self.store.recovery_findings()

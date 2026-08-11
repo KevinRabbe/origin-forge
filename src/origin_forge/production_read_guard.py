@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator
+
+from .db import SCHEMA_VERSION
+from .runtime import OriginForgeRuntime
+
+
+class ProductionReadGuardError(RuntimeError):
+    pass
+
+
+def existing_config_path(project_root: str | Path) -> Path:
+    root = Path(project_root).resolve()
+    state = root / ".origin-forge"
+    config = state / "config.toml"
+    if state.is_symlink() or not state.is_dir():
+        raise ProductionReadGuardError("Origin Forge state directory is missing or aliased")
+    if config.is_symlink() or not config.is_file():
+        raise ProductionReadGuardError("Origin Forge config is missing or aliased")
+    try:
+        resolved_state = state.resolve(strict=True)
+        resolved_config = config.resolve(strict=True)
+        resolved_config.relative_to(resolved_state)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ProductionReadGuardError("Origin Forge config escaped protected state") from exc
+    return resolved_config
+
+
+def _database_path(runtime: OriginForgeRuntime) -> Path:
+    existing_config_path(runtime.project_root)
+    state = runtime.state_dir
+    database = runtime.store.db_path
+    if database.is_symlink() or not database.is_file():
+        raise ProductionReadGuardError("Origin Forge database is missing or aliased")
+    try:
+        resolved_state = state.resolve(strict=True)
+        resolved_database = database.resolve(strict=True)
+        resolved_database.relative_to(resolved_state)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise ProductionReadGuardError("Origin Forge database escaped protected state") from exc
+    return resolved_database
+
+
+def _journal_paths(database: Path) -> tuple[Path, ...]:
+    base = str(database)
+    return tuple(Path(base + suffix) for suffix in ("-wal", "-shm", "-journal"))
+
+
+def _require_quiescent(database: Path) -> None:
+    for path in _journal_paths(database):
+        if path.exists() or path.is_symlink():
+            raise ProductionReadGuardError(
+                "Origin Forge database has active journal state; finish authoritative writes before cockpit inspection"
+            )
+
+
+@contextmanager
+def production_read_connection(
+    runtime: OriginForgeRuntime,
+) -> Iterator[sqlite3.Connection]:
+    """Open one non-creating, non-migrating SQLite inspection connection.
+
+    Phase 30 deliberately refuses a database with WAL/SHM/rollback-journal state.
+    That makes ``immutable=1`` safe for this bounded local cockpit and prevents a
+    read from creating SQLite bookkeeping files. If the database changes while the
+    inspection is open, the read fails closed instead of presenting a mixed snapshot.
+    """
+
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+
+    database = _database_path(runtime)
+    _require_quiescent(database)
+    before = database.stat()
+    connection: sqlite3.Connection | None = None
+    try:
+        connection = sqlite3.connect(
+            database.as_uri() + "?mode=ro&immutable=1",
+            uri=True,
+            timeout=5.0,
+        )
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA query_only = ON")
+        connection.execute("PRAGMA foreign_keys = ON")
+        try:
+            row = connection.execute(
+                "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations"
+            ).fetchone()
+        except sqlite3.DatabaseError as exc:
+            raise ProductionReadGuardError(
+                "Origin Forge database schema is unavailable to read-only inspection"
+            ) from exc
+        version = 0 if row is None else int(row["version"])
+        if version != SCHEMA_VERSION:
+            raise ProductionReadGuardError(
+                f"Origin Forge schema {version} is not current; authoritative migration to {SCHEMA_VERSION} is required before cockpit inspection"
+            )
+        project = connection.execute(
+            "SELECT id FROM projects WHERE root_path = ?",
+            (str(runtime.project_root),),
+        ).fetchone()
+        if project is None:
+            raise ProductionReadGuardError(
+                "project is not initialized for this repository root"
+            )
+
+        yield connection
+
+        _require_quiescent(database)
+        after = database.stat()
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        ):
+            raise ProductionReadGuardError(
+                "Origin Forge database changed during cockpit inspection"
+            )
+    except sqlite3.Error as exc:
+        raise ProductionReadGuardError(
+            "Origin Forge database cannot be opened read-only"
+        ) from exc
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def ensure_production_runtime_readable(runtime: OriginForgeRuntime) -> None:
+    """Validate current initialized state without creating files or migrating it."""
+
+    with production_read_connection(runtime):
+        return
