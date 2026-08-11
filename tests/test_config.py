@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from origin_forge.config import load_config
+from origin_forge.model_scheduler import ModelRole
 
 
 class ConfigTests(unittest.TestCase):
@@ -318,10 +319,8 @@ model_sha256 = "{'a' * 64}"
             self.assertEqual(provider.to_dict()["loopback_host"], "127.0.0.1")
             self.assertEqual(provider.binding("coder-strong").model_sha256, "a" * 64)
             self.assertEqual(
-                config.resource_models.policy.__self__.policy_profile
-                if False
-                else config.resource_models.policy,
-                config.resource_models.policy,
+                config.resource_models.policy(ModelRole.CODER_STRONG).primary_profile_id,
+                "coder-strong",
             )
 
 
