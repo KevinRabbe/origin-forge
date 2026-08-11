@@ -10,8 +10,13 @@ from .training_research_models import (
     TrainingEvidenceRef,
     TrainingEvidenceType,
     TrainingResearchModelError,
-    TrainingTrajectory,
     TrainingTrajectoryOutcome,
+)
+from .training_research_policy import (
+    GovernedTrainingTrajectory,
+    RUNTIME_REDACTED_PRODUCER_FINGERPRINT,
+    RUNTIME_REDACTED_PRODUCER_ID,
+    RUNTIME_REDACTED_PRODUCER_VERSION,
 )
 
 
@@ -58,14 +63,8 @@ def build_verified_runtime_trajectory(
     runtime: OriginForgeRuntime,
     *,
     run_id: str,
-) -> TrainingTrajectory:
-    """Build one redacted research trajectory from exact successful durable state.
-
-    v1 intentionally exports only stable structural/cost metadata. Task objective,
-    acceptance criteria, constraints, verification evidence/metrics, failure text,
-    arbitrary artifacts, and repository content remain undisclosed until a future
-    explicit research-disclosure policy exists.
-    """
+) -> GovernedTrainingTrajectory:
+    """Build one trusted redacted trajectory from exact successful durable state."""
 
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
@@ -124,10 +123,11 @@ def build_verified_runtime_trajectory(
         for value in verification_projections
     )
 
+    project_id = runtime.project_id()
     leakage_group_hash = content_hash(
         {
             "group_policy": "project-task-v1",
-            "project_id": runtime.project_id(),
+            "project_id": project_id,
             "task_id": task_id,
         }
     )
@@ -158,8 +158,8 @@ def build_verified_runtime_trajectory(
         },
     }
     try:
-        return TrainingTrajectory.create(
-            project_id=runtime.project_id(),
+        return GovernedTrainingTrajectory.create(
+            project_id=project_id,
             task_id=task_id,
             run_id=run_id,
             leakage_group_hash=leakage_group_hash,
@@ -169,6 +169,9 @@ def build_verified_runtime_trajectory(
             model_hash=run["model_hash"],
             example=example,
             source_refs=refs,
+            producer_id=RUNTIME_REDACTED_PRODUCER_ID,
+            producer_version=RUNTIME_REDACTED_PRODUCER_VERSION,
+            producer_fingerprint=RUNTIME_REDACTED_PRODUCER_FINGERPRINT,
         )
     except (KeyError, TypeError, ValueError, TrainingResearchModelError) as exc:
         raise TrainingTrajectoryAdapterError(
