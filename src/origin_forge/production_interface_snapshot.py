@@ -7,6 +7,7 @@ from .dream_read import DreamReadService
 from .model_resource_read import inspect_model_resources
 from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import ensure_production_runtime_readable
+from .production_runtime_read import ProductionRuntimeReadService
 from .project_intelligence_read import ProjectIntelligenceReadService
 from .provenance_read import ProvenanceReadService
 from .runtime import OriginForgeRuntime
@@ -415,6 +416,7 @@ def build_production_interface_snapshot(
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
     ensure_production_runtime_readable(runtime)
+    core = ProductionRuntimeReadService(runtime)
 
     max_goals = _section_limit(max_goals)
     max_flows = _section_limit(max_flows)
@@ -440,10 +442,10 @@ def build_production_interface_snapshot(
         max_memory_generations, 2048, "memory generation"
     )
 
-    raw_goals = tuple(runtime.list_goals(limit=max_goals + 1))
-    raw_flows = tuple(runtime.list_flows(limit=max_flows + 1))
-    raw_tasks = tuple(runtime.list_tasks(limit=max_tasks + 1))
-    raw_runs = tuple(runtime.list_runs(limit=max_runs + 1))
+    raw_goals = core.list_goals(limit=max_goals + 1)
+    raw_flows = core.list_flows(limit=max_flows + 1)
+    raw_tasks = core.list_tasks(limit=max_tasks + 1)
+    raw_runs = core.list_runs(limit=max_runs + 1)
     goals, goals_truncated = _limit_rows(raw_goals, max_goals)
     flows, flows_truncated = _limit_rows(raw_flows, max_flows)
     tasks, tasks_truncated = _limit_rows(raw_tasks, max_tasks)
@@ -454,8 +456,8 @@ def build_production_interface_snapshot(
         remaining = max_verifications - len(verification_rows)
         if remaining <= 0:
             break
-        values = runtime.list_verifications(
-            "TASK", str(task["id"]), limit=remaining + 1
+        values = core.list_task_verifications(
+            str(task["id"]), limit=remaining + 1
         )
         verification_rows.extend(values[:remaining])
         if len(values) > remaining:
@@ -546,11 +548,11 @@ def build_production_interface_snapshot(
     model_resources = inspect_model_resources(runtime.project_root)
 
     total_counts = {
-        "goals": runtime.count_goals(),
-        "flows": runtime.count_flows(),
-        "tasks": runtime.count_tasks(),
-        "runs": runtime.count_runs(),
-        "task_verifications": runtime.count_task_verifications(),
+        "goals": core.count_goals(),
+        "flows": core.count_flows(),
+        "tasks": core.count_tasks(),
+        "runs": core.count_runs(),
+        "task_verifications": core.count_task_verifications(),
         "entities": pi_counts["entities"],
         "entity_relations": pi_counts["relations"],
         "entity_bindings": pi_counts["bindings"],
@@ -571,7 +573,7 @@ def build_production_interface_snapshot(
     }
 
     return ProductionInterfaceSnapshot(
-        project_id=runtime.project_id(),
+        project_id=core.project_id(),
         goals=tuple(_goal_projection(value) for value in goals),
         flows=tuple(_flow_projection(value) for value in flows),
         tasks=tuple(_task_projection(value) for value in tasks),
