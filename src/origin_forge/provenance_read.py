@@ -77,17 +77,32 @@ class ProvenanceReadService:
         self.revocations_dir = self.root / "revocations"
         self.manifests_dir = self.root / "signed-manifests"
 
-    def _directory(self, path: Path) -> Path | None:
+    def _registry_root(self) -> Path | None:
         state = self.runtime.state_dir.resolve(strict=True)
+        if not self.root.exists() and not self.root.is_symlink():
+            return None
+        if self.root.is_symlink() or not self.root.is_dir():
+            raise ProvenanceReadError("invalid provenance registry root")
+        try:
+            resolved = self.root.resolve(strict=True)
+            resolved.relative_to(state)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ProvenanceReadError("provenance registry escaped protected state") from exc
+        return resolved
+
+    def _directory(self, path: Path) -> Path | None:
+        root = self._registry_root()
+        if root is None:
+            return None
         if not path.exists() and not path.is_symlink():
             return None
         if path.is_symlink() or not path.is_dir():
             raise ProvenanceReadError(f"invalid provenance directory: {path.name}")
         try:
             resolved = path.resolve(strict=True)
-            resolved.relative_to(state)
+            resolved.relative_to(root)
         except (OSError, RuntimeError, ValueError) as exc:
-            raise ProvenanceReadError("provenance directory escaped protected state") from exc
+            raise ProvenanceReadError("provenance directory escaped registry root") from exc
         return resolved
 
     @staticmethod
