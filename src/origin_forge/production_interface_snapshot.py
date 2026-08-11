@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from .model_resource_read import inspect_model_resources
 from .project_intelligence_read import ProjectIntelligenceReadService
 from .runtime import OriginForgeRuntime
 from .runtime_observation_models import content_hash
@@ -211,6 +212,7 @@ class ProductionInterfaceSnapshot:
     entity_relations: tuple[dict[str, object], ...]
     entity_bindings: tuple[dict[str, object], ...]
     design_rules: tuple[dict[str, object], ...]
+    model_resources: dict[str, object]
     total_counts: dict[str, int]
     truncated: dict[str, bool]
 
@@ -227,6 +229,7 @@ class ProductionInterfaceSnapshot:
             "entity_relations": list(self.entity_relations),
             "entity_bindings": list(self.entity_bindings),
             "design_rules": list(self.design_rules),
+            "model_resources": self.model_resources,
             "total_counts": dict(sorted(self.total_counts.items())),
             "truncated": dict(sorted(self.truncated.items())),
             "authority": {
@@ -234,6 +237,9 @@ class ProductionInterfaceSnapshot:
                 "task_mutation": False,
                 "project_intelligence_mutation": False,
                 "model_execution": False,
+                "model_loading": False,
+                "resource_leasing": False,
+                "routing_mutation": False,
                 "tool_execution": False,
                 "artifact_adoption": False,
                 "provenance_signing": False,
@@ -302,6 +308,7 @@ def build_production_interface_snapshot(
     relations = intelligence.list_relations(limit=max_entity_relations)
     bindings = intelligence.list_bindings(limit=max_entity_bindings)
     rules = intelligence.list_design_rules(limit=max_design_rules)
+    model_resources = inspect_model_resources(runtime.project_root)
 
     total_counts = {
         "goals": runtime.count_goals(),
@@ -329,6 +336,7 @@ def build_production_interface_snapshot(
         entity_relations=tuple(_relation_projection(value) for value in relations),
         entity_bindings=tuple(_binding_projection(value) for value in bindings),
         design_rules=tuple(_design_rule_projection(value) for value in rules),
+        model_resources=model_resources,
         total_counts=total_counts,
         truncated={
             "goals": goals_truncated,
