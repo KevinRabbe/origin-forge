@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .ids import IdKind, validate_id
+from .ids import validate_id
 from .production_capability_models import CapabilityCatalog, CapabilityRoutingPolicy
 from .production_capability_routing import (
     CapabilityRouteResolution,
@@ -39,7 +39,15 @@ class ProductionCapabilityReadError(RuntimeError):
 def _state_exists(runtime: OriginForgeRuntime) -> bool:
     state = runtime.state_dir
     config = state / "config.toml"
-    return state.is_dir() and not state.is_symlink() and config.is_file() and not config.is_symlink()
+    if state.is_symlink():
+        raise ProductionCapabilityReadError("Origin Forge state directory may not be a symlink")
+    if not state.exists():
+        return False
+    if not state.is_dir():
+        raise ProductionCapabilityReadError("Origin Forge state path is not a directory")
+    if config.is_symlink():
+        raise ProductionCapabilityReadError("Origin Forge config may not be a symlink")
+    return config.is_file()
 
 
 def _existing_root(runtime: OriginForgeRuntime, *, required: bool) -> Path | None:
@@ -202,6 +210,12 @@ def read_capability_route(
         or decision.resolution.routing_policy_hash != policy.content_hash
     ):
         raise ProductionCapabilityReadError("route decision relation drifted")
+    try:
+        expected = resolve_route_input(decision.resolution.route_input, catalog, policy)
+    except CapabilityRoutingError as exc:
+        raise ProductionCapabilityReadError("route decision failed frozen-input recomputation") from exc
+    if expected.to_dict() != decision.resolution.to_dict():
+        raise ProductionCapabilityReadError("route decision outcome does not match frozen routing inputs")
     return decision
 
 
