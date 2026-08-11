@@ -1,611 +1,523 @@
 # Phase 31 — Governed Production Planning & Dependency Graph
 
-Status: **PLANNED — post-v0.1 architecture contract**
+Status: **IMPLEMENTED — final exact-head closure gate pending**
 
-Phase 31 implements the missing Manager-side planning substrate between a durable Goal and the already-proven bounded Task execution layers.
+Phase 31 adds the missing Manager-side planning substrate between a durable Goal and Origin Forge's already-governed Task execution layers.
 
-Origin Forge already has durable Goal / Flow / Task state, isolated execution, verification, Project Intelligence, media/runtime evidence, bounded retry policy, resource scheduling, and a read-only production cockpit. The remaining structural gap for integrated production is that one high-level Goal still lacks a governed, reconstructable mechanism for proposing a multi-step cross-domain work graph, validating that graph independently, materializing it into canonical Flow / Task state only under explicit authority, and determining which Tasks are eligible to execute from durable dependency evidence.
-
-The architecture baseline already assigns these responsibilities to the Manager: read the Goal and verified project state, decompose work into bounded Tasks, determine dependencies and priority, assign budgets/capabilities, and handle blocked work. Phase 31 makes that responsibility explicit and testable without turning a planning model into production authority.
-
-Core rule:
+The implementation preserves the architectural split:
 
 ```text
 planner proposes structure
-infrastructure validates structure
+        ↓
+infrastructure parses + independently audits
+        ↓
 explicit authority materializes canonical work
-durable verified state determines readiness
+        ↓
+durable Task + Verification state determines dependency readiness
 ```
 
-A plan is not a Task, a Verification, an approval, or execution authority.
+A plan is evidence. It is not a Task, a Verification, approval, execution authority, Artifact adoption, merge, or release authority.
 
 ---
 
-## 1. Goals
+## 1. Implemented boundary
 
-Phase 31 v1 must provide:
+Phase 31 v1 now provides:
 
-1. **Frozen planning input** bound to one existing Goal revision and exact project-state evidence.
-2. **Bounded plan proposals** describing proposed Task contracts and dependency edges without canonical Task IDs or direct state mutation.
-3. **Independent structural plan audit** that recomputes proposal identity, validates bounds, rejects cycles/unknown references, and prevents authority amplification.
-4. **Canonical same-Flow Task dependency state** in Origin Forge's durable truth store.
-5. **Explicit materialization authority** that atomically creates the approved Flow / Tasks / dependency edges through normal infrastructure-owned state APIs.
-6. **Deterministic readiness resolution** from canonical dependency outcomes, without a hidden autonomous queue or planner-controlled state transition.
-7. **Read-only inspection** of planning inputs, proposals, audits, dependency graphs, and readiness reasons.
-8. **Restart/replay safety**: the same durable state reconstructs the same dependency eligibility after process restart.
+1. infrastructure-owned `PLINPUT-*`, `PLPROP-*`, `PLAUD-*`, and `PLMAT-*` identities;
+2. bounded frozen `PlanningInput` evidence bound to an exact Goal revision/hash and bounded project/capability/policy evidence;
+3. inert bounded `PlanStep` / `PlanProposal` contracts with proposal-local keys only;
+4. strict duplicate-key-aware JSON proposal parsing;
+5. deterministic finite DAG validation with bounded task count, edge count, depth, text, capabilities, and attempt hints;
+6. independently recomputed `PlanAudit` evidence;
+7. canonical same-Flow `REQUIRES_SUCCESS` Task dependency state in SQLite;
+8. atomic audited-plan materialization into canonical Flow / Task / dependency state with infrastructure-owned IDs;
+9. immutable `PLMAT-*` materialization evidence linking proposal-local step keys to canonical Task IDs;
+10. deterministic dependency readiness derived from canonical Task and Task-Verification state;
+11. one-shot proposal-only Planner model execution behind the existing governed model/resource scheduler;
+12. non-creating, non-migrating read-only planning inspection over the Phase-30 immutable SQLite guard;
+13. a read-only `origin-forge-plan` module CLI for planning evidence, graph, and readiness inspection.
 
-Phase 31 does **not** need to execute the resulting Tasks automatically to satisfy v1.
+Phase 31 does **not** automatically execute materialized Tasks.
 
 ---
 
-## 2. Explicit non-goals
+## 2. Authority invariants
 
-Phase 31 does not add:
+The following remain outside Phase 31 Planner authority:
 
-- direct model writes to Goal / Flow / Task state;
-- planner authority to verify or complete a Task;
+- direct Goal / Flow / Task writes;
+- canonical ID selection by a model;
+- Task state transitions;
+- Task Verification PASS or Task completion;
+- arbitrary shell, SQL, filesystem, process, or generic tool execution;
+- Artifact adoption or provenance signing;
+- Design Bible / Project Intelligence mutation;
+- Skill, context, routing, or model-profile activation;
+- automatic retry recursion or hidden autonomous queues;
 - automatic merge or release;
-- generic model-facing tool execution;
-- recursive planner → planner delegation;
-- hidden background workers or an unbounded autonomous queue;
-- cross-project dependencies;
-- arbitrary dependency expressions or model-written predicates;
-- dependency edges based on hidden model reasoning;
-- automatic Artifact adoption/signing;
-- automatic Design Bible or Project Intelligence mutation;
-- automatic Skill/routing/context/model activation;
-- live self-improvement or model-weight mutation;
-- a second workflow database parallel to canonical Origin Forge state.
+- Phase-30 cockpit mutation;
+- live self-training or model-weight mutation.
 
-The Planner remains proposal-only.
+The Planner may produce exactly one inert structured proposal per Planner Run. A successful Planner Run does not audit or materialize the proposal automatically.
 
 ---
 
-## 3. Phase 31 identities
+## 3. Frozen planning evidence
 
-Infrastructure owns all durable identities.
-
-Recommended v1 prefixes:
+`PlanningInput` is bound to:
 
 ```text
-PLINPUT-*   frozen planning input
-PLPROP-*    immutable plan proposal
-PLAUD-*     independent structural plan audit
-PLMAT-*     materialization evidence record
+PLINPUT identity
+project identity
+Goal identity
+Goal revision
+canonical Goal planning hash
+bounded verified-state refs
+bounded active Design Rule refs
+Project Intelligence snapshot hash
+capability-catalog hash
+infrastructure-owned capability IDs
+model-policy hash
+resource-policy hash
 ```
 
-Canonical production work continues to use the existing:
+The Planner context exposes a bounded semantic projection rather than arbitrary database rows, repository bytes, secrets, or runtime handles.
+
+The current Goal planning hash covers the canonical planning-relevant Goal projection:
 
 ```text
-GOAL-*
-FLOW-*
-TASK-*
-RUN-*
-VERIFY-*
-```
-
-A model may use short proposal-local `step_key` values such as `design`, `code`, `sprite`, or `runtime-test` only for references inside one proposal. It may not choose canonical `FLOW-*` or `TASK-*` identities.
-
----
-
-## 4. Frozen planning input
-
-`PlanningInput` is an immutable content-addressed package for one planning pass.
-
-Minimum binding:
-
-```text
-planning_input_id
+id
 project_id
-goal_id
-goal_revision
-goal_content_hash
-existing_flow_refs
-verified_task_summary_refs
-active_design_rule_refs
-project_intelligence_snapshot_hash
-capability_catalog_hash
-model_policy_snapshot_hash
-resource_policy_snapshot_hash
-created_at
-content_hash
+objective
+success criteria
+constraints
+budgets
+priority
+status
+revision
 ```
 
-The input package contains bounded projections, not arbitrary database rows or repository bytes.
-
-The v1 Planner context may include:
-
-- exact Goal objective / success criteria / constraints / budgets;
-- current terminal Task outcome summaries relevant to that Goal;
-- bounded active Project Intelligence Entities / relations relevant to the Goal;
-- applicable active Design Rules;
-- a bounded infrastructure-owned capability catalog describing currently supported production surfaces;
-- bounded configured model/resource policy summaries where planning depends on capability availability.
-
-The planning package must exclude by default:
-
-- secret key material;
-- raw Phase-18 private signing state;
-- arbitrary Artifact bytes;
-- arbitrary repository file contents;
-- unrestricted Verification evidence blobs;
-- mutable runtime handles or resource leases;
-- direct database access.
-
-Every included evidence item must carry an exact stable identity/hash/revision sufficient for later revalidation.
+An unmaterialized PlanningInput becomes stale if the bound Goal revision/hash changes. Staleness fails before a Planner model call or before materialization.
 
 ---
 
-## 5. Bounded model-facing proposal shape
+## 4. Proposal contract
 
-A Planner model may propose only inert structured data.
-
-Conceptual v1 shape:
-
-```json
-{
-  "summary": "Implement and verify the requested feature across code and media.",
-  "steps": [
-    {
-      "step_key": "code",
-      "objective": "Implement gameplay behavior.",
-      "acceptance_criteria": ["..."],
-      "constraints": ["..."],
-      "required_capabilities": ["code"],
-      "priority": 50,
-      "budget_hint": {"attempts": 2},
-      "depends_on": []
-    },
-    {
-      "step_key": "runtime-test",
-      "objective": "Verify runtime behavior.",
-      "acceptance_criteria": ["..."],
-      "constraints": ["..."],
-      "required_capabilities": ["runtime-observation"],
-      "priority": 40,
-      "budget_hint": {"attempts": 1},
-      "depends_on": ["code"]
-    }
-  ]
-}
-```
-
-The exact schema is infrastructure-owned.
-
-The proposal must not contain:
-
-- canonical Goal / Flow / Task status assignments;
-- canonical IDs selected by the model;
-- SQL;
-- shell commands;
-- executable code;
-- arbitrary filesystem paths as authority grants;
-- model/tool credentials;
-- approval flags;
-- verification outcomes;
-- merge/release/signing/adoption actions;
-- model profile overrides outside an explicitly disclosed allowed policy surface;
-- nested sub-plans, loops, recursion, callbacks, or conditional executable expressions.
-
----
-
-## 6. Proposal bounds
-
-Initial v1 hard bounds should be conservative and covered by regression tests.
-
-Recommended ceilings:
+A PlanStep contains only:
 
 ```text
-max planning-input bytes           512 KiB
-max Planner response bytes         256 KiB
-max proposed Tasks                 64
-max dependency edges               192
-max dependency depth               16
-max acceptance criteria / Task     32
-max constraints / Task             32
-max required capabilities / Task   16
-max text field bytes               bounded per schema
-max Planner calls / proposal       1
+step_key
+objective
+acceptance_criteria
+constraints
+required_capabilities
+priority
+budget_hint.attempts
+depends_on
 ```
 
-The implementation may select smaller limits when source-level constraints justify them.
+Proposal-local `step_key` values are inert references. They never become canonical IDs.
 
-All limits are enforced before expensive graph processing or durable publication where practical.
+Implemented v1 bounds include:
 
----
+```text
+Planner response             <= 256 KiB before JSON parsing
+proposed Tasks               1..64
+dependency edges             <= 192
+dependency depth             <= 16
+acceptance criteria / Task   <= 32
+constraints / Task           <= 32
+required capabilities / Task <= 16
+attempt hint                 1..16
+Planner calls / Run          exactly 1
+```
 
-## 7. Strict proposal parser
+Text/token fields are independently bounded by the model contract.
 
-The parser is infrastructure-owned and fail-closed.
+The strict parser rejects:
 
-It must reject at least:
-
-- malformed or noncanonical JSON;
+- malformed UTF-8/JSON;
 - duplicate JSON keys;
-- unknown top-level or step fields;
-- duplicate `step_key` values;
-- missing dependency targets;
+- unknown fields;
+- model-supplied canonical ID fields;
+- approval/status/verification/authority fields;
+- duplicate step keys;
+- unknown dependencies;
 - self-dependencies;
-- duplicate dependency edges;
+- duplicate edges;
 - cycles;
-- depth/edge/task-count overflow;
-- empty objectives or acceptance contracts;
+- depth/task/edge overflow;
 - unknown capability identifiers;
-- illegal priority/budget values;
-- oversized scalar/string/list values;
-- model-supplied canonical IDs;
-- authority/status/verification/adoption/signing/merge/release fields;
-- pathological numeric values.
-
-Normalization may canonicalize representation but must not silently strengthen authority or invent missing acceptance criteria.
+- bool-as-integer ambiguity;
+- pathological JSON integers;
+- oversized output.
 
 ---
 
-## 8. Independent structural audit
+## 5. Independent structural audit
 
-Every publishable `PlanProposal` requires an independently computed `PlanAudit`.
-
-The Auditor recomputes:
-
-- planning-input hash and exact Goal binding;
-- proposal canonical hash;
-- all local step references;
-- graph acyclicity;
-- graph depth;
-- task/edge counts;
-- capability membership;
-- all schema/resource bounds;
-- absence of forbidden authority fields;
-- deterministic topological ordering evidence;
-- materialization eligibility prerequisites.
-
-Audit outcomes:
+`PlanAudit` recomputes the proposal/input relationship and records:
 
 ```text
-PASS
-FAIL
+PLAUD identity
+PlanningInput ID/hash
+PlanProposal ID/hash
+PASS / FAIL
+task count
+edge count
+max depth
+deterministic topological step order
+bounded failure reason when applicable
 ```
 
-A structural `PASS` means only that the plan is internally valid and bounded. It does **not** prove the plan is semantically good, sufficient, optimal, or approved.
+A structural `PASS` means only that the proposal is bounded and structurally valid against the frozen PlanningInput. It is not semantic proof, Task Verification, approval, or materialization authority.
 
-A Planner may not audit its own proposal for authority purposes.
+Published audit evidence is revalidated against an independently recomputed audit before use.
 
 ---
 
-## 9. Canonical Task dependency graph
+## 6. Canonical Task dependencies
 
-Phase 31 adds explicit canonical dependency relationships to the existing durable production state instead of hiding them in `Flow.state_json` or model context.
+Schema v6 introduced canonical `task_dependencies` state.
 
-V1 supports one dependency semantic:
+V1 supports exactly:
 
 ```text
 REQUIRES_SUCCESS
 ```
 
-Meaning:
+For an edge:
 
-> the dependent Task is not eligible for execution until the required Task has reached the existing canonical successful terminal state and its required production verification contract is satisfied.
+```text
+dependent Task -> required Task
+```
 
-V1 dependency constraints:
+both Tasks must belong to the same Flow.
 
-- both Tasks belong to the same Project;
-- both Tasks belong to the same materialized Flow;
-- no self-edge;
-- no duplicate active edge;
-- no cycle;
-- deterministic ordering;
-- dependency mutations are infrastructure-owned and revision/event tracked;
-- a materialized graph cannot be silently rewritten by a Planner.
+Durable defenses include:
 
-More expressive dependency kinds are deferred until there is a measured requirement.
+- foreign keys to canonical Tasks;
+- composite uniqueness;
+- self-edge rejection;
+- exact dependency-type constraint;
+- same-Flow trigger;
+- recursive cycle-rejection trigger;
+- deterministic dependency/dependent listing;
+- deterministic topological graph reconstruction;
+- dependency creation state events;
+- restart persistence.
 
----
-
-## 10. Materialization boundary
-
-A valid audited proposal remains inert until an authorized caller explicitly materializes it.
-
-Materialization must:
-
-1. re-load and revalidate the exact PlanningInput, PlanProposal, and PlanAudit;
-2. confirm the bound Goal still exists at the expected revision/identity or fail stale;
-3. confirm the proposal has not already been materialized;
-4. allocate canonical infrastructure-owned Flow / Task IDs;
-5. map proposal-local `step_key` values to those new canonical Task IDs;
-6. create Task contracts using existing runtime/store authority checks;
-7. create dependency edges using canonical Task IDs;
-8. record an immutable `PLMAT-*` mapping from proposal identity to the created canonical objects;
-9. commit atomically or leave no partial Flow / Task graph.
-
-A materialization call is an explicit authority action. It is not triggered by reading a proposal, completing a Planner Run, or obtaining a structural audit `PASS`.
-
-The v1 CLI should not expose model-driven implicit materialization.
+No second Task-status source of truth exists.
 
 ---
 
-## 11. Deterministic readiness resolution
+## 7. Immutable planning evidence persistence
 
-Phase 31 provides a read-side resolver that explains whether a materialized Task is dependency-eligible.
+Schema v7 added normalized immutable evidence tables:
 
-Conceptual outcomes:
+```text
+planning_inputs
+plan_proposals
+plan_audits
+plan_materializations
+```
+
+Each persisted object carries:
+
+```text
+schema version
+canonical payload
+content hash
+relational foreign-key bindings
+creation timestamp
+```
+
+Read paths reparse canonical JSON, reconstruct typed contracts, recompute hashes, and revalidate relationships before returning evidence.
+
+Duplicate publication fails closed rather than overwriting historical evidence.
+
+---
+
+## 8. Explicit atomic materialization
+
+`ProductionPlanningEvidenceStore.materialize(...)` requires exact identities for:
+
+```text
+PLINPUT
+PLPROP
+PLAUD
+```
+
+Materialization re-loads and revalidates every object, requires an independently recomputed structural PASS, rechecks the current Goal revision/hash, and rejects duplicate materialization.
+
+Only then does infrastructure allocate:
+
+```text
+FLOW-*
+TASK-*
+PLMAT-*
+```
+
+The proposal cannot choose those canonical IDs.
+
+One SQLite transaction creates:
+
+- the canonical Flow;
+- every canonical Task contract;
+- exact step-key -> Task-ID bindings;
+- canonical dependency edges;
+- Flow / Task / dependency state events;
+- immutable `PLMAT-*` evidence.
+
+Any failure rolls the entire transaction back. Adversarial tests inject a mid-transaction event-ID collision after writes have begun and prove that no partial Flow, Task, dependency, materialization, or associated event survives.
+
+---
+
+## 9. Deterministic dependency readiness
+
+Readiness is recomputed from durable canonical state every time. It never depends on Planner memory, an in-memory queue, or an LLM call.
+
+Read-side classifications are:
 
 ```text
 READY
 WAITING_ON_DEPENDENCIES
 BLOCKED_BY_FAILED_DEPENDENCY
+INVALID_DEPENDENCY_STATE
+ACTIVE
 TERMINAL
-INVALID_GRAPH
 ```
 
-The exact names may align with existing runtime enums rather than introducing duplicate Task states.
-
-The resolver must derive its answer from canonical durable state each time. It must not depend on an in-memory queue, Planner memory, or prior conversation.
-
-For every non-ready result it should provide bounded exact reasons such as:
+For `REQUIRES_SUCCESS`, a prerequisite is satisfied only when:
 
 ```text
-required_task_id
-required_task_status
-required_verification_status
+required Task status == SUCCEEDED
+AND
+at least one canonical Task Verification status == PASS
 ```
 
-Readiness inspection itself performs no Task transition and starts no execution.
+A prerequisite in `FAILED`, `QUARANTINED`, or `CANCELLED` yields blocked dependency evidence.
 
-Any later scheduler integration must consume this deterministic resolver rather than reimplement dependency semantics inside a model loop.
+A corrupted prerequisite recorded as `SUCCEEDED` without a PASS Task Verification is classified `INVALID_DEPENDENCY_STATE` rather than being treated as satisfied.
 
----
-
-## 12. Planner model boundary
-
-If Phase 31 wires a real Planner model invocation, it must reuse existing governed model infrastructure.
-
-Requirements:
-
-- fresh one-shot model context;
-- configured Planner-capable semantic role/policy;
-- resource admission through existing Phase-14 policy;
-- bounded request/response/token/time accounting;
-- no direct tool execution;
-- no direct filesystem/database access;
-- exact PlanningInput hash in Run evidence;
-- exact raw-response hash and parsed-proposal hash;
-- ordinary model/transport/parser failures represented as bounded failure evidence;
-- Planner completion never materializes work by itself.
-
-A deterministic/manual proposal path should remain available for unit/adversarial tests so Phase 31 contracts do not depend on a live model service.
+Inspection produces bounded reasons containing the exact required Task ID, status, verification condition, and reason kind. It performs no Task transition and starts no Run.
 
 ---
 
-## 13. Persistence
+## 10. Governed Planner model boundary
 
-Planning evidence must be durable and reconstructable.
+`BoundedProductionPlanner` supports only:
 
-Preferred placement:
+1. the existing Phase-14 `ScheduledModelAdapter` for governed real inference; or
+2. an infrastructure-owned deterministic no-I/O fixture adapter for unit/manual evidence.
 
-- canonical Goal / Flow / Task / dependency state: existing protected SQLite truth store;
-- immutable planning input/proposal/audit/materialization evidence: either normalized protected SQLite records or a dedicated immutable protected store, selected based on current repository conventions.
+Arbitrary unscheduled `ModelAdapter` instances are rejected.
 
-Whichever representation is chosen must provide:
-
-- no silent overwrite of immutable evidence;
-- exact content hashes;
-- project/Goal binding;
-- referential validation;
-- bounded load/list behavior;
-- duplicate-key/canonical JSON validation for file-backed evidence;
-- protected-root/symlink/alias containment where filesystem persistence is used;
-- deterministic ordering;
-- restart reconstruction.
-
-Phase 31 must not create a second source of truth for Task status.
-
----
-
-## 14. Operator surfaces
-
-The initial operator surface should separate read-only inspection from explicit mutation.
-
-Read-only examples:
+A pre-materialization Planner Run is legitimately Task-less:
 
 ```text
-origin-forge plan status
-origin-forge plan show <PLPROP-ID>
-origin-forge plan audit-show <PLAUD-ID>
-origin-forge plan graph <FLOW-ID>
-origin-forge plan readiness <TASK-ID>
+role = PLANNER
+task_id = null
 ```
 
-Explicit materialization, if exposed through CLI in v1, must be unmistakably operator-authorized and require an exact proposal identity plus audit identity. It must never be combined with Planner execution in one implicit command.
+`ModelRequest.task_id` was widened to `str | None` for this governed case; existing Task-bound worker paths continue to pass canonical Task IDs.
 
-The Phase-30 cockpit remains read-only. Phase 31 does not add cockpit mutation controls.
+The real scheduled path retains Phase-14 behavior:
 
----
+- explicit profile/policy selection;
+- resource admission before model load;
+- lease held through generation;
+- selected-profile evidence;
+- unload before resource release.
 
-## 15. Cross-domain planning semantics
-
-Phase 31 is intentionally media/software neutral.
-
-A plan may propose bounded Tasks requiring existing capabilities such as:
+Planner generation records Run-level evidence for:
 
 ```text
-code
-project-intelligence
-pixelorama-2d
-image-generation
-vision-inspection
-model3d
-blender-3d
-audio
-runtime-observation
-playtesting
-simulation
-provenance
+PlanningInput ID/hash
+request hash
+raw response hash
+PlanProposal ID/hash
+model ID/hash
+response bytes
+token counts
+model_calls = 1
+materialized = false
 ```
 
-Capability names are infrastructure-owned catalog identifiers, not arbitrary model-defined strings.
+Malformed model output fails the Planner Run and creates no proposal, Flow, Task, audit, or materialization.
 
-The planner may express ordering/dependency structure across those capabilities but does not gain their execution permissions.
+---
 
-Example:
+## 11. Read-only inspection
+
+Phase 31 reuses Phase 30's `production_read_connection` instead of the normal create/migrate store lifecycle.
+
+Planning inspection therefore requires:
+
+- existing protected config/database state;
+- exact current schema;
+- project-root binding;
+- no active WAL/SHM/rollback-journal state;
+- immutable/query-only SQLite access;
+- unchanged database identity/size/mtime through the inspection.
+
+The inspector revalidates:
+
+- PlanningInput canonical hash and project/Goal relationship;
+- PlanProposal canonical hash and exact input binding;
+- PlanAudit canonical hash and independent recomputation;
+- PlanMaterialization hashes and relational input/proposal/audit/Goal/Flow bindings;
+- exact materialized Task contracts against the frozen PlanSteps;
+- exact materialized dependency graph against the frozen proposal.
+
+It also exposes connection-bound canonical Flow graph and Task readiness inspection without entering the normal writer store path.
+
+---
+
+## 12. Read-only module CLI
+
+The module CLI is intentionally not added as a new v0.1 package entrypoint.
+
+It may be invoked as:
 
 ```text
-specification
-   ├─→ gameplay-code ─→ integration-test ─→ runtime-observation
-   ├─→ visual-design ─→ 2d/3d-assets ─────┘
-   └─→ audio-design ─→ audio-assets ───────┘
-                                   ↓
-                              playtest
+python -m origin_forge.production_planning_cli --project-root <project> status
+python -m origin_forge.production_planning_cli --project-root <project> input-show <PLINPUT-ID>
+python -m origin_forge.production_planning_cli --project-root <project> proposal-show <PLPROP-ID>
+python -m origin_forge.production_planning_cli --project-root <project> audit-show <PLAUD-ID>
+python -m origin_forge.production_planning_cli --project-root <project> materialization-show <PLMAT-ID>
+python -m origin_forge.production_planning_cli --project-root <project> graph <FLOW-ID>
+python -m origin_forge.production_planning_cli --project-root <project> readiness <TASK-ID>
 ```
 
-This is dependency evidence, not a hidden agent swarm.
+There is no CLI command for:
+
+```text
+generate
+approve
+materialize
+run
+verify
+adopt
+sign
+merge
+release
+```
+
+Help and uninitialized inspection create no `.origin-forge` state.
 
 ---
 
-## 16. Staleness and re-planning
+## 13. Implementation modules
 
-A frozen plan may become stale after materialization or after unrelated verified project changes.
+Primary Phase-31 implementation:
 
-V1 rules:
+```text
+src/origin_forge/ids.py
+src/origin_forge/state.py
+src/origin_forge/migrations.py
+src/origin_forge/model.py
+src/origin_forge/production_planning_models.py
+src/origin_forge/production_planning_proposal.py
+src/origin_forge/task_dependencies.py
+src/origin_forge/production_planning_evidence.py
+src/origin_forge/task_readiness.py
+src/origin_forge/production_planner.py
+src/origin_forge/production_planning_inspection.py
+src/origin_forge/production_planning_cli.py
+```
 
-- an unmaterialized proposal must fail closed if its bound Goal revision no longer matches;
-- planning-input evidence drift invalidates materialization;
-- already materialized canonical Tasks remain historical durable state and are not deleted/replaced automatically;
-- replanning creates a new PlanningInput / PlanProposal / PlanAudit lineage;
-- a new plan may supersede a prior planning Decision/evidence record only through explicit infrastructure/human authority;
-- Planner output cannot silently rewrite active Tasks or dependencies.
-
-Automatic dynamic replanning after every failure is deferred.
-
----
-
-## 17. Failure and blocked semantics
-
-Phase 31 distinguishes:
-
-- Planner/model failure;
-- proposal parser failure;
-- structural audit failure;
-- stale planning evidence;
-- materialization conflict;
-- dependency waiting;
-- failed prerequisite;
-- production Task failure.
-
-These classes must not collapse into a generic "agent failed" state.
-
-A failed prerequisite does not authorize deletion, bypass, or automatic replacement of the dependency edge.
-
-Recovery must be explicit and durable.
+The implementation deliberately reuses existing runtime/store, Run, Verification, Phase-14 model scheduling, and Phase-30 immutable read boundaries.
 
 ---
 
-## 18. Security and authority invariants
+## 14. Verification coverage
 
-Mandatory regressions should prove:
+Phase-31 regressions cover:
 
-- model-selected canonical IDs are rejected;
-- a Planner cannot set Task/Flow status;
-- a Planner cannot claim Verification PASS;
-- a Planner cannot authorize merge/release/signing/adoption;
-- cyclic graphs are rejected before publication/materialization;
-- unknown/missing dependency refs fail closed;
-- same-Flow/project dependency constraints are enforced;
-- stale Goal/input evidence cannot materialize;
-- duplicate materialization cannot create a second graph;
-- materialization is atomic under injected failures;
-- readiness inspection never mutates state;
-- restart yields the same readiness classification from the same durable state;
-- failed prerequisite Tasks cannot be bypassed by Planner output;
-- no model call is required to determine dependency readiness.
-
----
-
-## 19. Acceptance test plan
-
-Phase 31 closure requires normal Python 3.12 and 3.13 coverage for at least:
-
-### Contracts
-
-- content-addressed PlanningInput;
-- strict PlanProposal parser;
-- canonical proposal hashing;
-- graph bounds and acyclicity;
-- structural audit recomputation.
-
-### Durable dependency state
-
-- create/read/list dependency edges;
-- same-project / same-Flow enforcement;
-- duplicate/self/cycle rejection;
-- deterministic graph traversal/topological ordering;
-- persistence across restart.
-
-### Materialization
-
-- exact evidence revalidation;
-- canonical ID allocation outside model control;
-- atomic Flow/Task/edge creation;
+- new infrastructure ID families;
+- canonical PlanningInput hashing/bounds;
+- strict proposal parser and authority-field rejection;
+- duplicate JSON key rejection;
+- finite DAG validation/cycle rejection/topological evidence;
+- exact capability binding;
+- canonical dependency persistence and database defenses;
+- same-Flow/self/duplicate/cycle rejection;
+- restart graph reconstruction;
+- immutable evidence publication and tamper detection;
 - stale Goal rejection;
+- infrastructure-owned canonical materialization IDs;
 - duplicate materialization rejection;
-- rollback/no partial graph on failure.
-
-### Readiness
-
-- root Task eligible when otherwise runnable;
-- dependent Task waits while prerequisites are nonterminal;
-- dependent Task becomes eligible only after canonical successful prerequisite evidence;
-- failed prerequisite produces blocked evidence;
-- multi-parent dependency requires every prerequisite;
-- restart preserves identical result.
-
-### Authority
-
-- no Planner self-verification;
-- no model-triggered materialization;
-- no cockpit mutation;
-- no merge/release/adoption/signing authority;
-- bounded parser/model/persistence failure behavior.
-
-### Optional real model evidence
-
-If a trusted Planner model path is enabled during Phase 31, one separately governed evidence workflow may prove the real adapter against a frozen small planning fixture. The normal CI matrix must remain independent of that external model service.
+- atomic rollback under injected mid-transaction failure;
+- deterministic multi-parent readiness;
+- failed prerequisite evidence;
+- SUCCEEDED-without-PASS fail-closed handling;
+- restart-identical readiness;
+- one-shot taskless Planner Runs;
+- scheduled-model resource evidence and lease release;
+- generic unscheduled model rejection;
+- invalid-model-output cleanup;
+- non-creating immutable planning inspection;
+- materialized Task/dependency drift detection;
+- read-only CLI authority surface;
+- source-level absence of mutation/model/materialization authority in inspection paths.
 
 ---
 
-## 20. Phased implementation order
+## 15. Exact-head evidence so far
 
-Recommended internal sequence:
+Each completed implementation slice passed the normal Ubuntu matrix before the next slice began:
 
 ```text
-31A  identities + frozen planning contracts
- ↓
-31B  strict parser + independent structural auditor
- ↓
-31C  canonical Task dependency persistence + graph queries
- ↓
-31D  explicit atomic materialization
- ↓
-31E  deterministic readiness resolver
- ↓
-31F  bounded Planner model adapter/evidence
- ↓
-31G  read-only operator inspection + closure hardening
+31A + 31B  run 31486070627  Python 3.12 PASS / Python 3.13 PASS
+31C        run 31486512755  Python 3.12 PASS / Python 3.13 PASS
+31D        run 31486992452  Python 3.12 PASS / Python 3.13 PASS
+31E        run 31487242234  Python 3.12 PASS / Python 3.13 PASS
+31F        run 31487871034  Python 3.12 PASS / Python 3.13 PASS
+31G code   run 31488574588  Python 3.12 PASS / Python 3.13 PASS
 ```
 
-Each slice must preserve the proposal/evidence/authority separation before the next slice begins.
+Unrelated heavyweight Pixelorama / Blender / image / vision / FFmpeg / Piper evidence workflows remained skipped/disarmed on the normal implementation heads.
+
+The documentation/roadmap closure edit creates a new immutable candidate SHA and therefore requires its own final Python 3.12/3.13 matrix before ready-for-review and merge.
 
 ---
 
-## 21. Exit condition
+## 16. Explicit non-goals retained
 
-Phase 31 is complete when one immutable repository head proves that Origin Forge can:
+Phase 31 does not add:
 
-- freeze bounded exact planning evidence for a durable Goal;
-- accept a bounded Planner proposal without canonical state authority;
-- independently validate and audit a finite cross-domain Task dependency graph;
-- explicitly and atomically materialize an approved plan into canonical Flow / Task / dependency state with infrastructure-owned IDs;
-- reconstruct deterministic Task dependency eligibility from durable verified state across restart;
-- inspect the entire planning/dependency chain without requiring old model conversation state;
-- preserve all existing verification, Artifact adoption/signing, merge, release, Project Intelligence, model/resource, and cockpit authority boundaries.
+- automatic Task execution after materialization;
+- automatic retry/replanning recursion;
+- hidden Manager queues;
+- cross-project dependencies;
+- arbitrary dependency expressions;
+- dynamic model-written predicates;
+- production Task self-verification;
+- automatic Artifact adoption/signing;
+- automatic Project Intelligence / Design Bible mutation;
+- arbitrary model tool execution;
+- cockpit mutation;
+- automatic merge/release;
+- live self-training/self-modification.
 
-The final immutable Phase-31 head must pass the normal Python 3.12 and Python 3.13 matrix with unrelated heavyweight evidence workflows skipped/disarmed before ready-for-review transition and SHA-guarded merge.
+Any later orchestration layer must consume Phase 31's durable dependency/readiness contracts rather than reimplementing those semantics inside a model loop.
+
+---
+
+## 17. Closure condition
+
+Phase 31 is implementation-complete when one immutable repository head contains the code, tests, this implementation contract, and the synchronized canonical roadmap, and that exact head passes the normal Python 3.12 and Python 3.13 matrix with unrelated heavyweight evidence workflows skipped/disarmed.
+
+After that exact-head proof, closure is mechanical:
+
+```text
+clean review/thread state
+        ↓
+SHA-guarded squash merge
+        ↓
+verify actual main commit
+```
+
+No post-CI documentation edit is required; the pull request, workflow run, and merge result are the external closure record.
