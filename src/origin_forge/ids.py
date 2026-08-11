@@ -66,6 +66,7 @@ class IdKind(StrEnum):
     FINGERPRINT_COMPARISON = "FPCMP"
     WATERMARK_PLAN = "WMPLAN"
     WATERMARK_RESULT = "WMRES"
+    FINGERPRINT_PROVENANCE_LINK = "FPLINK"
 
 
 def new_id(kind: IdKind) -> str:
