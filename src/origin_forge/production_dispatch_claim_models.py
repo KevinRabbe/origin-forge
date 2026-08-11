@@ -21,6 +21,7 @@ class DispatchClaimStatus(StrEnum):
     ACTIVE = "ACTIVE"
     RELEASED = "RELEASED"
     INTERRUPTED = "INTERRUPTED"
+    CONSUMED = "CONSUMED"
 
 
 def _exact_nonnegative_int(value: object, label: str) -> int:
