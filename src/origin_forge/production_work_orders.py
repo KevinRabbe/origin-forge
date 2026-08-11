@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Any, Sequence
@@ -67,7 +68,7 @@ class ProductionWorkOrder:
     dispatch_contract_id: str
     dispatch_contract_hash: str
     input_refs: tuple[WorkOrderInputRef, ...]
-    payload: dict[str, Any]
+    payload_json: str
 
     def __post_init__(self) -> None:
         if not validate_id(self.work_order_id, IdKind.PRODUCTION_WORK_ORDER):
@@ -129,14 +130,31 @@ class ProductionWorkOrder:
                 )
             ),
         )
-        if not isinstance(self.payload, dict):
-            raise ProductionWorkOrderError("payload must be an object")
+
+        if not isinstance(self.payload_json, str) or not self.payload_json:
+            raise ProductionWorkOrderError("payload_json must be canonical JSON text")
         try:
-            canonical_bytes(self.payload)
+            payload = json.loads(self.payload_json)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ProductionWorkOrderError("payload_json is invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise ProductionWorkOrderError("payload must decode to an object")
+        try:
+            expected = canonical_bytes(payload).decode("utf-8")
+        except ProductionWorkOrderModelError as exc:
+            raise ProductionWorkOrderError("payload is outside canonical bounds") from exc
+        if expected != self.payload_json:
+            raise ProductionWorkOrderError("payload_json is not canonical")
+        try:
             canonical_bytes(self.to_dict())
         except ProductionWorkOrderModelError as exc:
             raise ProductionWorkOrderError("work order is outside canonical bounds") from exc
-        object.__setattr__(self, "payload", dict(self.payload))
+
+    @property
+    def payload(self) -> dict[str, Any]:
+        value = json.loads(self.payload_json)
+        assert isinstance(value, dict)
+        return value
 
     @property
     def payload_hash(self) -> str:
@@ -257,5 +275,5 @@ def create_current_work_order(
         dispatch_contract_id=contract.contract_id,
         dispatch_contract_hash=contract.content_hash,
         input_refs=refs,
-        payload=normalized_payload,
+        payload_json=canonical_bytes(normalized_payload).decode("utf-8"),
     )
