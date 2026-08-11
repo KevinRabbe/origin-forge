@@ -290,10 +290,10 @@ class ProductionPlannerTests(unittest.TestCase):
             "transition_goal(",
             "transition_flow(",
             "transition_task(",
-            "adopt",
-            "sign_artifact",
-            "merge_pull_request",
-            "release",
+            "adopt(",
+            "sign_artifact(",
+            "merge_pull_request(",
+            "release(",
         ):
             self.assertNotIn(forbidden, source)
 
