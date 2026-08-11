@@ -6,6 +6,7 @@ from typing import Any, Iterable
 from .dream_read import DreamReadService
 from .model_resource_read import inspect_model_resources
 from .production_evidence_read import ProductionEvidenceReadService
+from .production_read_guard import ensure_production_runtime_readable
 from .project_intelligence_read import ProjectIntelligenceReadService
 from .provenance_read import ProvenanceReadService
 from .runtime import OriginForgeRuntime
@@ -413,6 +414,7 @@ def build_production_interface_snapshot(
 ) -> ProductionInterfaceSnapshot:
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
+    ensure_production_runtime_readable(runtime)
 
     max_goals = _section_limit(max_goals)
     max_flows = _section_limit(max_flows)
