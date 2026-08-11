@@ -391,7 +391,7 @@ Cooperative exact-path PNG capture is the accepted v1 capture boundary. OS/windo
 
 See `docs/phase-23-runtime-observation.md` for the detailed v1 contract, exclusions, evidence model and acceptance boundary.
 
-**Exit condition met:** one immutable repository head proves on Python 3.12 and 3.13 that Origin Forge can launch an exact trusted target, bound logs/runtime outcomes/performance evidence, capture and independently validate only declared screenshots/timed video frames, emit deterministic baseline-regression evidence, persist/read that evidence, terminate descendant process state, and leave production Task/adoption/signing/merge/release authority unchanged.
+**Exit condition met:** one immutable repository head proves on Python 3.12 and 3.13 that Origin Forge can launch an exact trusted target, bind logs/runtime outcomes/performance evidence, capture and independently validate only declared screenshots/timed video frames, emit deterministic baseline-regression evidence, persist/read that evidence, terminate descendant process state, and leave production Task/adoption/signing/merge/release authority unchanged.
 
 ## Phase 24 — Automated Playtesting — DONE
 
@@ -612,6 +612,34 @@ Implemented the Manager-side planning substrate needed to turn one durable Goal 
 See `docs/phase-31-governed-production-planning.md` for the detailed implemented contract, evidence model, readiness semantics, model boundary, inspection surface, and slice-by-slice CI evidence.
 
 **Exit condition met in implementation:** Phase-31 slices 31A–31G independently passed the normal Python 3.12/3.13 matrix through code head `eedd8a8699a57a856b9451c1be273e14edf856e4`; the canonical documentation/roadmap closure head created after those proofs must itself pass the final normal matrix before SHA-guarded merge.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
+## Phase 32 — Governed Production Capability Catalog & Routing — DONE
+
+Implemented the infrastructure-owned capability/routing layer required between a Phase-31 production plan and any future dependency-aware execution coordinator:
+
+- infrastructure-owned `CAPCAT-*`, `CAPPOL-*`, and `CAPROUTE-*` identities;
+- bounded semantic `ProductionCapability` contracts with exact capability IDs and no fuzzy/model-created capability authority;
+- inert trusted production-adapter descriptors with exact contract fingerprints, effects/replay classes, and no shell/argv/import/callable/endpoint/secret/executable payload;
+- immutable deterministic capability catalogs with duplicate/reference/bounds/hash validation;
+- immutable exact-catalog-bound routing policies separated from inventory, preserving explicit ordered adapter allow-lists and no implicit fallback;
+- exact canonical Task routing inputs bound to Flow ownership, objective, acceptance criteria, constraints, required capabilities, budgets, priority, revision, and content hash;
+- deterministic pure static routing that considers only policy-listed adapters and requires one adapter to cover the complete Task capability set;
+- explicit `ROUTABLE`, `UNKNOWN_CAPABILITY`, `CAPABILITY_NOT_ALLOWED`, `NO_ELIGIBLE_ADAPTER`, and `INVALID_TASK_CONTRACT` outcomes with bounded reasons;
+- no hidden multi-adapter composition or registry-driven backend fallback;
+- immutable no-overwrite `.origin-forge/production-capabilities/` catalog/policy/route evidence with canonical JSON, byte/count, duplicate-key, hash, symlink/alias, and relational validation;
+- exact current-Task route revalidation plus frozen route-outcome recomputation that rejects self-consistently rehashed forged selected-adapter evidence;
+- governed Phase-31 PlanningInput freeze deriving capability catalog hash and Planner-visible capability IDs from persisted catalog/policy authority rather than caller strings;
+- reviewed built-in descriptors for bounded coding/retry, Pixelorama export, Blender 3D, image generation, vision inspection, FFmpeg processing, Piper TTS, runtime observation, cooperative playtesting, and deterministic simulation;
+- known `design.specify` capability with no built-in executor, and no Blockbench adapter while Phase 20B remains deferred;
+- non-creating read-only capability inspection through Phase-30 immutable SQLite reads and protected immutable evidence reads;
+- read-only module CLI limited to `status`, `catalog-show`, `policy-show`, `route-show`, and `task-route`;
+- no Task execution/transition, background queue, recursive replanning, model loading, resource lease, generic tool call, plugin install, Artifact adoption/signing, Project Intelligence mutation, cockpit mutation, merge, or release authority.
+
+See `docs/phase-32-governed-production-capability-routing.md` for the detailed implemented contract, reviewed built-in inventory, persistence/read boundary, authority exclusions, and slice-by-slice CI evidence.
+
+**Exit condition met in implementation:** Phase-32 slices 32A–32F independently passed the normal Python 3.12/3.13 matrix through code head `52e74952ef6b7b182893f6b478a9b097f0fc1ebb`; the canonical documentation/roadmap closure head created after those proofs must itself pass the final normal matrix before SHA-guarded merge.
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
