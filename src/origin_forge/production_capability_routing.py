@@ -280,16 +280,15 @@ def _result(
     )
 
 
-def resolve_task_route(
-    store: OriginForgeStore,
-    task_id: str,
+def resolve_route_input(
+    route_input: TaskRouteInput,
     catalog: CapabilityCatalog,
     policy: CapabilityRoutingPolicy,
 ) -> CapabilityRouteResolution:
-    """Resolve one static authorized adapter route without executing or mutating Task state."""
+    """Pure static authority resolution over an already-frozen canonical Task input."""
 
-    if not isinstance(store, OriginForgeStore):
-        raise TypeError("store must be an OriginForgeStore")
+    if not isinstance(route_input, TaskRouteInput):
+        raise TypeError("route_input must be a TaskRouteInput")
     if not isinstance(catalog, CapabilityCatalog):
         raise TypeError("catalog must be a CapabilityCatalog")
     if not isinstance(policy, CapabilityRoutingPolicy):
@@ -298,15 +297,6 @@ def resolve_task_route(
         policy.validate_against(catalog)
     except ProductionCapabilityError as exc:
         raise CapabilityRoutingError("routing policy is not valid for the supplied catalog") from exc
-
-    with store.session() as conn:
-        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-        if row is None:
-            raise KeyError(task_id)
-        flow = conn.execute("SELECT id FROM flows WHERE id = ?", (row["flow_id"],)).fetchone()
-        if flow is None:
-            raise CapabilityRoutingError("Task references a missing canonical Flow")
-        route_input = TaskRouteInput.from_row(row)
 
     required = set(route_input.required_capabilities)
     if not required:
@@ -392,3 +382,24 @@ def resolve_task_route(
         considered_adapter_ids=tuple(considered),
         reasons=tuple(reasons),
     )
+
+
+def resolve_task_route(
+    store: OriginForgeStore,
+    task_id: str,
+    catalog: CapabilityCatalog,
+    policy: CapabilityRoutingPolicy,
+) -> CapabilityRouteResolution:
+    """Resolve one static authorized adapter route without executing or mutating Task state."""
+
+    if not isinstance(store, OriginForgeStore):
+        raise TypeError("store must be an OriginForgeStore")
+    with store.session() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if row is None:
+            raise KeyError(task_id)
+        flow = conn.execute("SELECT id FROM flows WHERE id = ?", (row["flow_id"],)).fetchone()
+        if flow is None:
+            raise CapabilityRoutingError("Task references a missing canonical Flow")
+        route_input = TaskRouteInput.from_row(row)
+    return resolve_route_input(route_input, catalog, policy)
