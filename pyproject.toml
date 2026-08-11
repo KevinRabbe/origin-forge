@@ -4,9 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "origin-forge"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Local autonomous production infrastructure built around durable verified state."
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.12"
 dependencies = []
 
