@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from origin_forge.ids import IdKind, new_id
@@ -94,6 +95,32 @@ class MediaFingerprintProvenanceTests(unittest.TestCase):
                 manifest=wrong_hash,
             )
 
+    def test_forged_link_is_revalidated_against_source_binding(self) -> None:
+        artifact_id = new_id(IdKind.ARTIFACT)
+        original = fingerprint_source_text(
+            source_ref=artifact_id,
+            source=b"source\n",
+        )
+        manifest = _manifest(
+            artifact_id=artifact_id,
+            artifact_content_hash=original.source_hash,
+        )
+        link = FingerprintProvenanceLink.create(
+            fingerprint=original,
+            manifest=manifest,
+        )
+        foreign = fingerprint_source_text(
+            source_ref=new_id(IdKind.ARTIFACT),
+            source=b"source\n",
+        )
+        forged = replace(
+            link,
+            fingerprint_id=foreign.fingerprint_id,
+            fingerprint_hash=foreign.content_hash,
+        )
+        with self.assertRaisesRegex(MediaFingerprintModelError, "artifact ID"):
+            forged.bind(foreign, manifest)
+
     def test_link_is_immutable_persisted_evidence(self) -> None:
         artifact_id = new_id(IdKind.ARTIFACT)
         fingerprint = fingerprint_source_text(
@@ -112,7 +139,11 @@ class MediaFingerprintProvenanceTests(unittest.TestCase):
             runtime = OriginForgeRuntime(Path(tempdir))
             runtime.initialize("phase28-provenance-link-test")
             store = MediaFingerprintStore(runtime)
-            path = store.publish_provenance_link(link)
+            path = store.publish_provenance_link(
+                link,
+                fingerprint=fingerprint,
+                manifest=manifest,
+            )
             self.assertTrue(path.is_file())
             loaded = store.load("provenance-links", link.link_id)
             self.assertEqual(loaded["content_hash"], link.content_hash)
