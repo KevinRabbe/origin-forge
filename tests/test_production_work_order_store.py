@@ -152,15 +152,14 @@ class ProductionWorkOrderStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ProductionWorkOrderStoreError, "frozen revalidation"):
             self.store.load_work_order(self.work_order.work_order_id)
 
-    def test_dispatch_catalog_validator_drift_is_rejected_before_publication(self) -> None:
-        other_registry = build_builtin_dispatch_validator_registry()
-        broken_store = ProductionWorkOrderStore(
+    def test_second_store_instance_cannot_overwrite_same_dispatch_catalog(self) -> None:
+        second_store = ProductionWorkOrderStore(
             self.runtime,
             self.capability_store,
-            other_registry,
+            build_builtin_dispatch_validator_registry(),
         )
         with self.assertRaisesRegex(ProductionWorkOrderStoreError, "already exists"):
-            broken_store.publish_dispatch_catalog(self.dispatch_catalog)
+            second_store.publish_dispatch_catalog(self.dispatch_catalog)
 
     def test_symlinked_category_is_rejected(self) -> None:
         self.store._ensure_root()
