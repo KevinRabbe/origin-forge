@@ -81,8 +81,6 @@ class DispatchExecution:
     task_content_hash: str
     work_order_id: str
     work_order_hash: str
-    work_order_audit_id: str
-    work_order_audit_hash: str
     input_resolution_id: str
     input_resolution_hash: str
     dispatch_binding_id: str
@@ -118,12 +116,6 @@ class DispatchExecution:
             "work_order_id",
         )
         _digest(self.work_order_hash, "work_order_hash")
-        _typed_id(
-            self.work_order_audit_id,
-            IdKind.WORK_ORDER_AUDIT,
-            "work_order_audit_id",
-        )
-        _digest(self.work_order_audit_hash, "work_order_audit_hash")
         _typed_id(
             self.input_resolution_id,
             IdKind.INPUT_RESOLUTION_BUNDLE,
@@ -202,8 +194,6 @@ class DispatchExecution:
             "task_content_hash": self.task_content_hash,
             "work_order_id": self.work_order_id,
             "work_order_hash": self.work_order_hash,
-            "work_order_audit_id": self.work_order_audit_id,
-            "work_order_audit_hash": self.work_order_audit_hash,
             "input_resolution_id": self.input_resolution_id,
             "input_resolution_hash": self.input_resolution_hash,
             "dispatch_binding_id": self.dispatch_binding_id,
