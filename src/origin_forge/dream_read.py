@@ -101,15 +101,23 @@ class DreamReadService:
         root = self._registry_root()
         if root is None:
             return None
-        if not path.exists() and not path.is_symlink():
-            return None
-        if path.is_symlink() or not path.is_dir():
-            raise DreamReadError(f"invalid Dream directory: {path.name}")
         try:
-            resolved = path.resolve(strict=True)
-            resolved.relative_to(root)
-        except (OSError, RuntimeError, ValueError) as exc:
-            raise DreamReadError("Dream directory escaped registry root") from exc
+            relative = path.relative_to(self.root)
+        except ValueError as exc:
+            raise DreamReadError("Dream directory is outside registry root") from exc
+        current = self.root
+        resolved = root
+        for part in relative.parts:
+            current = current / part
+            if not current.exists() and not current.is_symlink():
+                return None
+            if current.is_symlink() or not current.is_dir():
+                raise DreamReadError(f"invalid Dream directory: {current.name}")
+            try:
+                resolved = current.resolve(strict=True)
+                resolved.relative_to(root)
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise DreamReadError("Dream directory escaped registry root") from exc
         return resolved
 
     @staticmethod
