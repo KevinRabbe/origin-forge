@@ -270,7 +270,6 @@ class ProductionDispatchResolverTests(unittest.TestCase):
             "create_run",
             "generate",
             "drive",
-            "execute",
             "dispatch",
             "publish_work_order",
             "publish_audit",
@@ -286,6 +285,23 @@ class ProductionDispatchResolverTests(unittest.TestCase):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
         }
         self.assertTrue(forbidden.isdisjoint(called_attributes | called_names))
+
+        execute_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "execute"
+        ]
+        self.assertTrue(execute_calls)
+        self.assertTrue(
+            all(
+                isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "conn"
+                for node in execute_calls
+            )
+        )
+        self.assertNotIn("execute", called_names)
 
 
 if __name__ == "__main__":
