@@ -55,6 +55,10 @@ class TaskStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
+class TaskDependencyType(StrEnum):
+    REQUIRES_SUCCESS = "REQUIRES_SUCCESS"
+
+
 GOAL_TRANSITIONS: dict[GoalStatus, frozenset[GoalStatus]] = {
     GoalStatus.OPEN: frozenset({GoalStatus.ACTIVE, GoalStatus.CANCELLED}),
     GoalStatus.ACTIVE: frozenset(
