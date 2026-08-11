@@ -11,6 +11,7 @@ from .media_fingerprint_models import (
     MediaFingerprint,
     WatermarkPlan,
 )
+from .media_fingerprint_provenance import FingerprintProvenanceLink
 from .media_watermark_models import WatermarkResult
 from .runtime import OriginForgeRuntime
 from .runtime_observation_models import canonical_bytes, content_hash
@@ -24,6 +25,7 @@ _CATEGORY_KIND = {
     "comparisons": IdKind.FINGERPRINT_COMPARISON,
     "watermark-plans": IdKind.WATERMARK_PLAN,
     "watermark-results": IdKind.WATERMARK_RESULT,
+    "provenance-links": IdKind.FINGERPRINT_PROVENANCE_LINK,
 }
 
 
@@ -89,6 +91,8 @@ class MediaFingerprintStore:
             return value.plan_id
         if category == "watermark-results" and isinstance(value, WatermarkResult):
             return value.result_id
+        if category == "provenance-links" and isinstance(value, FingerprintProvenanceLink):
+            return value.link_id
         raise TypeError(f"object type does not belong in media-fingerprints/{category}")
 
     def _exact_path(self, category: str, object_id: str, *, require_file: bool) -> Path:
@@ -206,3 +210,6 @@ class MediaFingerprintStore:
 
     def publish_watermark_result(self, value: WatermarkResult) -> Path:
         return self._publish("watermark-results", value)
+
+    def publish_provenance_link(self, value: FingerprintProvenanceLink) -> Path:
+        return self._publish("provenance-links", value)
