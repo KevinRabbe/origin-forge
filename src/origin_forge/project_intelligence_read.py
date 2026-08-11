@@ -4,7 +4,10 @@ import json
 from typing import Any
 
 from .ids import IdKind, validate_id
-from .production_read_guard import ensure_production_runtime_readable
+from .production_read_guard import (
+    ensure_production_runtime_readable,
+    production_read_connection,
+)
 from .runtime import OriginForgeRuntime
 
 
@@ -54,11 +57,18 @@ class ProjectIntelligenceReadService:
 
     @property
     def project_id(self) -> str:
-        return self.runtime.project_id()
+        with production_read_connection(self.runtime) as conn:
+            row = conn.execute(
+                "SELECT id FROM projects WHERE root_path = ?",
+                (str(self.runtime.project_root),),
+            ).fetchone()
+        if row is None:
+            raise KeyError(str(self.runtime.project_root))
+        return str(row["id"])
 
     def counts(self) -> dict[str, int]:
         project_id = self.project_id
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             return {
                 "entities": int(
                     conn.execute(
@@ -88,7 +98,7 @@ class ProjectIntelligenceReadService:
 
     def list_entities(self, *, limit: int = 256) -> tuple[dict[str, object], ...]:
         limit = _limit(limit)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             rows = conn.execute(
                 """SELECT id, kind, name, description, status, revision,
                           created_at, updated_at
@@ -113,7 +123,7 @@ class ProjectIntelligenceReadService:
     def get_entity(self, entity_id: str) -> dict[str, object]:
         if not validate_id(entity_id, IdKind.ENTITY):
             raise KeyError(entity_id)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             row = conn.execute(
                 """SELECT id, kind, name, description, status, revision,
                           created_at, updated_at
@@ -135,7 +145,7 @@ class ProjectIntelligenceReadService:
 
     def list_relations(self, *, limit: int = 512) -> tuple[dict[str, object], ...]:
         limit = _limit(limit)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             rows = conn.execute(
                 """SELECT id, source_entity_id, relation_type, target_entity_id,
                           status, revision, rationale, created_at, updated_at
@@ -161,7 +171,7 @@ class ProjectIntelligenceReadService:
 
     def list_bindings(self, *, limit: int = 512) -> tuple[dict[str, object], ...]:
         limit = _limit(limit)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             rows = conn.execute(
                 """SELECT id, entity_id, binding_type, target_ref, target_hash,
                           status, revision, created_at, updated_at
@@ -187,7 +197,7 @@ class ProjectIntelligenceReadService:
 
     def list_design_rules(self, *, limit: int = 256) -> tuple[dict[str, object], ...]:
         limit = _limit(limit)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             rows = conn.execute(
                 """SELECT id, category, title, statement, rationale, authority,
                           scope_entity_ids_json, status, revision, supersedes_rule_id,
@@ -217,7 +227,7 @@ class ProjectIntelligenceReadService:
     def get_design_rule(self, rule_id: str) -> dict[str, object]:
         if not validate_id(rule_id, IdKind.DESIGN_RULE):
             raise KeyError(rule_id)
-        with self.runtime.store.session() as conn:
+        with production_read_connection(self.runtime) as conn:
             row = conn.execute(
                 """SELECT id, category, title, statement, rationale, authority,
                           scope_entity_ids_json, status, revision, supersedes_rule_id,
