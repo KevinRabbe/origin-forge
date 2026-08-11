@@ -41,9 +41,9 @@ Human review / eventual merge
 
 ## Current status
 
-Origin Forge is approaching its **v0.1 First Useful Release**. Phases 0–29 are merged. Phase 30 implements the first full local production cockpit and is in its exact-head closure gate before merge.
+Origin Forge is approaching its **v0.1 First Useful Release**. Phases 0–30 are merged, including the first bounded local production cockpit from Phase 30.
 
-The v0.1 release-readiness work is intentionally stacked after Phase 30. The package version remains `0.1.0.dev0` until the final release gate is satisfied.
+The v0.1 release-readiness work has been re-rooted onto the actual Phase-30 merge commit. The package version remains `0.1.0.dev0` while the release-readiness exact-head Python 3.12/3.13 gate and the explicit version/license/tag decisions remain pending.
 
 ### What exists now
 
