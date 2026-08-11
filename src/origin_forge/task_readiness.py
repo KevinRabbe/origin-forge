@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -68,41 +69,35 @@ _FAILED_PREREQUISITE_STATUSES = frozenset(
 )
 
 
-def resolve_task_dependency_readiness(
-    store: OriginForgeStore,
+def resolve_task_dependency_readiness_connection(
+    conn: sqlite3.Connection,
     task_id: str,
 ) -> TaskDependencyReadiness:
-    """Derive dependency eligibility without mutating durable production state."""
+    task = conn.execute(
+        "SELECT id, status FROM tasks WHERE id = ?",
+        (task_id,),
+    ).fetchone()
+    if task is None:
+        raise KeyError(task_id)
+    try:
+        task_status = TaskStatus(task["status"])
+    except ValueError as exc:
+        raise TaskReadinessError("task has invalid canonical status") from exc
 
-    if not isinstance(store, OriginForgeStore):
-        raise TypeError("store must be an OriginForgeStore")
-
-    with store.session() as conn:
-        task = conn.execute(
-            "SELECT id, status FROM tasks WHERE id = ?",
-            (task_id,),
-        ).fetchone()
-        if task is None:
-            raise KeyError(task_id)
-        try:
-            task_status = TaskStatus(task["status"])
-        except ValueError as exc:
-            raise TaskReadinessError("task has invalid canonical status") from exc
-
-        rows = conn.execute(
-            """SELECT td.required_task_id, td.dependency_type, rt.status,
-                      EXISTS(
-                          SELECT 1 FROM verifications v
-                          WHERE v.target_type = 'TASK'
-                            AND v.target_id = td.required_task_id
-                            AND v.status = 'PASS'
-                      ) AS has_pass
-               FROM task_dependencies td
-               JOIN tasks rt ON rt.id = td.required_task_id
-               WHERE td.task_id = ?
-               ORDER BY td.required_task_id""",
-            (task_id,),
-        ).fetchall()
+    rows = conn.execute(
+        """SELECT td.required_task_id, td.dependency_type, rt.status,
+                  EXISTS(
+                      SELECT 1 FROM verifications v
+                      WHERE v.target_type = 'TASK'
+                        AND v.target_id = td.required_task_id
+                        AND v.status = 'PASS'
+                  ) AS has_pass
+           FROM task_dependencies td
+           JOIN tasks rt ON rt.id = td.required_task_id
+           WHERE td.task_id = ?
+           ORDER BY td.required_task_id""",
+        (task_id,),
+    ).fetchall()
 
     if task_status in _TERMINAL_TASK_STATUSES:
         return TaskDependencyReadiness(
@@ -182,3 +177,15 @@ def resolve_task_dependency_readiness(
         dependency_count=len(rows),
         satisfied_dependency_count=satisfied,
     )
+
+
+def resolve_task_dependency_readiness(
+    store: OriginForgeStore,
+    task_id: str,
+) -> TaskDependencyReadiness:
+    """Derive dependency eligibility without mutating durable production state."""
+
+    if not isinstance(store, OriginForgeStore):
+        raise TypeError("store must be an OriginForgeStore")
+    with store.session() as conn:
+        return resolve_task_dependency_readiness_connection(conn, task_id)
