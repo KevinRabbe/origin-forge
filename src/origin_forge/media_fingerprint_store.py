@@ -12,7 +12,9 @@ from .media_fingerprint_models import (
     WatermarkPlan,
 )
 from .media_fingerprint_provenance import FingerprintProvenanceLink
+from .media_fingerprint_validation import validate_fingerprint_comparison
 from .media_watermark_models import WatermarkResult
+from .provenance_models import ProvenanceManifest
 from .runtime import OriginForgeRuntime
 from .runtime_observation_models import canonical_bytes, content_hash
 
@@ -202,14 +204,34 @@ class MediaFingerprintStore:
     def publish_fingerprint(self, value: MediaFingerprint) -> Path:
         return self._publish("fingerprints", value)
 
-    def publish_comparison(self, value: FingerprintComparison) -> Path:
+    def publish_comparison(
+        self,
+        value: FingerprintComparison,
+        *,
+        left: MediaFingerprint,
+        right: MediaFingerprint,
+    ) -> Path:
+        validate_fingerprint_comparison(value, left, right)
         return self._publish("comparisons", value)
 
     def publish_watermark_plan(self, value: WatermarkPlan) -> Path:
         return self._publish("watermark-plans", value)
 
-    def publish_watermark_result(self, value: WatermarkResult) -> Path:
+    def publish_watermark_result(
+        self,
+        value: WatermarkResult,
+        *,
+        plan: WatermarkPlan,
+    ) -> Path:
+        value.bind_plan(plan)
         return self._publish("watermark-results", value)
 
-    def publish_provenance_link(self, value: FingerprintProvenanceLink) -> Path:
+    def publish_provenance_link(
+        self,
+        value: FingerprintProvenanceLink,
+        *,
+        fingerprint: MediaFingerprint,
+        manifest: ProvenanceManifest,
+    ) -> Path:
+        value.bind(fingerprint, manifest)
         return self._publish("provenance-links", value)
