@@ -433,6 +433,126 @@ ON dispatch_claims(task_id)
 WHERE status = 'ACTIVE';
 """
 
+MIGRATION_009 = r"""
+ALTER TABLE dispatch_claims RENAME TO dispatch_claims_v8;
+
+CREATE TABLE dispatch_claims (
+    claim_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    task_revision INTEGER NOT NULL CHECK (task_revision >= 0),
+    task_content_hash TEXT NOT NULL,
+    work_order_id TEXT NOT NULL,
+    work_order_hash TEXT NOT NULL,
+    work_order_audit_id TEXT NOT NULL,
+    work_order_audit_hash TEXT NOT NULL,
+    input_resolution_id TEXT NOT NULL,
+    input_resolution_hash TEXT NOT NULL,
+    dispatch_binding_id TEXT NOT NULL,
+    dispatch_binding_hash TEXT NOT NULL,
+    binding_audit_id TEXT NOT NULL,
+    binding_audit_hash TEXT NOT NULL,
+    selected_adapter_id TEXT NOT NULL,
+    selected_adapter_fingerprint TEXT NOT NULL,
+    dispatch_contract_id TEXT NOT NULL,
+    dispatch_contract_hash TEXT NOT NULL,
+    binder_id TEXT NOT NULL,
+    binder_fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'RELEASED', 'INTERRUPTED', 'CONSUMED')),
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    terminal_reason TEXT,
+    CHECK (
+        (status = 'ACTIVE' AND terminal_reason IS NULL)
+        OR
+        (status IN ('RELEASED', 'INTERRUPTED', 'CONSUMED') AND terminal_reason IS NOT NULL AND length(terminal_reason) > 0)
+    )
+);
+
+INSERT INTO dispatch_claims(
+    claim_id, project_id, task_id, task_revision, task_content_hash,
+    work_order_id, work_order_hash, work_order_audit_id, work_order_audit_hash,
+    input_resolution_id, input_resolution_hash,
+    dispatch_binding_id, dispatch_binding_hash,
+    binding_audit_id, binding_audit_hash,
+    selected_adapter_id, selected_adapter_fingerprint,
+    dispatch_contract_id, dispatch_contract_hash,
+    binder_id, binder_fingerprint,
+    status, revision, created_at, updated_at, terminal_reason
+)
+SELECT
+    claim_id, project_id, task_id, task_revision, task_content_hash,
+    work_order_id, work_order_hash, work_order_audit_id, work_order_audit_hash,
+    input_resolution_id, input_resolution_hash,
+    dispatch_binding_id, dispatch_binding_hash,
+    binding_audit_id, binding_audit_hash,
+    selected_adapter_id, selected_adapter_fingerprint,
+    dispatch_contract_id, dispatch_contract_hash,
+    binder_id, binder_fingerprint,
+    status, revision, created_at, updated_at, terminal_reason
+FROM dispatch_claims_v8;
+
+DROP TABLE dispatch_claims_v8;
+
+CREATE INDEX idx_dispatch_claims_task_history
+ON dispatch_claims(project_id, task_id, created_at, claim_id);
+
+CREATE INDEX idx_dispatch_claims_binding
+ON dispatch_claims(dispatch_binding_id, created_at, claim_id);
+
+CREATE UNIQUE INDEX idx_dispatch_claims_one_active_per_task
+ON dispatch_claims(task_id)
+WHERE status = 'ACTIVE';
+
+CREATE TABLE dispatch_executions (
+    execution_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    claim_id TEXT NOT NULL UNIQUE REFERENCES dispatch_claims(claim_id) ON DELETE CASCADE,
+    claim_revision_at_start INTEGER NOT NULL CHECK (claim_revision_at_start >= 0),
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    task_revision INTEGER NOT NULL CHECK (task_revision >= 0),
+    task_content_hash TEXT NOT NULL,
+    work_order_id TEXT NOT NULL,
+    work_order_hash TEXT NOT NULL,
+    input_resolution_id TEXT NOT NULL,
+    input_resolution_hash TEXT NOT NULL,
+    dispatch_binding_id TEXT NOT NULL,
+    dispatch_binding_hash TEXT NOT NULL,
+    binding_audit_id TEXT NOT NULL,
+    binding_audit_hash TEXT NOT NULL,
+    selected_adapter_id TEXT NOT NULL,
+    selected_adapter_fingerprint TEXT NOT NULL,
+    dispatch_contract_id TEXT NOT NULL,
+    dispatch_contract_hash TEXT NOT NULL,
+    binder_id TEXT NOT NULL,
+    binder_fingerprint TEXT NOT NULL,
+    execution_owner_id TEXT NOT NULL,
+    execution_owner_fingerprint TEXT NOT NULL,
+    runtime_dependency_plan_hash TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('STARTED', 'RETURNED', 'RAISED', 'INTERRUPTED')),
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    terminal_detail_hash TEXT,
+    CHECK (
+        (status = 'STARTED' AND terminal_detail_hash IS NULL)
+        OR
+        (status IN ('RETURNED', 'RAISED', 'INTERRUPTED') AND terminal_detail_hash IS NOT NULL AND length(terminal_detail_hash) = 64)
+    )
+);
+
+CREATE INDEX idx_dispatch_executions_task_history
+ON dispatch_executions(project_id, task_id, created_at, execution_id);
+
+CREATE INDEX idx_dispatch_executions_status
+ON dispatch_executions(project_id, status, created_at, execution_id);
+
+CREATE UNIQUE INDEX idx_dispatch_executions_one_started_per_task
+ON dispatch_executions(task_id)
+WHERE status = 'STARTED';
+"""
+
 MIGRATIONS = (
     Migration(1, MIGRATION_001),
     Migration(2, MIGRATION_002),
@@ -442,6 +562,7 @@ MIGRATIONS = (
     Migration(6, MIGRATION_006),
     Migration(7, MIGRATION_007),
     Migration(8, MIGRATION_008),
+    Migration(9, MIGRATION_009),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version
