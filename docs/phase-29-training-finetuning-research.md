@@ -1,188 +1,244 @@
 # Phase 29 — Training / Fine-Tuning Research
 
-Status: **IN PROGRESS — offline verified-trajectory research substrate**
+Status: **DONE — governed offline trajectory/dataset/evaluation research substrate**
 
-Phase 29 investigates whether verified Origin Forge trajectories can improve routing, tool use, coding assistance, or infrastructure-native model behavior without allowing production models to rewrite their own weights or allowing a training process to promote itself.
+Phase 29 establishes the data and evaluation boundary required before any real training system can be considered. It does **not** execute gradient training, load candidate checkpoints into production, or allow a trainer/model to promote itself.
 
 ## Core rule
 
 ```text
-verified history → frozen research dataset → independent experiment plan → offline candidate evidence → independent evaluation → STOP
+verified history → trusted redacted producer → eligibility audit → frozen leakage-safe dataset
+        ↓
+independent experiment plan → candidate checkpoint evidence → independent evaluation → STOP
 ```
 
-Training research may create evidence and candidate weight artifacts. It does not change the model profiles used by production execution.
+Training research evidence is not production model authority.
 
-## Why dataset governance comes first
+## v1 identities and objects
 
-The repository already has substantial durable evidence across Goal / Flow / Task / Run, verification, Dream, specialist, media, playtest, simulation and workshop phases. A training system that simply dumps that history into a model would mix:
+Phase 29 adds infrastructure-owned:
 
-- verified and failed work;
-- infrastructure failures and semantic failures;
-- model inputs and privileged infrastructure state;
-- secrets or protected state that should never become training text;
-- near-duplicate attempts that could leak across train/evaluation splits;
-- downstream evaluation evidence that could contaminate the training target;
-- unsupported assumptions about whether a trajectory is actually useful to imitate.
+- `TRAJ-*` — bounded research trajectories;
+- `TRAUD-*` — eligibility audits;
+- `TRDATA-*` — frozen dataset manifests;
+- `TRPLAN-*` — independently frozen experiment/evaluation plans;
+- `TRREP-*` — candidate checkpoint evaluation reports.
 
-Phase 29 therefore starts with immutable **dataset eligibility and split contracts**, not GPU training code.
+The generic model layer can represent success, failure, and infrastructure-failure trajectory outcomes for future research, but the **only producer accepted into durable v1 datasets** is the frozen successful-runtime redaction adapter described below.
 
-## v1 research objects
+## Bounded research-value contract
 
-The initial substrate uses infrastructure-owned immutable objects for:
+A trajectory binds:
 
-- `TrainingTrajectory` — one bounded exact research example assembled from eligible durable evidence;
-- `TrainingDatasetManifest` — a frozen set of trajectory IDs/hashes plus split assignment and dataset-policy identity;
-- `TrainingExperimentPlan` — an independently frozen research hypothesis, base-model identity, dataset binding, method family, resource ceiling and evaluation requirements;
-- `TrainingExperimentReport` — evidence-only result binding candidate checkpoint identity to the plan and independently supplied evaluation metrics.
+- exact project, Task and Run IDs;
+- deterministic leakage-group hash;
+- explicit outcome class;
+- bounded objective label;
+- optional model profile/hash;
+- bounded canonical JSON example;
+- exact typed Task/Run/Verification/Artifact/Decision evidence refs with hashes/revisions/disclosure classes;
+- explicit false authority flags for production training, model activation and Task verification.
 
-All objects are canonical/content-addressed and proposal/evidence only.
+Verified success/failure records require Verification evidence. Source refs are bounded, deduplicated and sorted. Canonical JSON/text limits prevent unbounded transcript or arbitrary binary ingestion through the model contract.
 
-## Trajectory boundary
+## Trusted v1 trajectory producer
 
-A v1 trajectory is **not** an arbitrary transcript dump. It is a bounded typed record that may include only explicitly disclosed research fields such as:
+The only producer trusted for durable v1 datasets is:
 
-- task objective / acceptance criteria;
-- exact selected context or context hashes where permitted;
-- exact model profile/hash used by the recorded Run;
-- bounded model request/response evidence where the upstream contract permits research disclosure;
-- proposed patch/tool/context decision evidence;
-- independent audit / verification outcome;
-- terminal Run / Task outcome;
-- bounded cost metrics;
-- exact source evidence refs/hashes/revisions.
+```text
+origin-forge-runtime-redacted @ 1
+```
 
-It must preserve failure semantics. Infrastructure failure is not relabeled as a bad model answer, and a failed semantic attempt is not silently removed merely because a later retry succeeded.
+Its fingerprint content-addresses the exact projection/redaction contract.
 
-## Eligibility policy
+`build_verified_runtime_trajectory()` accepts only:
 
-Dataset inclusion is infrastructure-owned. A model or trainer cannot mark its own trajectory eligible.
+- a task-scoped Run;
+- Run status `SUCCEEDED`;
+- terminal Task status `SUCCEEDED`;
+- at least one `PASS` Task Verification whose `run_id` equals that exact successful Run.
 
-The v1 policy must fail closed on at least:
+It exports only a stable structural/cost projection:
 
-- nonterminal or mutable source evidence;
-- missing exact hashes/revisions;
-- unverifiable Task/Run ownership;
-- protected/secret evidence classes;
-- explicit `training_allowed = false` evidence;
-- unsupported binary/raw media payloads;
-- oversized fields;
-- malformed UTF-8/control data;
-- unbounded arbitrary filesystem content;
-- candidates whose required independent verification is absent.
+- Task: ID, Flow ID, status, revision, attempt count;
+- Run: ID, Task ID, role, model profile/hash, status, input/output token counts;
+- Verification: ID, target type/ID, verification type, verifier, status, bound Run ID;
+- deterministic Task-based leakage group;
+- a redacted input/target/cost example.
 
-A trajectory may represent success or failure, but the outcome class and verifier evidence remain explicit.
+It deliberately excludes:
 
-## Split integrity and leakage control
+- Task objective text;
+- acceptance criteria and constraints;
+- Verification evidence/metrics payloads;
+- failure text;
+- repository/source content;
+- arbitrary Artifact bytes;
+- secrets/protected state.
 
-Train/validation/test membership is infrastructure-owned and deterministic from frozen grouping keys. Samples that share the same leakage group must remain in one split.
+Tests seed those excluded fields with sentinel secret values and prove they are absent from serialized trajectory evidence.
 
-Leakage grouping should conservatively bind related examples such as:
+Failed attempts are **not exported by the real v1 producer**. The generic trajectory schema preserves failure classes for future research, but widening the trusted producer to failed attempts requires a separately frozen disclosure/outcome policy. The current Task-based leakage-group policy already ensures future attempts for one Task must remain in one split.
 
-- retries/attempts for the same Task;
-- equivalent fixture/case identity;
-- the same source snapshot or benchmark case;
-- derivative examples that would expose the held-out target;
-- paired baseline/candidate trials that must not straddle train/test.
+## Trusted eligibility policy
 
-The model/trainer cannot choose a favorable split.
+The v1 dataset policy is:
 
-## Experiment plan
+```text
+verified-runtime-redacted-v1 @ 1
+```
 
-A `TrainingExperimentPlan` freezes before training:
+Its fingerprint binds:
 
-- exact dataset manifest ID/hash;
-- exact base model profile/hash and tokenizer/runtime identity;
-- method family (for example routing classifier, supervised fine-tune, adapter/LoRA research, or offline distillation);
-- hyperparameter/effective-token/resource ceilings as inert data;
-- exact trainer implementation/version/fingerprint if a trainer is later introduced;
-- required independent evaluation suite IDs/hashes;
-- acceptance thresholds and regression ceilings;
-- checkpoint byte/count limits;
-- whether raw candidate weights may be retained at all.
+- the exact trusted producer ID/version/fingerprint;
+- protected evidence as ineligible;
+- no production-training authority.
 
-The candidate does not define its own acceptance criteria after seeing evaluation results.
+`GovernedTrainingEligibilityAudit` recomputes eligibility from the trajectory. It adds `untrusted-producer` for generic/manual trajectories or producer identity/fingerprint drift, and `protected-evidence` for protected refs.
 
-## Candidate checkpoint boundary
+A forged `eligible=true` audit fails revalidation. Policy identity/fingerprint and trusted-producer metadata are also revalidated.
 
-Any future trained checkpoint is a **research artifact**, not an active Origin Forge model.
+Generic/manual `TrainingTrajectory` and generic audit objects may exist as inert research records, but the durable v1 dataset store rejects them even when their self-declared disclosure flags look clean.
 
-A checkpoint record must bind:
+## Deterministic leakage-safe dataset splitting
 
-- exact experiment plan;
-- exact base model;
-- exact dataset;
-- exact trainer identity;
-- exact checkpoint/content hash;
-- resource/training metrics;
-- independent evaluation evidence.
+`TrainingDatasetManifest` contains exact trajectory/audit IDs and hashes, leakage groups and infrastructure-assigned splits.
 
-It has no `ModelProfile` activation, routing, production loader, Task completion, signing, merge or release authority.
+Split assignment is deterministic from:
 
-## Independent evaluation
+- frozen split-salt hash;
+- leakage-group hash;
+- exact `80-10-10-v1` split policy.
 
-Training success cannot be measured by training loss alone. Evaluation must be separate from the trainer and regression-dominant.
+The caller cannot choose the split. Every member of one leakage group deterministically maps to the same train/validation/test split. Caller-forged split changes fail at the model boundary, and durable publication reconstructs the dataset from the supplied trajectories/audits before accepting it.
 
-Depending on the research family, metrics may include:
+Durable v1 dataset publication additionally requires:
 
-- frozen task/case success;
-- verifier/audit pass rate;
-- critical failure rate;
-- tool-selection precision/recall;
-- context sufficiency / irrelevant-context rate;
-- model calls and token cost;
-- wall time/resource cost;
-- held-out leakage checks;
-- baseline-vs-candidate regressions.
+- every trajectory is a trusted `GovernedTrainingTrajectory` from the exact redacted runtime producer;
+- every audit is a `GovernedTrainingEligibilityAudit`;
+- exact v1 eligibility-policy identity/fingerprint;
+- every audit is eligible and rebinds to its trajectory;
+- reconstructed dataset entries exactly match the supplied manifest.
 
-The trainer/candidate may emit metrics, but those metrics never self-certify promotion.
+## Frozen experiment plan
+
+`TrainingExperimentPlan` freezes **before candidate evaluation**:
+
+- exact dataset ID/hash;
+- exact base model profile/hash;
+- tokenizer hash;
+- method family (`ROUTING_CLASSIFIER`, `SUPERVISED_FINETUNE`, `ADAPTER_LORA`, or `OFFLINE_DISTILLATION`);
+- trainer ID/version/fingerprint;
+- independent evaluator ID/version/fingerprint;
+- evaluation-suite ID/hash;
+- maximum training tokens;
+- maximum wall time;
+- maximum candidate-checkpoint bytes;
+- regression/acceptance thresholds.
+
+These are inert research commitments. The presence of trainer identity does not mean a trainer is wired or executable in v1.
+
+## Candidate report and independent evaluation
+
+`TrainingExperimentReport` stores only candidate **checkpoint hash/size** plus independently supplied baseline/candidate evaluation observations and the exact evaluator identity from the frozen plan.
+
+The report recomputes regression-dominant classification over:
+
+- success;
+- quality;
+- critical failures;
+- model calls;
+- input/output tokens;
+- wall time.
+
+A quality/success regression or cost/critical-failure increase beyond the frozen plan dominates efficiency gains. Forged verdicts, evaluator drift, plan drift and checkpoint-size violations fail closed.
+
+Training loss is explicitly **not** promotion evidence. `TRREP-*` records no checkpoint bytes and provides no loader or activation surface.
+
+## Immutable persistence
+
+`.origin-forge/training-research/` provides protected immutable categories for:
+
+- trajectories;
+- eligibility audits;
+- datasets;
+- experiment plans;
+- experiment reports.
+
+The store enforces:
+
+- protected-root containment;
+- symlink/alias rejection;
+- no overwrite;
+- strict UTF-8 JSON and duplicate-key rejection;
+- object-count/byte limits;
+- canonical bytes/content-hash revalidation;
+- trajectory↔audit revalidation;
+- trusted-producer/policy enforcement for durable datasets;
+- dataset reconstruction before publication;
+- plan↔dataset binding;
+- report↔plan/evaluator/classification revalidation.
+
+## Read-only operator surface
+
+`python -m origin_forge.training_research_cli` exposes only:
+
+- `status`;
+- list commands for the five immutable evidence categories;
+- corresponding `*-show` commands.
+
+`status` exposes the exact trusted producer and eligibility-policy fingerprints and reports all of the following false:
+
+- dataset build;
+- arbitrary-path ingestion;
+- training execution;
+- model download;
+- checkpoint loading;
+- model-profile mutation;
+- routing activation;
+- secret export;
+- production Task mutation;
+- Phase-26 promotion;
+- provenance signing;
+- merge/release.
+
+There is no `train`, `finetune`, `distill`, ingestion, model-download, checkpoint-load, activation, Task, promotion, signing, merge or release command.
 
 ## Relationship to Phase 15 and Phase 26
 
-Phase-15 Dream consolidation remains symbolic/offline memory and proposal generation. It does not become gradient training.
+Phase-15 Dream remains symbolic/offline memory consolidation and candidate generation. It is not gradient training.
 
-Phase-26 Workshop may eventually receive a bounded `MODEL_CANDIDATE` research proposal only after Phase 29 has a trusted evaluator family. Phase 29 v1 does **not** add such a promotion-capable evaluator and does not activate candidate weights.
+Phase-26 Workshop gains no trusted model-candidate evaluator or activation path from Phase 29 v1. A future trained model candidate would require a separately governed evaluator family and explicit model-profile activation authority outside this research substrate.
 
-## Persistence and operator surface
+## Why v1 deliberately stops before training
 
-Research manifests/plans/reports must use protected immutable no-overwrite persistence with canonical/hash/source-reference revalidation and read-only inspection.
+The roadmap phase is research, and the safety-critical prerequisite is proving dataset/evaluation governance before spending GPU resources or creating active weight artifacts. Phase 29 therefore stops at a reproducible research contract that can describe a candidate checkpoint by hash and independently evaluate it.
 
-No v1 CLI may expose:
+A future training backend must be separately justified and must preserve:
 
-- `train` / `finetune` / `distill` execution;
-- arbitrary dataset path ingestion;
-- arbitrary model download;
-- production model/profile replacement;
-- route activation;
-- secret/token export;
-- Task completion/verification;
-- signing/merge/release.
+```text
+trainer authority  ≠ evaluator authority
+research checkpoint ≠ active ModelProfile
+training loss       ≠ promotion evidence
+```
 
-## Initial implementation checkpoints
-
-1. immutable IDs/models for trajectory, dataset manifest, experiment plan and report;
-2. bounded explicit research-value schema with strict text/JSON/resource limits;
-3. deterministic leakage-group-preserving split assignment;
-4. eligibility/audit contract that cannot be set by the model/trainer;
-5. protected immutable research persistence and read-only inspection;
-6. at least one real adapter from existing terminal Run/Task/Verification evidence into a bounded trajectory, with protected fields excluded;
-7. adversarial tests for source drift, split leakage, forged eligibility, duplicate evidence, dataset drift and self-reported promotion;
-8. offline experiment-report comparison contract with independent evaluator identity and regression-dominant semantics;
-9. no production weight-loading or training execution until the dataset/evaluation substrate is separately proven useful;
-10. exact-head Python 3.12/3.13 CI before canonical roadmap closure.
+No arbitrary training shell/process, external dataset path ingestion, internet model/dataset download, raw secret export, or production checkpoint loader exists in v1.
 
 ## Explicit v1 exclusions
 
 Not implemented or authorized:
 
 - production model self-training;
-- live online gradient updates;
-- automatic LoRA/checkpoint loading;
+- live/online gradient updates;
+- actual fine-tuning/LoRA/distillation process execution;
+- automatic checkpoint/LoRA loading;
 - automatic model-profile/routing replacement;
 - arbitrary training shell/process execution;
 - arbitrary external dataset ingestion;
 - internet model/dataset download;
 - secret/private-key/token inclusion in datasets;
-- training on protected raw project state by default;
+- raw protected project-state training by default;
+- trusted failed-attempt export;
 - trainer-defined acceptance criteria;
 - training-loss-only promotion;
 - automatic Phase-26 promotion;
@@ -190,6 +246,16 @@ Not implemented or authorized:
 - provenance signing;
 - merge/release authority.
 
-## Initial exit condition
+## v1 exit condition
 
-Phase 29 v1 is complete when one immutable repository head proves that Origin Forge can construct and persist bounded exact verified-trajectory research data, deterministically create leakage-safe frozen dataset splits, freeze independent experiment/evaluation requirements, and retain candidate training results only as non-production research evidence without adding a path for models or trainers to rewrite active weights, routing, production truth, or release state.
+Phase 29 v1 is complete when one immutable repository head proves on Python 3.12 and 3.13 that Origin Forge can:
+
+1. construct a bounded trusted redacted research trajectory only from a successful terminal Task/Run with PASS Verification bound to that exact Run;
+2. exclude protected/raw Task/Verification/repository content from that producer contract;
+3. independently audit producer trust and disclosure eligibility;
+4. deterministically assign leakage-group-preserving train/validation/test splits;
+5. persist only governed eligible trajectories into durable v1 datasets with source/policy revalidation;
+6. freeze exact base-model, tokenizer, trainer, evaluator, evaluation-suite, resource and acceptance identities before candidate evaluation;
+7. represent candidate checkpoint results by bounded hash/size evidence and recompute regression-dominant independent evaluation verdicts;
+8. persist/reconstruct the full research evidence chain and inspect it read-only; and
+9. keep training execution, checkpoint loading, production model/routing mutation, Task authority, Phase-26 promotion, signing, merge and release outside Phase 29.
