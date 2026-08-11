@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from origin_forge.media_fingerprint_models import (
     FingerprintComparison,
+    FingerprintComparisonOutcome,
     FingerprintMediaClass,
+    MediaFingerprintModelError,
     WatermarkMutationClass,
     WatermarkPlan,
     WatermarkRobustnessClass,
@@ -60,7 +63,12 @@ class MediaFingerprintStoreTests(unittest.TestCase):
         published = (
             ("fingerprints", left.fingerprint_id, left.content_hash, self.store.publish_fingerprint(left)),
             ("fingerprints", right.fingerprint_id, right.content_hash, self.store.publish_fingerprint(right)),
-            ("comparisons", comparison.comparison_id, comparison.content_hash, self.store.publish_comparison(comparison)),
+            (
+                "comparisons",
+                comparison.comparison_id,
+                comparison.content_hash,
+                self.store.publish_comparison(comparison, left=left, right=right),
+            ),
             ("watermark-plans", plan.plan_id, plan.content_hash, self.store.publish_watermark_plan(plan)),
         )
         for category, object_id, expected_hash, path in published:
@@ -68,6 +76,14 @@ class MediaFingerprintStoreTests(unittest.TestCase):
             envelope = self.store.load(category, object_id)
             self.assertEqual(envelope["content_hash"], expected_hash)
             self.assertEqual(envelope["object_id"], object_id)
+
+    def test_forged_comparison_classification_is_rejected_before_persistence(self) -> None:
+        left, right, comparison, _ = self._objects()
+        self.assertIs(comparison.outcome, FingerprintComparisonOutcome.EXACT_MATCH)
+        forged = replace(comparison, outcome=FingerprintComparisonOutcome.DIFFERENT)
+        with self.assertRaisesRegex(MediaFingerprintModelError, "classification is inconsistent"):
+            self.store.publish_comparison(forged, left=left, right=right)
+        self.assertEqual(self.store.list_objects("comparisons"), ())
 
     def test_no_overwrite_and_tamper_detection(self) -> None:
         left, *_ = self._objects()
@@ -99,9 +115,9 @@ class MediaFingerprintStoreTests(unittest.TestCase):
             self.store.publish_fingerprint(left)
 
     def test_listing_revalidates_objects(self) -> None:
-        left, _, comparison, _ = self._objects()
+        left, right, comparison, _ = self._objects()
         self.store.publish_fingerprint(left)
-        self.store.publish_comparison(comparison)
+        self.store.publish_comparison(comparison, left=left, right=right)
         self.assertEqual(
             self.store.list_objects("fingerprints")[0]["content_hash"],
             left.content_hash,
