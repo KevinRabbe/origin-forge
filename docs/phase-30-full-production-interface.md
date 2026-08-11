@@ -28,12 +28,13 @@ The interface may summarize, navigate, and explain existing state. It does not b
 - explicit total counts and truncation evidence;
 - causal Decision → Change → Artifact → Artifact Verification navigation;
 - Task → Run / Verification / Change relationships;
-- no Verification evidence/metrics, approved command arrays, arbitrary SQL, or raw store rows;
+- dedicated immutable SQLite readers rather than the normal store open/migrate path;
+- no Verification evidence/metrics, approved command arrays, arbitrary SQL from the operator/model, or raw store rows;
 - Artifact metadata only in v1; arbitrary Artifact file bytes are not previewed or served.
 
 ### Project Intelligence and Design Bible
 
-- SELECT-only bounded Entity, relation, binding, and Design Rule projections;
+- SELECT-only bounded Entity, relation, binding, and Design Rule projections through the same immutable SQLite read boundary;
 - Entity detail pages with related relations, bindings, and scoped Design Rules;
 - relation evidence refs and binding metadata remain withheld;
 - the cockpit does not expose the mutable Phase-17 service as a UI authority surface.
@@ -41,6 +42,7 @@ The interface may summarize, navigate, and explain existing state. It does not b
 ### Model and resource monitor
 
 - protected config version, configured capacity, model profiles, selection policies, and admission state;
+- the config must already exist as a contained non-symlink file; inspection never creates a default config;
 - inspection uses fresh process-local scheduling state with zero resource leases;
 - opening the cockpit does not load a model, acquire a lease, invoke a runtime loader, or change routing.
 
@@ -68,9 +70,11 @@ The interface may summarize, navigate, and explain existing state. It does not b
 - fixed route set only; query strings, fragments, absolute request targets, traversal, and malformed typed IDs fail closed;
 - loopback-only `127.0.0.1` HTTP bind;
 - no arbitrary static/project file serving;
-- every non-GET method returns 405;
+- the router rejects every non-GET request; the explicitly wired POST/PUT/PATCH/DELETE handlers return 405 and unsupported HTTP methods remain non-mutating;
 - fresh bounded snapshot per request;
-- response byte ceiling and `no-store`, `nosniff`, frame/referrer security headers.
+- conservative server-specific row limits plus a 4 MiB response/page ceiling;
+- renderer overflow fails closed as a controlled 500;
+- `no-store`, `nosniff`, frame/referrer security headers.
 
 ### Operator surface
 
@@ -83,12 +87,25 @@ There is no host override, browser launch, model/tool/process execution command,
 
 ## Read-side mutation boundary
 
-A read-only UI must also be non-mutating merely by opening it. Phase 30 therefore does not reuse store listing methods that create directories as a side effect. Dedicated provenance and Dream readers treat absent registries as empty and validate every existing registry path component before reading it.
+A read-only UI must also be non-mutating merely by opening it. The normal `OriginForgeStore.open()/session()` path is authoritative runtime infrastructure: it may create the SQLite database, configure WAL mode, and apply migrations. Phase 30 therefore does **not** use that path for cockpit database reads.
+
+Before any DB-backed projection, Phase 30 requires:
+
+- an already-existing contained `.origin-forge/config.toml`;
+- an already-existing contained non-symlink `project.db`;
+- the exact current schema version;
+- the exact project row for the repository root;
+- no active `-wal`, `-shm`, or rollback-journal sidecar.
+
+It then opens SQLite with read-only immutable semantics and `query_only`. If the DB file changes during that bounded inspection, the read fails closed. Stale-schema state is never auto-migrated by the cockpit; an authoritative runtime path must migrate it first. Active journal state is likewise rejected rather than read through a side-effectful SQLite path.
+
+Dedicated provenance and Dream readers separately treat absent optional registries as empty and validate every existing registry path component before reading it.
 
 ```text
-missing optional registry → empty view
-corrupt / aliased registry → fail closed
-valid registry → bounded validated projection
+uninitialized / stale / actively-written core state → fail closed, no creation or migration
+missing optional provenance/Dream registry          → empty view
+corrupt / aliased optional registry                 → fail closed
+valid quiescent state                               → bounded validated projection
 ```
 
 ## Authority boundary
@@ -115,9 +132,10 @@ Phase 30 v1 is complete when one immutable repository head proves that Origin Fo
 5. expose model/resource configuration and admission state without model loading or leasing;
 6. inspect public provenance without registry creation, secret access, signature-trust claims, or Artifact-currentness claims;
 7. inspect Dream/memory generations without registry creation, automatic promotion, or production mutation;
-8. keep Artifact bytes and Verification evidence/metrics outside the v1 presentation surface;
-9. expose only fixed GET routes and the `snapshot` / `serve` operator commands;
-10. preserve all existing Task, adoption, signing, promotion, merge, and release authority boundaries;
-11. pass the normal Python 3.12 and 3.13 matrix on the exact immutable closure head with unrelated heavyweight evidence workflows skipped.
+8. inspect core SQLite state without creating config/database/journal files or applying migrations, and fail closed on stale/active journal state;
+9. keep Artifact bytes and Verification evidence/metrics outside the v1 presentation surface;
+10. expose only fixed read routes and the `snapshot` / `serve` operator commands;
+11. preserve all existing Task, adoption, signing, promotion, merge, and release authority boundaries;
+12. pass the normal Python 3.12 and 3.13 matrix on the exact immutable closure head with unrelated heavyweight evidence workflows skipped.
 
-Artifact-byte/media preview rendering, mutation workflows, production approvals, and remote/multi-user hosting remain separate future capabilities rather than implicit authority added by Phase 30 v1.
+Artifact-byte/media preview rendering, mutation workflows, production approvals, live-database multi-reader coordination, and remote/multi-user hosting remain separate future capabilities rather than implicit authority added by Phase 30 v1.
