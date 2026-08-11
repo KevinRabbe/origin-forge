@@ -26,7 +26,7 @@ class PhaseSpecificResolverReviewStatus(StrEnum):
     SUPPORTED = "SUPPORTED"
     DEFERRED_NO_TYPED_READER = "DEFERRED_NO_TYPED_READER"
     DEFERRED_NO_TYPED_ID = "DEFERRED_NO_TYPED_ID"
-    DEFERRED_READER_MUTATES = "DEFERRED_READER_MUTATES"
+    DEFERRED_NO_EXACT_CLAIM = "DEFERRED_NO_EXACT_CLAIM"
 
 
 @dataclass(frozen=True)
@@ -165,8 +165,8 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
         ),
         PhaseSpecificResolverReview(
             "phase-specific-evidence",
-            PhaseSpecificResolverReviewStatus.DEFERRED_READER_MUTATES,
-            "generic phase evidence is not a wildcard escape hatch; reviewed media-fingerprint storage lacks the required non-creating generic read boundary",
+            PhaseSpecificResolverReviewStatus.DEFERRED_NO_EXACT_CLAIM,
+            "PHASE_SPECIFIC_EVIDENCE is not a wildcard escape hatch; no reviewed v1 family has both an exact prefix/role claim and a required non-creating generic reader",
         ),
     )
     return tuple(sorted(rows, key=lambda value: value.evidence_family))
