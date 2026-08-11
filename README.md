@@ -41,9 +41,9 @@ Human review / eventual merge
 
 ## Current status
 
-Origin Forge is approaching its **v0.1 First Useful Release**. Phases 0–30 are merged, including the first bounded local production cockpit from Phase 30.
+Origin Forge is at its **v0.1.0 First Useful Release candidate**. Phases 0–30 are merged, including the first bounded local production cockpit from Phase 30, and the release-readiness packaging/entrypoint matrix passed on Python 3.12 and 3.13 before merge.
 
-The v0.1 release-readiness work has been re-rooted onto the actual Phase-30 merge commit. The package version remains `0.1.0.dev0` while the release-readiness exact-head Python 3.12/3.13 gate and the explicit version/license/tag decisions remain pending.
+The final release candidate sets package version `0.1.0` and adopts the Apache License 2.0. The `v0.1.0` tag remains downstream of exact-head Python 3.12/3.13 CI, clean review/thread state, and SHA-guarded merge of the final release candidate.
 
 ### What exists now
 
@@ -112,17 +112,14 @@ See the [v0.1 operator guide](docs/v0.1-operator-guide.md) for the installed com
 
 ## v0.1 release gate
 
-A v0.1 release requires, at minimum:
+The Phase-30 and release-readiness implementation/packaging gates are complete. The final `v0.1.0` release requires:
 
-- Phase 30 merged from an exact immutable Python 3.12/3.13 green head;
-- release packaging/entrypoint tests green on top of that merge;
-- README and release metadata synchronized to the merged tree;
-- a deliberate license decision before any public distribution that requires one;
-- a final tagged release commit with no unresolved review/CI failures.
+- exact-head Python 3.12 and Python 3.13 green CI on the final version/license candidate;
+- no unresolved review or CI failures on that exact head;
+- SHA-guarded merge of the final candidate;
+- a `v0.1.0` tag bound to the exact reviewed/tested merge commit.
 
-Until those gates are satisfied, `0.1.0.dev0` is intentional.
-
-See the [v0.1 release-readiness contract](docs/v0.1-release-readiness.md), [v0.1 acceptance matrix](docs/v0.1-acceptance-matrix.md), and [changelog](CHANGELOG.md) for the explicit pre-release boundary.
+See the [v0.1 release-readiness contract](docs/v0.1-release-readiness.md), [v0.1 acceptance matrix](docs/v0.1-acceptance-matrix.md), and [changelog](CHANGELOG.md) for the explicit release boundary.
 
 ## Documentation
 
@@ -174,4 +171,4 @@ Complexity by itself is not progress.
 
 ## License
 
-No license has been selected yet. Licensing is a deliberate release decision and is not inferred by the codebase.
+Origin Forge is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).

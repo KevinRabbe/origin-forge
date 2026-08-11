@@ -23,9 +23,11 @@ class ReleasePackagingTests(unittest.TestCase):
             config = tomllib.load(handle)
 
         project = config["project"]
+        self.assertEqual(config["build-system"]["requires"], ["setuptools>=68"])
         self.assertEqual(project["name"], "origin-forge")
-        self.assertEqual(project["version"], "0.1.0.dev0")
+        self.assertEqual(project["version"], "0.1.0")
         self.assertEqual(project["readme"], "README.md")
+        self.assertEqual(project["license"], {"file": "LICENSE"})
         self.assertEqual(project["requires-python"], ">=3.12")
         self.assertEqual(
             project["scripts"],
@@ -35,6 +37,11 @@ class ReleasePackagingTests(unittest.TestCase):
                 "origin-forge-cockpit": "origin_forge.production_interface_cli:main",
             },
         )
+
+        license_text = (root / "LICENSE").read_text(encoding="utf-8")
+        self.assertTrue(license_text.startswith("Apache License\n"))
+        self.assertIn("Version 2.0, January 2004", license_text)
+        self.assertIn("END OF TERMS AND CONDITIONS", license_text)
 
     def test_attempt_entrypoint_is_one_bounded_context_selected_attempt(self) -> None:
         parser = build_attempt_parser()

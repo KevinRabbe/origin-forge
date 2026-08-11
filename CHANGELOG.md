@@ -2,11 +2,11 @@
 
 All notable release-level changes to Origin Forge are summarized here. Detailed architecture and per-phase evidence remain in `docs/` and the canonical roadmap.
 
-## [Unreleased] — v0.1
+## [0.1.0] — 2026-08-11
 
 ### Release boundary
 
-Origin Forge v0.1 is the first useful local production-infrastructure release. It is built around durable verified state, replaceable models, deterministic verification, explicit capability boundaries, and causal/provenance evidence rather than long-lived conversation state.
+Origin Forge v0.1.0 is the first useful local production-infrastructure release. It is built around durable verified state, replaceable models, deterministic verification, explicit capability boundaries, and causal/provenance evidence rather than long-lived conversation state.
 
 ### Included
 
@@ -20,7 +20,8 @@ Origin Forge v0.1 is the first useful local production-infrastructure release. I
 - governed 2D, 3D, image/vision, audio, runtime-observation, playtesting, and simulation layers;
 - Dream/memory consolidation and governed improvement/research substrates;
 - read-only local production cockpit over runtime state, causal history, Project Intelligence, model/resource configuration, provenance, and Dream/memory state;
-- installed `origin-forge` control-plane, `origin-forge-attempt` single bounded coding-attempt, and `origin-forge-cockpit` read-only inspection entrypoints.
+- installed `origin-forge` control-plane, `origin-forge-attempt` single bounded coding-attempt, and `origin-forge-cockpit` read-only inspection entrypoints;
+- Apache License 2.0 distribution license.
 
 ### Deliberately excluded
 
@@ -34,6 +35,6 @@ Origin Forge v0.1 is the first useful local production-infrastructure release. I
 - arbitrary Artifact-byte/media preview serving;
 - production checkpoint/model activation or live self-training.
 
-### Pre-release gates
+### Release proof
 
-The release remains `0.1.0.dev0` until Phase 30 is merged from an exact Python 3.12/3.13 green head, release-packaging CI is green on the merged mainline, documentation is synchronized, the license decision is explicit, and the release tag is bound to the exact reviewed/tested commit.
+Phase 30 and release-readiness packaging both passed exact-head Python 3.12/3.13 matrices before their SHA-guarded merges. The final `0.1.0` version/license candidate must pass its own exact-head Python 3.12/3.13 matrix with clean review/thread state before merge. The `v0.1.0` tag is created only after that merge and must point to the exact reviewed/tested release commit.
