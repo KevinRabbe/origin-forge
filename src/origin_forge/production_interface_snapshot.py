@@ -38,6 +38,15 @@ def _section_limit(limit: int) -> int:
     return limit
 
 
+def _catalog_limit(limit: int, maximum: int, label: str) -> int:
+    normalized = _section_limit(limit)
+    if normalized > maximum:
+        raise ProductionInterfaceSnapshotError(
+            f"{label} limit must be 1..{maximum}"
+        )
+    return normalized
+
+
 def _limit_rows(
     rows: Iterable[dict[str, Any]], limit: int
 ) -> tuple[tuple[dict[str, Any], ...], bool]:
@@ -405,48 +414,29 @@ def build_production_interface_snapshot(
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
 
-    values = (
-        max_goals,
-        max_flows,
-        max_tasks,
-        max_runs,
-        max_verifications,
-        max_entities,
-        max_entity_relations,
-        max_entity_bindings,
-        max_design_rules,
-        max_decisions,
-        max_changes,
-        max_artifacts,
-        max_artifact_verifications,
-        max_provenance_manifests,
-        max_dream_manifests,
-        max_dream_candidates,
-        max_dream_audits,
-        max_memory_entries,
-        max_memory_generations,
+    max_goals = _section_limit(max_goals)
+    max_flows = _section_limit(max_flows)
+    max_tasks = _section_limit(max_tasks)
+    max_runs = _section_limit(max_runs)
+    max_verifications = _section_limit(max_verifications)
+    max_entities = _section_limit(max_entities)
+    max_entity_relations = _section_limit(max_entity_relations)
+    max_entity_bindings = _section_limit(max_entity_bindings)
+    max_design_rules = _section_limit(max_design_rules)
+    max_decisions = _section_limit(max_decisions)
+    max_changes = _section_limit(max_changes)
+    max_artifacts = _section_limit(max_artifacts)
+    max_artifact_verifications = _section_limit(max_artifact_verifications)
+    max_provenance_manifests = _catalog_limit(
+        max_provenance_manifests, 8192, "provenance manifest"
     )
-    (
-        max_goals,
-        max_flows,
-        max_tasks,
-        max_runs,
-        max_verifications,
-        max_entities,
-        max_entity_relations,
-        max_entity_bindings,
-        max_design_rules,
-        max_decisions,
-        max_changes,
-        max_artifacts,
-        max_artifact_verifications,
-        max_provenance_manifests,
-        max_dream_manifests,
-        max_dream_candidates,
-        max_dream_audits,
-        max_memory_entries,
-        max_memory_generations,
-    ) = tuple(_section_limit(value) for value in values)
+    max_dream_manifests = _catalog_limit(max_dream_manifests, 1024, "Dream manifest")
+    max_dream_candidates = _catalog_limit(max_dream_candidates, 8192, "Dream candidate")
+    max_dream_audits = _catalog_limit(max_dream_audits, 10_000, "Dream audit")
+    max_memory_entries = _catalog_limit(max_memory_entries, 4096, "memory entry")
+    max_memory_generations = _catalog_limit(
+        max_memory_generations, 2048, "memory generation"
+    )
 
     raw_goals = tuple(runtime.list_goals(limit=max_goals + 1))
     raw_flows = tuple(runtime.list_flows(limit=max_flows + 1))
@@ -514,7 +504,7 @@ def build_production_interface_snapshot(
         "cryptographic_trust_verified_by_cockpit": False,
         "artifact_currentness_verified_by_cockpit": False,
         "artifact_bytes_read": False,
-        "private_keys_stored_or_read": False,
+        "secret_key_material_read": False,
     }
 
     dream_reader = DreamReadService(runtime)
