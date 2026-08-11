@@ -99,6 +99,7 @@ class ProductionCapabilityReadTests(unittest.TestCase):
     def test_read_objects_and_task_route_leave_database_and_evidence_bytes_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             runtime, task, catalog, policy, decision = self._fixture(temp)
+            authoritative = resolve_task_route(runtime.store, task, catalog, policy)
             database = runtime.store.db_path
             files = sorted(
                 (runtime.state_dir / "production-capabilities").rglob("*.json")
@@ -116,7 +117,6 @@ class ProductionCapabilityReadTests(unittest.TestCase):
                 catalog.catalog_id,
                 policy.routing_policy_id,
             )
-            authoritative = resolve_task_route(runtime.store, task, catalog, policy)
 
             self.assertEqual(loaded_catalog.to_dict(), catalog.to_dict())
             self.assertEqual(loaded_policy.to_dict(), policy.to_dict())
