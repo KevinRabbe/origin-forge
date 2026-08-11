@@ -34,7 +34,7 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 7)
+            self.assertEqual(SCHEMA_VERSION, 8)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -71,6 +71,14 @@ class MigrationTests(unittest.TestCase):
                     )
                     for row in upgraded.execute(f"PRAGMA index_list({table})")
                 }
+                dispatch_claim_columns = {
+                    row["name"]
+                    for row in upgraded.execute("PRAGMA table_info(dispatch_claims)")
+                }
+                dispatch_claim_indexes = {
+                    row["name"]
+                    for row in upgraded.execute("PRAGMA index_list(dispatch_claims)")
+                }
             self.assertIn("revision", workspace_columns)
             self.assertIn("base_commit", workspace_columns)
             for table in (
@@ -83,6 +91,7 @@ class MigrationTests(unittest.TestCase):
                 "plan_proposals",
                 "plan_audits",
                 "plan_materializations",
+                "dispatch_claims",
             ):
                 self.assertIn(table, tables)
             self.assertIn("idx_entity_relations_active_unique", relation_indexes)
@@ -101,6 +110,23 @@ class MigrationTests(unittest.TestCase):
                 "idx_plan_materializations_goal",
             ):
                 self.assertIn(index, planning_indexes)
+            self.assertTrue(
+                {
+                    "claim_id",
+                    "project_id",
+                    "task_id",
+                    "task_revision",
+                    "task_content_hash",
+                    "dispatch_binding_id",
+                    "binding_audit_id",
+                    "status",
+                    "revision",
+                    "terminal_reason",
+                }.issubset(dispatch_claim_columns)
+            )
+            self.assertIn("idx_dispatch_claims_task_history", dispatch_claim_indexes)
+            self.assertIn("idx_dispatch_claims_binding", dispatch_claim_indexes)
+            self.assertIn("idx_dispatch_claims_one_active_per_task", dispatch_claim_indexes)
 
 
 if __name__ == "__main__":

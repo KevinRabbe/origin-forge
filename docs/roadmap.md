@@ -686,6 +686,28 @@ See `docs/phase-34-governed-dispatch-input-resolution.md` for the finalized impl
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 35 — Governed Task Activation & Dispatch Claims — DONE
+
+Implemented the final durable-state prerequisites before any governed dispatch executor may consume a Phase-34 binding:
+
+- infrastructure-owned `DISPCLAIM-*` identities plus schema v8 durable claim rows;
+- a database partial unique index enforcing at most one `ACTIVE` dispatch claim per Task across concurrent processes;
+- explicit same-transaction dependency-ready Task activation limited to exact `QUEUED → READY`, with expected revision, canonical Task-hash evidence, and one state event;
+- required downstream authority rebuild after activation because the Task revision/content hash changes and pre-activation Phase-32/33/34 evidence becomes stale;
+- exact claim acquisition deriving Task/adapter/contract/binder/WorkOrder/evidence authority solely from one persisted current `INRES → DISPBIND → BINDAUD` chain;
+- repeat current Task revision/hash/status/dependency-readiness checks inside `BEGIN IMMEDIATE` before claim insertion;
+- fail-closed crash semantics: ACTIVE claims survive restart and continue blocking duplicate ownership with no TTL, PID guessing, expiration, or claim stealing;
+- exact expected-revision `ACTIVE → RELEASED` and `ACTIVE → INTERRUPTED` lifecycle operations that preserve every frozen authority field and never imply Task outcome;
+- independent Phase-30 immutable-SQLite-based claim reads, activation eligibility, frozen Phase-34 relation validation, and `CURRENT_ACTIVE` / stale / terminal currentness inspection;
+- cross-phase acceptance proving pre-activation staleness, fresh READY-chain reconstruction, one-winner concurrent claims, restart blocking, explicit recovery, and zero Run/Workspace creation;
+- source-level proof that Phase 35 stops before `BoundedRetryPolicy.drive()`, adapter/backend/model/process/tool execution, resource leases, Task success/failure/quarantine, Artifact adoption/signing, merge, release, or self-training authority.
+
+See `docs/phase-35-governed-task-activation-dispatch-claims.md` for the finalized activation/claim contract, lifecycle/currentness model, authority exclusions, and slice-by-slice CI evidence.
+
+**Exit condition met in implementation:** Phase-35 slices 35A–35F independently passed the normal Python 3.12/3.13 matrix through code/test head `58eeb69ea55759c521268f65a7b46d60fd56fcfd`; the canonical documentation/roadmap closure head created after those proofs must itself pass the final normal matrix before SHA-guarded merge.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release

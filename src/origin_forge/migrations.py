@@ -387,6 +387,52 @@ CREATE INDEX idx_plan_materializations_goal
 ON plan_materializations(goal_id, created_at, materialization_id);
 """
 
+MIGRATION_008 = r"""
+CREATE TABLE dispatch_claims (
+    claim_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    task_revision INTEGER NOT NULL CHECK (task_revision >= 0),
+    task_content_hash TEXT NOT NULL,
+    work_order_id TEXT NOT NULL,
+    work_order_hash TEXT NOT NULL,
+    work_order_audit_id TEXT NOT NULL,
+    work_order_audit_hash TEXT NOT NULL,
+    input_resolution_id TEXT NOT NULL,
+    input_resolution_hash TEXT NOT NULL,
+    dispatch_binding_id TEXT NOT NULL,
+    dispatch_binding_hash TEXT NOT NULL,
+    binding_audit_id TEXT NOT NULL,
+    binding_audit_hash TEXT NOT NULL,
+    selected_adapter_id TEXT NOT NULL,
+    selected_adapter_fingerprint TEXT NOT NULL,
+    dispatch_contract_id TEXT NOT NULL,
+    dispatch_contract_hash TEXT NOT NULL,
+    binder_id TEXT NOT NULL,
+    binder_fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'RELEASED', 'INTERRUPTED')),
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    terminal_reason TEXT,
+    CHECK (
+        (status = 'ACTIVE' AND terminal_reason IS NULL)
+        OR
+        (status IN ('RELEASED', 'INTERRUPTED') AND terminal_reason IS NOT NULL AND length(terminal_reason) > 0)
+    )
+);
+
+CREATE INDEX idx_dispatch_claims_task_history
+ON dispatch_claims(project_id, task_id, created_at, claim_id);
+
+CREATE INDEX idx_dispatch_claims_binding
+ON dispatch_claims(dispatch_binding_id, created_at, claim_id);
+
+CREATE UNIQUE INDEX idx_dispatch_claims_one_active_per_task
+ON dispatch_claims(task_id)
+WHERE status = 'ACTIVE';
+"""
+
 MIGRATIONS = (
     Migration(1, MIGRATION_001),
     Migration(2, MIGRATION_002),
@@ -395,6 +441,7 @@ MIGRATIONS = (
     Migration(5, MIGRATION_005),
     Migration(6, MIGRATION_006),
     Migration(7, MIGRATION_007),
+    Migration(8, MIGRATION_008),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version

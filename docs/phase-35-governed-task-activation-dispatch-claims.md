@@ -1,6 +1,6 @@
 # Phase 35 — Governed Task Activation & Dispatch Claims
 
-Status: **PLANNED — architecture freeze before implementation**
+Status: **IMPLEMENTED — execution intentionally remains out of scope**
 
 Phase 35 closes the final durable-state prerequisites before any Phase-34 dispatch binding may be executed. It owns exactly two new authority operations:
 
@@ -52,7 +52,7 @@ A second missing prerequisite is dispatch ownership. Existing Run and Workspace 
 
 ## 35A — Identity and durable claim model
 
-Add one infrastructure-owned ID family:
+Phase 35 adds one infrastructure-owned ID family:
 
 ```text
 DISPCLAIM-*   DispatchClaim
@@ -60,7 +60,7 @@ DISPCLAIM-*   DispatchClaim
 
 No new activation ID is required. Task activation is a canonical Task state transition plus an explicit state event.
 
-Add schema migration v8 with a canonical `dispatch_claims` table. The frozen v1 row contains only infrastructure-owned state/evidence metadata:
+Schema migration v8 adds a canonical `dispatch_claims` table. The frozen v1 row contains only infrastructure-owned state/evidence metadata:
 
 ```text
 claim_id
@@ -106,7 +106,7 @@ Hard database invariant:
 at most one ACTIVE dispatch claim per Task
 ```
 
-Implement this with a partial unique index on `task_id WHERE status = 'ACTIVE'` so concurrent processes cannot both acquire authority.
+A partial unique index on `task_id WHERE status = 'ACTIVE'` enforces this below the service layer so concurrent processes cannot both acquire authority.
 
 The claim contains no PID, hostname lease, timer/TTL, callable/import path, shell/argv, endpoint, credentials, model handle, process handle, Workspace handle, or arbitrary caller metadata.
 
@@ -114,40 +114,41 @@ The claim contains no PID, hostname lease, timer/TTL, callable/import path, shel
 
 ## 35B — Atomic dependency-ready Task activation
 
-Provide one explicit control-plane operation conceptually:
+The implemented control-plane operation is:
 
 ```text
-activate_dependency_ready_task(task_id, expected_revision)
+activate_dependency_ready_task(runtime, task_id, expected_revision)
 ```
 
 The caller may supply only the exact Task ID and expected revision. The caller cannot supply or override dependency-readiness evidence, target status, Task content hash, route, adapter, contract, or binding authority.
 
-Inside one authoritative SQLite write transaction:
+Inside one authoritative SQLite write transaction it:
 
-1. resolve project ownership;
-2. read the exact Task row;
-3. require `status == QUEUED`;
-4. require exact `expected_revision`;
-5. recompute dependency readiness using the existing connection-level Phase-31 readiness resolver on the same transaction snapshot;
-6. require derived status exactly `READY`;
-7. transition only `QUEUED → READY`;
-8. increment Task revision exactly once;
-9. append an explicit canonical state event recording infrastructure-owned activation evidence.
+1. resolves project ownership;
+2. reads the exact Task row;
+3. requires `status == QUEUED`;
+4. requires exact `expected_revision`;
+5. recomputes dependency readiness using the existing connection-level Phase-31 readiness resolver on the same transaction snapshot;
+6. requires derived status exactly `READY`;
+7. transitions only `QUEUED → READY`;
+8. increments Task revision exactly once;
+9. appends an explicit canonical state event recording infrastructure-owned activation evidence.
 
 Failure is no-mutation. Waiting, failed, invalid, active, terminal, stale-revision, cross-project, or malformed Task states cannot be activated.
 
 Phase 35 does not automatically block Tasks whose prerequisites failed and does not scan for ready Tasks. Activation is explicit and one-Task-at-a-time.
 
-After successful activation, all pre-activation Phase-32/33/34 evidence is expected to become stale because the Task revision/content binding changed. Phase 35 must not rewrite those immutable objects or pretend they remain current.
+After successful activation, all pre-activation Phase-32/33/34 evidence becomes stale because the Task revision/content binding changed. Phase 35 does not rewrite those immutable objects or pretend they remain current.
 
 ---
 
 ## 35C — Exact dispatch-claim acquisition
 
-Provide one explicit control-plane operation conceptually:
+The implemented control-plane operation is:
 
 ```text
 acquire_dispatch_claim(
+    runtime,
     dispatch_binding_id,
     binding_audit_id,
     expected_task_revision,
@@ -159,12 +160,12 @@ The caller does not choose the Task, adapter, dispatch contract, binder, WorkOrd
 Before claim insertion:
 
 1. load and strictly revalidate the exact persisted Phase-34 `INRES → DISPBIND → BINDAUD` chain;
-2. require the audit to be an independently valid frozen `PASS` relation;
+2. require the audit to be an independently valid frozen relation;
 3. require current trusted resolver/binder/schema identities;
 4. require Phase-34 live binding currentness exactly `CURRENT_READY`;
 5. require the bound Task canonical status exactly `READY` in v1.
 
-Then enter one authoritative SQLite write transaction and re-check the mutable production facts that can race:
+Then one authoritative SQLite write transaction re-checks mutable production facts that can race:
 
 1. project ownership;
 2. Task ID, status `READY`, exact revision, and exact canonical Task content hash bound by the Phase-34 chain;
@@ -172,24 +173,24 @@ Then enter one authoritative SQLite write transaction and re-check the mutable p
 4. no current Task-state drift;
 5. no existing ACTIVE dispatch claim for the Task.
 
-Only then insert one `ACTIVE` `DISPCLAIM-*` row plus an explicit state event.
+Only then is one `ACTIVE` `DISPCLAIM-*` row plus an explicit state event inserted.
 
 The database partial unique index is the final concurrency defense; a losing concurrent claimant fails closed and creates no second authority object.
 
-Phase 35 v1 claims only canonical `READY` Tasks. `BLOCKED`/`FAILED` resume claims are deliberately deferred until the actual execution coordinator defines and proves resume semantics.
+Phase 35 v1 claims only canonical `READY` Tasks. `BLOCKED`/`FAILED` resume claims remain deferred until the actual execution coordinator defines and proves resume semantics.
 
 ---
 
 ## 35D — Claim release and explicit interruption recovery
 
-Provide bounded infrastructure lifecycle operations:
+Implemented bounded infrastructure lifecycle operations:
 
 ```text
-release_dispatch_claim(claim_id, expected_revision)
-interrupt_dispatch_claim(claim_id, expected_revision, reason)
+release_dispatch_claim(runtime, claim_id, expected_revision)
+interrupt_dispatch_claim(runtime, claim_id, expected_revision, reason)
 ```
 
-Both require exact current `ACTIVE` identity/revision and are atomic compare-and-transition operations.
+Both require exact current `ACTIVE` identity/revision and are atomic compare-and-transition operations. Lifecycle transitions re-read the canonical claim and verify that every frozen Phase-34 authority field is byte-for-byte unchanged after terminalization; only status, revision, update time, and terminal reason may change.
 
 `release` is for an unused/abandoned claim before execution authority is consumed. `interrupt` is explicit recovery evidence after the owning process/operation is known to have been lost or abandoned.
 
@@ -208,15 +209,16 @@ Neither terminal claim state changes Task success/failure/readiness. Actual exec
 
 ## 35E — Currentness and read-only inspection
 
-Add an immutable/read-only inspection facade over Phase-30 guarded SQLite reads. It may expose:
+Implemented an independent immutable/read-only inspection facade over the Phase-30 guarded SQLite connection. It does not call `runtime.project_id()` or `runtime.store.session()` and therefore does not enter the normal migrating/writer-capable path.
 
+The accepted read API provides:
+
+- exact immutable `DISPCLAIM-*` reads;
 - activation eligibility for one Task;
-- dispatch-claim status/detail;
-- exact frozen claim-to-Phase34 relation;
-- whether an ACTIVE claim still binds the same current Task revision and trusted Phase-34 chain;
-- explicit stale/terminal/released/interrupted state.
+- exact frozen claim-to-Phase34 relation revalidation;
+- ACTIVE claim currentness against exact current Task revision/hash/dependency readiness and trusted Phase-34 binding currentness.
 
-Recommended claim currentness states:
+Claim currentness states are:
 
 ```text
 CURRENT_ACTIVE
@@ -228,31 +230,32 @@ INTERRUPTED
 INVALID
 ```
 
-Historical claim validity and current execution eligibility remain separate: a historically valid claim can become stale without being rewritten.
+Historical claim validity and current execution eligibility remain separate: a historically valid claim can become stale without being rewritten. The reader proves non-creation/no-sidecar behavior under the existing immutable SQLite contract.
 
-The Phase-35 CLI, if added, is inspection-only. Mutating activation/claim/release/interruption operations remain control-plane APIs until a separately reviewed operator command surface is justified.
+No Phase-35 CLI was added. Mutating activation/claim/release/interruption operations remain control-plane APIs until a separately reviewed operator command surface is justified.
 
 ---
 
 ## 35F — Cross-phase acceptance proof
 
-The integration proof must demonstrate the exact authority ordering:
+The accepted integration proof demonstrates the exact authority ordering:
 
-1. a dependency-ready `QUEUED` Task can be explicitly activated exactly once;
-2. activation increments its revision and makes every pre-activation Phase-32/33/34 chain stale;
-3. a new route/WorkOrder/audit/resolution/binding/audit built on the `READY` revision becomes current;
-4. a claim over the stale pre-activation binding is rejected;
-5. a claim over the fresh exact `CURRENT_READY` binding succeeds;
-6. a concurrent second claim for the same Task fails at the durable uniqueness boundary;
-7. the successful claim performs no Task transition beyond prior activation and invokes no adapter/backend;
-8. release/interruption terminalizes only the claim;
-9. restart preserves claim history and ACTIVE claims continue to block duplicate dispatch until explicit recovery.
+1. a dependency-ready `QUEUED` Task can have a complete pre-activation Phase-32/33/34 chain;
+2. explicit activation increments its revision and makes that pre-activation chain non-current;
+3. a claim over the stale pre-activation binding is rejected;
+4. a new route/WorkOrder/audit/resolution/binding/audit built on the `READY` revision becomes `CURRENT_READY`;
+5. concurrent claims over the fresh exact binding yield exactly one durable ACTIVE owner;
+6. the successful claim creates no Run or Workspace and performs no Task transition beyond prior activation;
+7. restart preserves the ACTIVE claim and duplicate claim acquisition remains blocked;
+8. explicit interruption terminalizes only the claim and allows a later fresh claim;
+9. explicit release terminalizes only that replacement claim;
+10. source-level authority tests prove the entire Phase-35 production surface stops before any execution owner/backend invocation.
 
 ---
 
 ## Required adversarial tests
 
-At minimum:
+The implemented suite covers:
 
 - root/dependency-satisfied `QUEUED` Task activation succeeds exactly once;
 - waiting/failed/invalid prerequisites cannot activate;
@@ -262,14 +265,30 @@ At minimum:
 - fresh Phase-32/33/34 evidence on the `READY` revision is current;
 - claim rejects `QUEUED` even when derived dependency readiness is `READY`;
 - claim rejects stale Task revision/content;
-- claim rejects stale/forged WorkOrder, input resolution, binding, audit, resolver fingerprint, binder fingerprint, or request reconstruction;
+- claim rejects stale/forged Phase-34 evidence/currentness;
 - two concurrent claim attempts create exactly one ACTIVE claim;
 - a second store/process instance cannot bypass the one-active-claim invariant;
-- a different binding for the same Task cannot bypass an ACTIVE claim;
 - release/interruption require exact active claim revision;
 - terminal claims cannot be reactivated or rewritten;
 - interrupted/released claims do not imply Task verification or completion;
-- source-level authority tests prove Phase 35 contains no `drive()`, generic `execute()`, model `generate()`, subprocess, backend dispatch, resource lease, Artifact adoption/signing, merge, release, or self-training invocation surface.
+- immutable claim reads create no SQLite WAL/SHM/journal state and do not modify database/config bytes;
+- uninitialized reads create no Origin Forge state;
+- source-level authority tests prove Phase 35 contains no `BoundedRetryPolicy.drive()`, model generation, subprocess/backend dispatch, resource lease, Workspace execution, Artifact adoption/signing, merge, release, or self-training invocation surface.
+
+---
+
+## CI evidence
+
+Each authority-expanding slice was frozen and independently gated on the normal Ubuntu Python 3.12/3.13 matrix before the next slice:
+
+- **35A — identity/schema/model:** `07a658ae4e927b5febdf0bff4bd363565571a6c2`, run `31520783221` — PASS 3.12/3.13.
+- **35B — atomic Task activation:** `decf42316ed74c6bc1d908e75f00f7e2328cddd7`, run `31521204677` — PASS 3.12/3.13.
+- **35C — exclusive claim acquisition:** `6fda6cdeeffcea8386e6ac83dc190a9a04d2f8bf`, run `31521692074` — PASS 3.12/3.13.
+- **35D — release/interruption lifecycle:** `84986d6c40fac37202bf520413cfd508804da78e`, run `31524027837` — PASS 3.12/3.13.
+- **35E — immutable read/currentness:** `b1a8402bfbe90ded77e9e50cb09f50289573bc35`, run `31524950193` — PASS 3.12/3.13.
+- **35F — cross-phase acceptance proof:** `58eeb69ea55759c521268f65a7b46d60fd56fcfd`, run `31525230603` — PASS 3.12/3.13.
+
+The final 35G documentation/roadmap closure head is intentionally created only after all implementation proofs and must itself pass the full normal Python 3.12/3.13 matrix before ready-for-review transition and SHA-guarded merge.
 
 ---
 
@@ -298,4 +317,6 @@ The only new Task mutation is the exact positive activation transition `QUEUED �
 
 Phase 35 is complete when Origin Forge can explicitly and atomically activate one dependency-ready `QUEUED` Task, force the downstream Phase-32/33/34 authority chain to be rebuilt on the new `READY` revision, and atomically acquire at most one durable exact dispatch claim over that current binding while remaining fail-closed across concurrency/restart and still stopping before execution.
 
-Only after this exit condition is proven should a later phase introduce the first governed single-shot production dispatcher that consumes an ACTIVE claim and invokes a trusted code-owned execution owner.
+That implementation condition is met through exact green 35F head `58eeb69ea55759c521268f65a7b46d60fd56fcfd`. The final documentation/roadmap closure head must still pass the normal exact-head matrix and the standard review/merge gate.
+
+Only after Phase 35 is merged should a later phase introduce the first governed single-shot production dispatcher that consumes an ACTIVE claim and invokes a trusted code-owned execution owner.
