@@ -5,6 +5,7 @@ from pathlib import Path
 from .config import load_config
 from .model_inspection import inspect_model_policy, inspect_model_registry
 from .model_scheduler_factory import create_model_scheduling
+from .production_read_guard import existing_config_path
 
 
 class ModelResourceReadError(RuntimeError):
@@ -46,7 +47,9 @@ def inspect_model_resources(project_root: str | Path) -> dict[str, object]:
     no active leases and is never passed to a runtime loader or model adapter.
     """
 
-    config = load_config(Path(project_root).resolve())
+    root = Path(project_root).resolve()
+    existing_config_path(root)
+    config = load_config(root)
     resource_models = config.resource_models
     if not resource_models.enabled:
         return {
