@@ -233,29 +233,28 @@ def _topological_order(
     return tuple(order), max(depth.values(), default=0)
 
 
-def flow_dependency_graph(
-    store: OriginForgeStore,
+def flow_dependency_graph_connection(
+    conn: sqlite3.Connection,
     flow_id: str,
 ) -> TaskDependencyGraph:
-    with store.session() as conn:
-        flow = conn.execute("SELECT id FROM flows WHERE id = ?", (flow_id,)).fetchone()
-        if flow is None:
-            raise KeyError(flow_id)
-        task_ids = tuple(
-            row["id"]
-            for row in conn.execute(
-                "SELECT id FROM tasks WHERE flow_id = ? ORDER BY id",
-                (flow_id,),
-            ).fetchall()
-        )
-        rows = conn.execute(
-            """SELECT td.task_id, td.required_task_id, td.dependency_type, td.created_at
-               FROM task_dependencies td
-               JOIN tasks t ON t.id = td.task_id
-               WHERE t.flow_id = ?
-               ORDER BY td.task_id, td.required_task_id""",
+    flow = conn.execute("SELECT id FROM flows WHERE id = ?", (flow_id,)).fetchone()
+    if flow is None:
+        raise KeyError(flow_id)
+    task_ids = tuple(
+        row["id"]
+        for row in conn.execute(
+            "SELECT id FROM tasks WHERE flow_id = ? ORDER BY id",
             (flow_id,),
         ).fetchall()
+    )
+    rows = conn.execute(
+        """SELECT td.task_id, td.required_task_id, td.dependency_type, td.created_at
+           FROM task_dependencies td
+           JOIN tasks t ON t.id = td.task_id
+           WHERE t.flow_id = ?
+           ORDER BY td.task_id, td.required_task_id""",
+        (flow_id,),
+    ).fetchall()
     edges = _rows_to_edges(rows)
     order, max_depth = _topological_order(task_ids, edges)
     return TaskDependencyGraph(
@@ -265,3 +264,11 @@ def flow_dependency_graph(
         topological_task_ids=order,
         max_depth=max_depth,
     )
+
+
+def flow_dependency_graph(
+    store: OriginForgeStore,
+    flow_id: str,
+) -> TaskDependencyGraph:
+    with store.session() as conn:
+        return flow_dependency_graph_connection(conn, flow_id)
