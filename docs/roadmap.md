@@ -509,9 +509,28 @@ See `docs/phase-27-code-mode-programmatic-context.md` for the detailed contracts
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
-## Phase 28 — Cross-Media Watermarking — PLANNED
+## Phase 28 — Cross-Media Watermarking and Fingerprinting — DONE
 
-Develop source/image/audio/3D watermark and fingerprint adapters. Watermarks complement cryptographic manifests and never become the sole proof of origin.
+Implemented exact cross-media fingerprint and explicitly fragile derivative watermark evidence without weakening Phase-18 provenance:
+
+- infrastructure-owned `MFPR-*`, `FPCMP-*`, `WMPLAN-*`, `WMRES-*`, and `FPLINK-*` identities;
+- exact source-text fingerprinting with strict UTF-8 and line-ending-only normalization;
+- exact raster fingerprinting over existing validated width/height + canonical RGBA8 pixel evidence;
+- exact PCM16 fingerprinting over channels/sample-rate/frame-count + canonical PCM hash, ignoring ancillary WAV chunks;
+- exact validated-byte GLB fingerprinting plus structural summary, with no re-export/mesh-reindex invariance claim;
+- exact `EXACT_MATCH` / `DIFFERENT` / `INCOMPARABLE` comparison semantics and durable pre-publication classification revalidation;
+- derivative-only PNG `ofWM` private ancillary mark classified `FRAGILE_METADATA`, preserving normalized raster pixels;
+- separately invoked detector with `DETECTED` / `NOT_DETECTED` / `MISMATCH` evidence and plan/status revalidation;
+- exact Phase-18 manifest Artifact ID/content-hash linkage without taking signature-verification authority;
+- bounded immutable no-overwrite persistence with symlink/root/canonical/hash/referenced-evidence revalidation;
+- strictly read-only CLI inspection;
+- no authorship proof, perceptual/robust watermark claim, arbitrary path hashing/external executable/key access, Task verification/completion, adoption/signing, merge/release authority.
+
+See `docs/phase-28-cross-media-watermarking.md` for the detailed v1 algorithms, fragile-mark boundary, provenance linkage, persistence rules and exclusions.
+
+**Exit condition met:** Origin Forge can create, compare, persist and inspect exact fingerprints across source/raster/audio/validated-GLB media, create/detect one explicitly fragile derivative PNG mark, bind fingerprint evidence to Phase-18 Artifact provenance without verifying signatures itself, and keep production authority unchanged.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 29 — Training / Fine-Tuning Research — PLANNED
 
