@@ -233,17 +233,15 @@ class TrainingResearchStoreTests(unittest.TestCase):
             self.store.publish_eligibility_audit(forged, trajectory=trajectory)
         self.assertEqual(self.store.list_objects("eligibility-audits"), ())
 
-    def test_forged_dataset_split_is_rejected_before_persistence(self) -> None:
+    def test_forged_dataset_split_is_rejected_at_model_boundary(self) -> None:
         trajectory = _trajectory()
         audit = _audit(trajectory)
         dataset = _dataset(trajectory, audit)
         entry = dataset.entries[0]
         wrong_split = type(entry.split).TEST if entry.split.value != "TEST" else type(entry.split).TRAIN
-        forged = replace(dataset, entries=(replace(entry, split=wrong_split),))
         with self.assertRaisesRegex(TrainingResearchModelError, "split assignment is inconsistent"):
-            # Dataclass construction itself is already fail-closed; if a future construction
-            # path relaxes that, publish_dataset also recomputes source bindings.
-            self.store.publish_dataset(forged, trajectories=(trajectory,), audits=(audit,))
+            replace(dataset, entries=(replace(entry, split=wrong_split),))
+        self.assertEqual(self.store.list_objects("datasets"), ())
 
     def test_forged_report_classification_is_rejected_before_persistence(self) -> None:
         trajectory = _trajectory()
