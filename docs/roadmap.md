@@ -532,11 +532,40 @@ See `docs/phase-28-cross-media-watermarking.md` for the detailed v1 algorithms, 
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
-## Phase 29 — Training / Fine-Tuning Research — PLANNED
+## Phase 29 — Training / Fine-Tuning Research — DONE
 
-Only after a substantial verified trajectory dataset exists, investigate routing models, specialized tool-use models, coding-agent fine-tuning, infrastructure-native agents, and offline distillation from verified trajectories and audited Dream outcomes.
+Implemented the governed data/evaluation substrate required before any real training backend can be considered:
 
-Symbolic Dream consolidation remains separate from neural weight training. Production models do not rewrite their own weights.
+- infrastructure-owned `TRAJ-*`, `TRAUD-*`, `TRDATA-*`, `TRPLAN-*`, and `TRREP-*` research identities;
+- bounded canonical research trajectories with exact Task/Run/Verification evidence refs, explicit outcome class and no production-training/model-activation/Task authority;
+- one trusted `origin-forge-runtime-redacted@1` producer that accepts only a task-scoped `SUCCEEDED` Run, terminal `SUCCEEDED` Task and `PASS` Task Verification bound to that exact Run;
+- redacted runtime examples exposing only stable structural/cost metadata while excluding Task objective/acceptance/constraints, Verification evidence/metrics, failure text, repository content and arbitrary Artifact bytes;
+- content-addressed producer identity and `verified-runtime-redacted-v1@1` eligibility policy;
+- fail-closed producer trust/disclosure auditing: generic/manual trajectories, producer drift, protected evidence, forged eligibility and policy drift cannot enter durable v1 datasets;
+- deterministic infrastructure-owned `80-10-10-v1` train/validation/test assignment from a frozen split-salt hash and leakage-group hash, with same-Task grouping and caller-forged split rejection;
+- durable dataset publication requiring trusted governed trajectories, governed eligibility audits, exact v1 policy identity and full source/audit/split reconstruction;
+- independently frozen experiment plans binding exact dataset, base-model/tokenizer, method family, trainer identity, independent evaluator identity, evaluation suite, resource ceilings and regression thresholds;
+- candidate checkpoint reports containing only bounded checkpoint hash/size plus independent evaluation observations rather than executable/loadable weights;
+- regression-dominant report classification over success, quality, critical failures, model calls, input/output tokens and wall time, with plan/evaluator/classification/checkpoint-limit revalidation;
+- immutable no-overwrite `.origin-forge/training-research/` persistence with protected-root/symlink/alias, strict JSON, byte/count, canonical/hash and relational revalidation;
+- strictly read-only research CLI exposing exact trusted producer/policy fingerprints and no dataset-build/training/download/checkpoint-load/model-profile/routing/secret/Task/promotion/signing/merge/release authority;
+- no actual trainer, fine-tuning/LoRA/distillation process, trusted failed-attempt export, checkpoint loader, model-profile/routing activation or Phase-26 model-candidate promotion path in v1.
+
+Core rule:
+
+```text
+verified history → trusted redacted producer → eligibility audit → leakage-safe dataset
+        ↓
+frozen experiment plan → candidate checkpoint evidence → independent evaluation → STOP
+```
+
+Phase-15 Dream remains symbolic consolidation rather than gradient training. Trainer identity in `TRPLAN-*` is an inert commitment for future research, not an executable training surface. Training loss alone is explicitly not promotion evidence.
+
+See `docs/phase-29-training-finetuning-research.md` for the detailed trusted-producer contract, dataset/split governance, experiment/evaluator boundary, persistence rules and exclusions.
+
+**Exit condition met:** Origin Forge can construct and persist only trusted redacted verified-runtime trajectories into deterministic leakage-safe datasets, freeze independent training/evaluation requirements, represent candidate checkpoint results as non-production evidence, recompute regression-dominant outcomes, inspect the chain read-only, and keep training execution, checkpoint activation, model/routing mutation, Task authority, Phase-26 promotion, signing, merge and release outside the research substrate.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 30 — Full Production Interface — PLANNED
 
