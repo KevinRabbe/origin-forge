@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import inspect
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
+import origin_forge.production_read_guard as guard_module
+import origin_forge.production_runtime_read as runtime_read_module
 from origin_forge.config import DEFAULT_CONFIG
 from origin_forge.db import SCHEMA_VERSION
 from origin_forge.model_resource_read import inspect_model_resources
@@ -134,6 +137,25 @@ class ProductionReadGuardTests(unittest.TestCase):
             )
             for suffix in ("-wal", "-shm", "-journal"):
                 self.assertFalse(Path(str(database) + suffix).exists())
+
+    def test_reader_source_has_no_normal_store_or_migration_surface(self) -> None:
+        reader_source = inspect.getsource(runtime_read_module)
+        for forbidden in (
+            ".store",
+            "migrate(",
+            "INSERT ",
+            "UPDATE ",
+            "DELETE ",
+            "journal_mode",
+            ".commit(",
+            ".rollback(",
+        ):
+            self.assertNotIn(forbidden, reader_source)
+
+        guard_source = inspect.getsource(guard_module)
+        self.assertIn("immutable=1", guard_source)
+        self.assertNotIn("journal_mode", guard_source)
+        self.assertNotIn("migrate(", guard_source)
 
 
 if __name__ == "__main__":
