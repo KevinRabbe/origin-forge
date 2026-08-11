@@ -643,6 +643,28 @@ See `docs/phase-32-governed-production-capability-routing.md` for the detailed i
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 33 — Governed Production Work Orders & Dispatch Contracts — DONE
+
+Implemented the dispatch-input authority layer required between Phase-31 dependency readiness, Phase-32 routing, and any later production coordinator:
+
+- infrastructure-owned `DISPCAT-*`, `WORKORD-*`, and `WORKAUD-*` identities;
+- immutable dispatch-contract catalogs bound to exact Phase-32 capability catalogs and adapter fingerprints;
+- code-owned trusted validator registry with inert exact payload schemas and no dynamic import/callable execution surface;
+- immutable WorkOrders bound to exact Task revision/content, Flow, current `CAPROUTE-*`, selected adapter, dispatch catalog/contract, bounded evidence refs, and canonical normalized payload;
+- independent frozen WorkOrder audits that recompute historical route/catalog/contract/validator/payload relations rather than trusting self-claimed PASS state;
+- separate live currentness inspection reusing Phase-31 dependency-readiness semantics and current Phase-32 route derivation;
+- one-shot taskless `WORK_ORDER_PLANNER` Runs through the existing scheduled-model boundary with strict duplicate-key/authority-field-aware proposal parsing and exact request/response/proposal/WorkOrder evidence;
+- intentionally narrow reviewed built-in dispatch support: `originforge.code.bounded-retry` only; media/runtime adapters remain fail-closed until their phase-specific evidence inputs can be resolved generically without weakening authority;
+- protected canonical no-overwrite `.origin-forge/production-work-orders/` persistence with byte/count, hash, symlink/alias, relation, frozen WorkOrder, and audit recomputation checks;
+- Phase-30 immutable-SQLite-guard-based non-creating read-only inspection and CLI limited to status/catalog/contract/WorkOrder/audit/currentness views;
+- no adapter invocation, Task transition/completion, background queue, generic tool execution, arbitrary shell/argv/import/callable authority, Artifact adoption/signing, Project Intelligence mutation, merge, release, or self-training authority.
+
+See `docs/phase-33-governed-production-work-orders.md` for the finalized implementation contract, reviewed built-in boundary, persistence/currentness model, authority exclusions, and slice-by-slice CI evidence.
+
+**Exit condition met in implementation:** Phase-33 slices 33A–33G independently passed the normal Python 3.12/3.13 matrix through code head `5f124d64466405106390c2f93c97e0068becb89b`; the canonical documentation/roadmap closure head created after those proofs must itself pass the final normal matrix before SHA-guarded merge.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release
