@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import tempfile
 import unittest
@@ -246,14 +247,19 @@ class BuiltinProductionWorkOrderTests(unittest.TestCase):
             "subprocess",
             "os.system",
             "importlib",
-            ".drive(",
-            ".execute(",
-            ".run(",
-            ".generate(",
             "create_sandbox_backend",
             "LlamaCpp",
         ):
             self.assertNotIn(forbidden, source)
+
+        tree = ast.parse(source)
+        forbidden_call_names = {"drive", "execute", "run", "generate"}
+        executable_calls = {
+            node.func.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        }
+        self.assertTrue(forbidden_call_names.isdisjoint(executable_calls))
 
 
 if __name__ == "__main__":
