@@ -44,16 +44,7 @@ class FingerprintProvenanceLink:
             raise TypeError("fingerprint must be a MediaFingerprint")
         if not isinstance(manifest, ProvenanceManifest):
             raise TypeError("manifest must be a ProvenanceManifest")
-        if manifest.artifact_ref.record_type is not ProvenanceRecordType.ARTIFACT:
-            raise MediaFingerprintModelError("Phase-18 manifest artifact_ref must target ARTIFACT")
-        if fingerprint.source_ref != manifest.artifact_ref.record_id:
-            raise MediaFingerprintModelError(
-                "fingerprint source_ref does not match Phase-18 manifest artifact ID"
-            )
-        if fingerprint.source_hash != manifest.artifact_content_hash:
-            raise MediaFingerprintModelError(
-                "fingerprint source_hash does not match Phase-18 artifact content hash"
-            )
+        cls._validate_source_binding(fingerprint, manifest)
         return cls(
             link_id=new_id(IdKind.FINGERPRINT_PROVENANCE_LINK),
             fingerprint_id=fingerprint.fingerprint_id,
@@ -65,7 +56,28 @@ class FingerprintProvenanceLink:
             artifact_content_hash=manifest.artifact_content_hash,
         )
 
+    @staticmethod
+    def _validate_source_binding(
+        fingerprint: MediaFingerprint,
+        manifest: ProvenanceManifest,
+    ) -> None:
+        if manifest.artifact_ref.record_type is not ProvenanceRecordType.ARTIFACT:
+            raise MediaFingerprintModelError("Phase-18 manifest artifact_ref must target ARTIFACT")
+        if fingerprint.source_ref != manifest.artifact_ref.record_id:
+            raise MediaFingerprintModelError(
+                "fingerprint source_ref does not match Phase-18 manifest artifact ID"
+            )
+        if fingerprint.source_hash != manifest.artifact_content_hash:
+            raise MediaFingerprintModelError(
+                "fingerprint source_hash does not match Phase-18 artifact content hash"
+            )
+
     def bind(self, fingerprint: MediaFingerprint, manifest: ProvenanceManifest) -> None:
+        if not isinstance(fingerprint, MediaFingerprint):
+            raise TypeError("fingerprint must be a MediaFingerprint")
+        if not isinstance(manifest, ProvenanceManifest):
+            raise TypeError("manifest must be a ProvenanceManifest")
+        self._validate_source_binding(fingerprint, manifest)
         if self.fingerprint_id != fingerprint.fingerprint_id or self.fingerprint_hash != fingerprint.content_hash:
             raise MediaFingerprintModelError("provenance link fingerprint binding drifted")
         if self.manifest_id != manifest.manifest_id or self.manifest_hash != manifest.content_hash:
