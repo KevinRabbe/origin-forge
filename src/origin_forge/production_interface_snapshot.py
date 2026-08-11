@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from .project_intelligence_read import ProjectIntelligenceReadService
 from .runtime import OriginForgeRuntime
 from .runtime_observation_models import content_hash
 
@@ -121,6 +122,83 @@ def _verification_projection(row: dict[str, Any]) -> dict[str, object]:
     }
 
 
+def _entity_projection(row: dict[str, object]) -> dict[str, object]:
+    name, name_truncated = _bounded_text(row.get("name"))
+    description, description_truncated = _bounded_text(row.get("description"))
+    return {
+        "id": row["id"],
+        "kind": row["kind"],
+        "name": name,
+        "name_truncated": name_truncated,
+        "description": description,
+        "description_truncated": description_truncated,
+        "status": row["status"],
+        "revision": int(row["revision"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _relation_projection(row: dict[str, object]) -> dict[str, object]:
+    rationale, rationale_truncated = _bounded_text(row.get("rationale"))
+    return {
+        "id": row["id"],
+        "source_entity_id": row["source_entity_id"],
+        "relation_type": row["relation_type"],
+        "target_entity_id": row["target_entity_id"],
+        "status": row["status"],
+        "revision": int(row["revision"]),
+        "rationale": rationale,
+        "rationale_truncated": rationale_truncated,
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "evidence_refs_disclosed": False,
+    }
+
+
+def _binding_projection(row: dict[str, object]) -> dict[str, object]:
+    target_ref, target_ref_truncated = _bounded_text(row.get("target_ref"))
+    return {
+        "id": row["id"],
+        "entity_id": row["entity_id"],
+        "binding_type": row["binding_type"],
+        "target_ref": target_ref,
+        "target_ref_truncated": target_ref_truncated,
+        "target_hash": row["target_hash"],
+        "status": row["status"],
+        "revision": int(row["revision"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "metadata_disclosed": False,
+    }
+
+
+def _design_rule_projection(row: dict[str, object]) -> dict[str, object]:
+    title, title_truncated = _bounded_text(row.get("title"))
+    statement, statement_truncated = _bounded_text(row.get("statement"))
+    rationale, rationale_truncated = _bounded_text(row.get("rationale"))
+    scopes = row.get("scope_entity_ids")
+    if not isinstance(scopes, tuple):
+        raise ProductionInterfaceSnapshotError("Design Rule scopes are not normalized")
+    return {
+        "id": row["id"],
+        "category": row["category"],
+        "title": title,
+        "title_truncated": title_truncated,
+        "statement": statement,
+        "statement_truncated": statement_truncated,
+        "rationale": rationale,
+        "rationale_truncated": rationale_truncated,
+        "authority": row["authority"],
+        "scope_entity_ids": scopes,
+        "status": row["status"],
+        "revision": int(row["revision"]),
+        "supersedes_rule_id": row["supersedes_rule_id"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
 @dataclass(frozen=True)
 class ProductionInterfaceSnapshot:
     project_id: str
@@ -129,6 +207,10 @@ class ProductionInterfaceSnapshot:
     tasks: tuple[dict[str, object], ...]
     runs: tuple[dict[str, object], ...]
     task_verifications: tuple[dict[str, object], ...]
+    entities: tuple[dict[str, object], ...]
+    entity_relations: tuple[dict[str, object], ...]
+    entity_bindings: tuple[dict[str, object], ...]
+    design_rules: tuple[dict[str, object], ...]
     total_counts: dict[str, int]
     truncated: dict[str, bool]
 
@@ -141,11 +223,16 @@ class ProductionInterfaceSnapshot:
             "tasks": list(self.tasks),
             "runs": list(self.runs),
             "task_verifications": list(self.task_verifications),
+            "entities": list(self.entities),
+            "entity_relations": list(self.entity_relations),
+            "entity_bindings": list(self.entity_bindings),
+            "design_rules": list(self.design_rules),
             "total_counts": dict(sorted(self.total_counts.items())),
             "truncated": dict(sorted(self.truncated.items())),
             "authority": {
                 "read_only": True,
                 "task_mutation": False,
+                "project_intelligence_mutation": False,
                 "model_execution": False,
                 "tool_execution": False,
                 "artifact_adoption": False,
@@ -167,6 +254,10 @@ def build_production_interface_snapshot(
     max_tasks: int = 512,
     max_runs: int = 512,
     max_verifications: int = 1024,
+    max_entities: int = 256,
+    max_entity_relations: int = 512,
+    max_entity_bindings: int = 512,
+    max_design_rules: int = 256,
 ) -> ProductionInterfaceSnapshot:
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
@@ -176,6 +267,10 @@ def build_production_interface_snapshot(
     max_tasks = _section_limit(max_tasks)
     max_runs = _section_limit(max_runs)
     max_verifications = _section_limit(max_verifications)
+    max_entities = _section_limit(max_entities)
+    max_entity_relations = _section_limit(max_entity_relations)
+    max_entity_bindings = _section_limit(max_entity_bindings)
+    max_design_rules = _section_limit(max_design_rules)
 
     raw_goals = tuple(runtime.list_goals(limit=max_goals + 1))
     raw_flows = tuple(runtime.list_flows(limit=max_flows + 1))
@@ -201,12 +296,23 @@ def build_production_interface_snapshot(
         if len(values) > remaining:
             break
 
+    intelligence = ProjectIntelligenceReadService(runtime)
+    pi_counts = intelligence.counts()
+    entities = intelligence.list_entities(limit=max_entities)
+    relations = intelligence.list_relations(limit=max_entity_relations)
+    bindings = intelligence.list_bindings(limit=max_entity_bindings)
+    rules = intelligence.list_design_rules(limit=max_design_rules)
+
     total_counts = {
         "goals": runtime.count_goals(),
         "flows": runtime.count_flows(),
         "tasks": runtime.count_tasks(),
         "runs": runtime.count_runs(),
         "task_verifications": runtime.count_task_verifications(),
+        "entities": pi_counts["entities"],
+        "entity_relations": pi_counts["relations"],
+        "entity_bindings": pi_counts["bindings"],
+        "design_rules": pi_counts["design_rules"],
     }
     verification_truncated = total_counts["task_verifications"] > len(verification_rows)
 
@@ -219,6 +325,10 @@ def build_production_interface_snapshot(
         task_verifications=tuple(
             _verification_projection(value) for value in verification_rows
         ),
+        entities=tuple(_entity_projection(value) for value in entities),
+        entity_relations=tuple(_relation_projection(value) for value in relations),
+        entity_bindings=tuple(_binding_projection(value) for value in bindings),
+        design_rules=tuple(_design_rule_projection(value) for value in rules),
         total_counts=total_counts,
         truncated={
             "goals": goals_truncated,
@@ -226,5 +336,9 @@ def build_production_interface_snapshot(
             "tasks": tasks_truncated,
             "runs": runs_truncated,
             "task_verifications": verification_truncated,
+            "entities": pi_counts["entities"] > len(entities),
+            "entity_relations": pi_counts["relations"] > len(relations),
+            "entity_bindings": pi_counts["bindings"] > len(bindings),
+            "design_rules": pi_counts["design_rules"] > len(rules),
         },
     )
