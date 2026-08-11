@@ -665,6 +665,27 @@ See `docs/phase-33-governed-production-work-orders.md` for the finalized impleme
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 34 — Governed Dispatch Input Resolution & Binding — DONE
+
+Implemented the exact evidence-resolution and typed-request binding layer between audited Phase-33 WorkOrders and any later production coordinator while preserving the hard stop before backend execution:
+
+- infrastructure-owned `INRES-*`, `DISPBIND-*`, and `BINDAUD-*` identities;
+- deterministic trusted resolver contracts/fingerprints with ambiguous-claim rejection and exact original ref ID/hash/revision/role binding;
+- core Artifact, Verification, Project Entity, and Design Rule resolvers plus one protected exact Audio Profile resolver;
+- explicit fail-closed review for phase-specific evidence families lacking typed IDs, direct non-creating readers, or unambiguous exact claims;
+- one exact typed binder for `originforge.code.bounded-retry` / `code.bounded-retry@1`, reconstructing the inert `BoundedRetryPolicy.drive@1` input projection without importing or calling the policy;
+- independent binding audit and separate live currentness for resolver/binder/schema/WorkOrder/source/request drift;
+- exact review of all ten Phase-32 built-in adapters, leaving nine media/runtime backends deferred with explicit missing-substrate blockers rather than silently promoting them;
+- protected canonical no-overwrite `.origin-forge/production-dispatch-bindings/` persistence for input resolutions, bindings, and PASS audits with restart/tamper/symlink/cross-object revalidation;
+- independent non-creating read-only inspection and CLI limited to status/show/currentness operations;
+- no adapter/backend invocation, process/model/tool execution, resource lease, Task/Flow/Goal transition/completion, dispatch queue, arbitrary shell/argv/import/callable/endpoint authority, Artifact adoption/signing, Project Intelligence mutation, merge, release, or self-training authority.
+
+See `docs/phase-34-governed-dispatch-input-resolution.md` for the finalized implementation contract, exact resolver/binder inventories, built-in deferral review, persistence/currentness model, authority exclusions, and slice-by-slice CI evidence.
+
+**Exit condition met in implementation:** Phase-34 slices 34A–34F independently passed the normal Python 3.12/3.13 matrix through code head `b4ff1f5eb6c224c965cb7fa35a8ffffcbca72caa`; the canonical documentation/roadmap closure head created after those proofs must itself pass the final normal matrix before SHA-guarded merge.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release
