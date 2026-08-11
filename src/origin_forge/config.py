@@ -6,11 +6,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from .model_runtime_config import ModelRuntimeConfig, parse_model_runtime_config
 from .resource_model_config import ResourceModelConfig, parse_resource_model_config
 
-CONFIG_VERSION = 5
+CONFIG_VERSION = 6
 DEFAULT_CONFIG = '''# Origin Forge project configuration
-version = 5
+version = 6
 policy_profile = "local-default"
 
 [limits]
@@ -39,6 +40,9 @@ gpus = []
 [models]
 profiles = []
 policies = []
+
+[model_runtimes]
+providers = []
 '''
 
 _SERVER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -89,6 +93,7 @@ class ProjectConfig:
     approved_test_commands: tuple[CommandSpec, ...]
     lsp_servers: tuple[LspServerConfig, ...] = ()
     resource_models: ResourceModelConfig = field(default_factory=ResourceModelConfig.disabled)
+    model_runtimes: ModelRuntimeConfig = field(default_factory=ModelRuntimeConfig.empty)
 
     def command(self, category: Literal["build", "test"], name: str) -> CommandSpec:
         commands = (
@@ -262,9 +267,9 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         raw = tomllib.load(handle)
 
     version = int(raw.get("version", 0))
-    if version not in {1, 2, 3, 4, CONFIG_VERSION}:
+    if version not in {1, 2, 3, 4, 5, CONFIG_VERSION}:
         raise ValueError(
-            f"unsupported config version {version}; expected 1, 2, 3, 4, or {CONFIG_VERSION}"
+            f"unsupported config version {version}; expected 1, 2, 3, 4, 5, or {CONFIG_VERSION}"
         )
 
     limits = raw.get("limits", {})
@@ -318,6 +323,15 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         else ResourceModelConfig.disabled()
     )
 
+    model_runtimes_raw = raw.get("model_runtimes")
+    if version < 6 and model_runtimes_raw not in (None, {}):
+        raise ValueError("managed model runtime bindings require config version 6")
+    model_runtimes = (
+        parse_model_runtime_config(model_runtimes_raw, resource_models)
+        if version >= 6
+        else ModelRuntimeConfig.empty()
+    )
+
     parser = _legacy_commands if version == 1 else _structured_commands
     return ProjectConfig(
         version=version,
@@ -334,4 +348,5 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         approved_test_commands=parser(commands.get("test"), "test"),
         lsp_servers=_lsp_servers(code_intelligence.get("lsp_servers")),
         resource_models=resource_models,
+        model_runtimes=model_runtimes,
     )
