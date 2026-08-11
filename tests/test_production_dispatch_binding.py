@@ -321,7 +321,7 @@ class ProductionDispatchBindingTests(unittest.TestCase):
         task = self.runtime.get_task(self.task_id)
         self.runtime.transition_task(
             self.task_id,
-            TaskStatus.RUNNING,
+            TaskStatus.READY,
             expected_revision=int(task["revision"]),
         )
         currentness = inspect_dispatch_binding_currentness(
