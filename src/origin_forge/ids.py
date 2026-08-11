@@ -85,6 +85,7 @@ class IdKind(StrEnum):
     INPUT_RESOLUTION_BUNDLE = "INRES"
     DISPATCH_BINDING = "DISPBIND"
     DISPATCH_BINDING_AUDIT = "BINDAUD"
+    DISPATCH_CLAIM = "DISPCLAIM"
 
 
 def new_id(kind: IdKind) -> str:
