@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from origin_forge.runtime import OriginForgeRuntime
+from origin_forge.state import TaskStatus
 
 
 class RuntimeReadLimitTests(unittest.TestCase):
@@ -24,6 +25,17 @@ class RuntimeReadLimitTests(unittest.TestCase):
         second_flow = self.runtime.create_flow(first_goal)
         first_task = self.runtime.create_task(first_flow, "first task")
         second_task = self.runtime.create_task(first_flow, "second task")
+        for task in (first_task, second_task):
+            revision = self.runtime.transition_task(
+                task,
+                TaskStatus.READY,
+                expected_revision=0,
+            )
+            self.runtime.transition_task(
+                task,
+                TaskStatus.RUNNING,
+                expected_revision=revision,
+            )
         first_run = self.runtime.start_run(first_task, role="OBSERVER")
         second_run = self.runtime.start_run(second_task, role="OBSERVER")
         self.runtime.record_verification(
