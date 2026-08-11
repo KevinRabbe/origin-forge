@@ -34,7 +34,7 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 5)
+            self.assertEqual(SCHEMA_VERSION, 6)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -50,6 +50,17 @@ class MigrationTests(unittest.TestCase):
                     row["name"]
                     for row in upgraded.execute("PRAGMA index_list(entity_relations)")
                 }
+                dependency_indexes = {
+                    row["name"]
+                    for row in upgraded.execute("PRAGMA index_list(task_dependencies)")
+                }
+                dependency_triggers = {
+                    row["name"]
+                    for row in upgraded.execute(
+                        """SELECT name FROM sqlite_master
+                           WHERE type = 'trigger' AND tbl_name = 'task_dependencies'"""
+                    )
+                }
             self.assertIn("revision", workspace_columns)
             self.assertIn("base_commit", workspace_columns)
             for table in (
@@ -57,9 +68,18 @@ class MigrationTests(unittest.TestCase):
                 "entity_relations",
                 "entity_bindings",
                 "design_rules",
+                "task_dependencies",
             ):
                 self.assertIn(table, tables)
             self.assertIn("idx_entity_relations_active_unique", relation_indexes)
+            self.assertIn("idx_task_dependencies_required", dependency_indexes)
+            self.assertEqual(
+                dependency_triggers,
+                {
+                    "task_dependencies_same_flow_insert",
+                    "task_dependencies_no_cycle_insert",
+                },
+            )
 
 
 if __name__ == "__main__":
