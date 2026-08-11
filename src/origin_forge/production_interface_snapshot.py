@@ -8,6 +8,7 @@ from .runtime_observation_models import content_hash
 
 
 _MAX_TEXT_CHARS = 4096
+_MAX_SECTION_ROWS = 10_000
 
 
 class ProductionInterfaceSnapshotError(ValueError):
@@ -24,13 +25,20 @@ def _bounded_text(value: object) -> tuple[str | None, bool]:
     return value[:_MAX_TEXT_CHARS], True
 
 
+def _section_limit(limit: int) -> int:
+    if type(limit) is not int or not 1 <= limit <= _MAX_SECTION_ROWS:
+        raise ProductionInterfaceSnapshotError(
+            f"interface section limit must be 1..{_MAX_SECTION_ROWS}"
+        )
+    return limit
+
+
 def _limit_rows(rows: Iterable[dict[str, Any]], limit: int) -> tuple[tuple[dict[str, Any], ...], bool]:
+    normalized = _section_limit(limit)
     values = tuple(rows)
-    if type(limit) is not int or not 1 <= limit <= 10_000:
-        raise ProductionInterfaceSnapshotError("interface section limit must be 1..10000")
-    if len(values) <= limit:
+    if len(values) <= normalized:
         return values, False
-    return values[:limit], True
+    return values[:normalized], True
 
 
 def _goal_projection(row: dict[str, Any]) -> dict[str, object]:
@@ -163,10 +171,16 @@ def build_production_interface_snapshot(
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
 
-    raw_goals = tuple(runtime.list_goals())
-    raw_flows = tuple(runtime.list_flows())
-    raw_tasks = tuple(runtime.list_tasks())
-    raw_runs = tuple(runtime.list_runs())
+    max_goals = _section_limit(max_goals)
+    max_flows = _section_limit(max_flows)
+    max_tasks = _section_limit(max_tasks)
+    max_runs = _section_limit(max_runs)
+    max_verifications = _section_limit(max_verifications)
+
+    raw_goals = tuple(runtime.list_goals(limit=max_goals + 1))
+    raw_flows = tuple(runtime.list_flows(limit=max_flows + 1))
+    raw_tasks = tuple(runtime.list_tasks(limit=max_tasks + 1))
+    raw_runs = tuple(runtime.list_runs(limit=max_runs + 1))
 
     goals, goals_truncated = _limit_rows(raw_goals, max_goals)
     flows, flows_truncated = _limit_rows(raw_flows, max_flows)
@@ -174,18 +188,27 @@ def build_production_interface_snapshot(
     runs, runs_truncated = _limit_rows(raw_runs, max_runs)
 
     verification_rows: list[dict[str, Any]] = []
-    verification_truncated = False
     for task in tasks:
         remaining = max_verifications - len(verification_rows)
         if remaining <= 0:
-            verification_truncated = True
             break
-        values = runtime.list_verifications("TASK", str(task["id"]))
+        values = runtime.list_verifications(
+            "TASK",
+            str(task["id"]),
+            limit=remaining + 1,
+        )
+        verification_rows.extend(values[:remaining])
         if len(values) > remaining:
-            verification_rows.extend(values[:remaining])
-            verification_truncated = True
             break
-        verification_rows.extend(values)
+
+    total_counts = {
+        "goals": runtime.count_goals(),
+        "flows": runtime.count_flows(),
+        "tasks": runtime.count_tasks(),
+        "runs": runtime.count_runs(),
+        "task_verifications": runtime.count_task_verifications(),
+    }
+    verification_truncated = total_counts["task_verifications"] > len(verification_rows)
 
     return ProductionInterfaceSnapshot(
         project_id=runtime.project_id(),
@@ -196,13 +219,7 @@ def build_production_interface_snapshot(
         task_verifications=tuple(
             _verification_projection(value) for value in verification_rows
         ),
-        total_counts={
-            "goals": len(raw_goals),
-            "flows": len(raw_flows),
-            "tasks": len(raw_tasks),
-            "runs": len(raw_runs),
-            "task_verifications": len(verification_rows),
-        },
+        total_counts=total_counts,
         truncated={
             "goals": goals_truncated,
             "flows": flows_truncated,
