@@ -11,6 +11,7 @@ from .media_fingerprint_models import (
     MediaFingerprint,
     WatermarkPlan,
 )
+from .media_watermark_models import WatermarkResult
 from .runtime import OriginForgeRuntime
 from .runtime_observation_models import canonical_bytes, content_hash
 
@@ -22,6 +23,7 @@ _CATEGORY_KIND = {
     "fingerprints": IdKind.MEDIA_FINGERPRINT,
     "comparisons": IdKind.FINGERPRINT_COMPARISON,
     "watermark-plans": IdKind.WATERMARK_PLAN,
+    "watermark-results": IdKind.WATERMARK_RESULT,
 }
 
 
@@ -39,7 +41,7 @@ def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 class MediaFingerprintStore:
-    """Immutable protected evidence store for Phase-28 fingerprints/plans."""
+    """Immutable protected evidence store for Phase-28 fingerprints/marks."""
 
     def __init__(self, runtime: OriginForgeRuntime):
         if not isinstance(runtime, OriginForgeRuntime):
@@ -85,6 +87,8 @@ class MediaFingerprintStore:
             return value.comparison_id
         if category == "watermark-plans" and isinstance(value, WatermarkPlan):
             return value.plan_id
+        if category == "watermark-results" and isinstance(value, WatermarkResult):
+            return value.result_id
         raise TypeError(f"object type does not belong in media-fingerprints/{category}")
 
     def _exact_path(self, category: str, object_id: str, *, require_file: bool) -> Path:
@@ -199,3 +203,6 @@ class MediaFingerprintStore:
 
     def publish_watermark_plan(self, value: WatermarkPlan) -> Path:
         return self._publish("watermark-plans", value)
+
+    def publish_watermark_result(self, value: WatermarkResult) -> Path:
+        return self._publish("watermark-results", value)
