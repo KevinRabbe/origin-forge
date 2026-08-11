@@ -7,14 +7,16 @@ from pathlib import Path
 
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import RunStatus, TaskStatus
-from origin_forge.training_research_models import TrainingEligibilityAudit
+from origin_forge.training_research_policy import (
+    GovernedTrainingEligibilityAudit,
+    RUNTIME_REDACTED_PRODUCER_FINGERPRINT,
+    RUNTIME_REDACTED_PRODUCER_ID,
+    RUNTIME_REDACTED_PRODUCER_VERSION,
+)
 from origin_forge.training_research_runtime_adapter import (
     TrainingTrajectoryAdapterError,
     build_verified_runtime_trajectory,
 )
-
-
-POLICY_HASH = "sha256:" + "f" * 64
 
 
 class TrainingResearchRuntimeAdapterTests(unittest.TestCase):
@@ -59,12 +61,18 @@ class TrainingResearchRuntimeAdapterTests(unittest.TestCase):
         self.runtime.transition_task(task, TaskStatus.SUCCEEDED, expected_revision=revision)
         return task, run_id
 
-    def test_successful_adapter_exports_only_redacted_structural_projection(self) -> None:
+    def test_successful_adapter_exports_only_redacted_trusted_projection(self) -> None:
         task, run_id = self._successful_state()
         trajectory = build_verified_runtime_trajectory(self.runtime, run_id=run_id)
         self.assertEqual(trajectory.task_id, task)
         self.assertEqual(trajectory.run_id, run_id)
         self.assertEqual(trajectory.objective, "verified terminal runtime trajectory")
+        self.assertEqual(trajectory.producer_id, RUNTIME_REDACTED_PRODUCER_ID)
+        self.assertEqual(trajectory.producer_version, RUNTIME_REDACTED_PRODUCER_VERSION)
+        self.assertEqual(
+            trajectory.producer_fingerprint,
+            RUNTIME_REDACTED_PRODUCER_FINGERPRINT,
+        )
         serialized = json.dumps(trajectory.to_dict(), sort_keys=True)
         for forbidden in (
             "SECRET-TASK-OBJECTIVE",
@@ -80,15 +88,11 @@ class TrainingResearchRuntimeAdapterTests(unittest.TestCase):
         self.assertEqual(trajectory.example["target"]["run_status"], "SUCCEEDED")
         self.assertEqual(trajectory.example["target"]["verification_types"], ["unit"])
 
-        audit = TrainingEligibilityAudit.create(
-            trajectory=trajectory,
-            policy_id="verified-runtime-redacted-v1",
-            policy_version="1",
-            policy_fingerprint=POLICY_HASH,
-        )
+        audit = GovernedTrainingEligibilityAudit.create(trajectory=trajectory)
         self.assertTrue(audit.eligible)
+        audit.bind(trajectory)
 
-    def test_same_task_retries_share_leakage_group(self) -> None:
+    def test_same_task_retries_share_leakage_group_policy(self) -> None:
         _, task = self._running_task()
         failed = self.runtime.start_run(task, role="EXECUTOR", model_profile="coding-small")
         self.runtime.finish_run(failed, RunStatus.FAILED, failure_reason="SECRET-FAILURE")
