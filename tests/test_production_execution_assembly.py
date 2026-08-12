@@ -248,6 +248,7 @@ providers = [
         self.assertEqual(assembled.plan.model_profile_ids, ("strong",))
         self.assertEqual(assembled.plan.runtime_ids, ("llamacpp-cpu",))
         self.assertEqual(assembled.plan.config_version, 6)
+        self.assertRegex(assembled.plan.resource_model_config_hash, r"^[0-9a-f]{64}$")
         self.assertEqual(assembled.plan.sandbox_backend, "podman")
         self.assertRegex(assembled.plan.plan_hash, r"^[0-9a-f]{64}$")
         self.assertEqual(len(assembled.models), 1)
@@ -275,6 +276,39 @@ providers = [
         self.assertEqual(self._state_snapshot(), before)
         self.assertEqual(self.runtime.get_task(self.task_id), task_before)
         self.assertEqual(self.runtime.list_runs(self.task_id), runs_before)
+
+    def test_phase14_resource_semantics_change_dependency_plan_identity(self) -> None:
+        first = assemble_production_execution_dependencies(
+            self.runtime,
+            self.claim.claim_id,
+        )
+        config_path = self.runtime.state_dir / "config.toml"
+        raw = config_path.read_text(encoding="utf-8")
+        changed = raw.replace(
+            'resources = { cpu_slots = 2, ram_mib = 4096 }',
+            'resources = { cpu_slots = 3, ram_mib = 4096 }',
+        )
+        self.assertNotEqual(changed, raw)
+        config_path.write_text(changed, encoding="utf-8")
+
+        second = assemble_production_execution_dependencies(
+            self.runtime,
+            self.claim.claim_id,
+        )
+        self.assertNotEqual(
+            first.plan.resource_model_config_hash,
+            second.plan.resource_model_config_hash,
+        )
+        self.assertEqual(
+            first.plan.model_runtime_config_fingerprint,
+            second.plan.model_runtime_config_fingerprint,
+        )
+        self.assertNotEqual(first.plan.plan_hash, second.plan.plan_hash)
+        self.assertEqual(first.plan.model_profile_ids, second.plan.model_profile_ids)
+        self.assertEqual(first.plan.runtime_ids, second.plan.runtime_ids)
+        self.assertEqual(second.model_scheduling.resources.status().active_leases, ())
+        self.assertEqual(second.runtime_dispatch_loader.active_runtime_ids(), ())
+        self.assertEqual(second.managed_loaders[0].active_instance_count(), 0)
 
     def test_missing_runtime_binding_and_unconfigured_sandbox_fail_before_authority(self) -> None:
         config_path = self.runtime.state_dir / "config.toml"
