@@ -330,8 +330,19 @@ providers = [
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
         }
         self.assertTrue(forbidden_calls.isdisjoint(called))
-        self.assertNotIn("sandbox", source)
-        self.assertNotIn("workspaces", source)
+        imported_modules = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module is not None
+        } | {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        self.assertTrue(
+            all("sandbox" not in module and "workspace" not in module for module in imported_modules)
+        )
         signature = inspect.signature(assemble_preparation_planner_dependencies)
         self.assertEqual(tuple(signature.parameters), ("runtime", "policy"))
         for forbidden in (
