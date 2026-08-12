@@ -45,7 +45,7 @@ class ModelResourceCliTests(unittest.TestCase):
                 code = main(["--project-root", temp, "status"])
             self.assertEqual(code, 0)
             payload = json.loads(output.getvalue())
-            self.assertEqual(payload["config_version"], 5)
+            self.assertEqual(payload["config_version"], 6)
             self.assertFalse(payload["enabled"])
             self.assertEqual(payload["profiles"], [])
             self.assertEqual(payload["policies"], [])
