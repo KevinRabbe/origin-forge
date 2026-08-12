@@ -2,303 +2,517 @@
 
 Status: **DONE — implementation complete; final documentation-head CI pending**
 
-Phase 36 closes the last execution-side authority gap between an exact Phase-35 `ACTIVE` dispatch claim and the first future production call into the bounded-code executor.
+Phase 36 prepares the last execution-side infrastructure required after Phase 35 and before the first production dispatcher may call a trusted execution owner.
 
-It adds durable one-shot execution ownership, a trusted execution-owner registry, protected managed-runtime configuration, a code-owned local CPU llama.cpp loader, lazy dependency reconstruction, atomic execution/claim lifecycle primitives, and immutable currentness inspection.
+It exists because Phase 35 now proves that Origin Forge can activate one exact dependency-ready Task, rebuild Phase-32/33/34 authority on the new `READY` revision, and acquire exactly one durable `ACTIVE` dispatch claim — but the repository still lacks two independent contracts required for safe invocation:
 
-Phase 36 deliberately **stops before production invocation**. No Phase-36 production path calls `BoundedRetryPolicy.drive()`, `ModelAdapter.generate()`, a production backend, or a model runtime as part of dispatch ownership establishment.
+1. a durable one-shot execution receipt/claim-consumption protocol; and
+2. a protected, code-owned way to construct the bounded-code executor's runtime/model dependencies without caller-supplied endpoints, loaders, model objects, shell commands, or arbitrary process authority.
+
+Phase 36 may add tightly bounded infrastructure-owned model-runtime process management because that is itself a missing dependency authority. It still stops before `BoundedRetryPolicy.drive()` and before any production Task is executed.
 
 ---
 
-## Accepted authority chain
+## Current verified gap
+
+At Phase-35 merged `main`, the following pieces already exist:
 
 ```text
-READY Task
-    ↓
-exact current Phase-32 route
-    ↓
-exact audited Phase-33 WorkOrder
-    ↓
-exact Phase-34 input resolution / binding / audit
-    ↓
+Phase 31   dependency readiness
+Phase 32   exact capability route
+Phase 33   exact WorkOrder + audit
+Phase 34   exact input resolution + typed binding + audit/currentness
+Phase 35   exact QUEUED→READY activation + exclusive ACTIVE claim
+```
+
+The bounded-code execution owner already exists:
+
+```text
+BoundedRetryPolicy(
+    runtime,
+    models: Sequence[ModelAdapter],
+    sandbox_backend,
+    workspaces,
+).drive(...)
+```
+
+`BoundedRetryPolicy` owns the downstream Task/Run/Workspace/retry/audit/sandbox lifecycle. A later dispatcher must not duplicate that truth model.
+
+The missing dependency construction is concrete:
+
+- Phase-14 `create_model_scheduling()` constructs resource/model scheduling state but deliberately does not load a model.
+- `ModelScheduler.use()` requires a caller-supplied `ManagedModelLoader`.
+- `ModelRuntimeRegistry` stores caller-supplied loader objects; it does not construct trusted production loaders.
+- `ScheduledModelAdapter` requires a supplied loader.
+- current production llama.cpp adapters are bounded HTTP clients whose endpoint/model/API settings are supplied to their constructors; they do not own the llama.cpp process/model lifecycle.
+- the Phase-14 model/resource CLI explicitly performs inspection without loading a model.
+- Phase-14 scheduler-factory tests prove lease construction and release, not production runtime loading.
+- Phase-21 llama.cpp vision is also a governed HTTP adapter, not a managed llama.cpp process loader.
+- the sandbox dependency is already safely constructible from protected configuration through `create_sandbox_backend()`.
+
+Therefore a dispatcher created immediately after Phase 35 would have to receive model/runtime authority from its caller. That is forbidden.
+
+---
+
+## Core Phase-36 boundary
+
+The intended architecture is:
+
+```text
 Phase-35 ACTIVE DISPCLAIM
-    ↓
+        ↓
+exact claim currentness = CURRENT_ACTIVE
+        ↓
 trusted execution-owner descriptor
-    ↓
-protected Phase-14 model policy + Phase-36 runtime provider bindings
-    ↓
-lazy bounded-code dependency assembly
-    ↓
-one durable DISPEXEC STARTED receipt
-    ↓
+        ↓
+protected model/runtime dependency plan
+        ↓
+code-owned runtime-provider registry
+        ↓
+construct bounded execution dependencies
+        ↓
+create durable DISPEXEC STARTED ownership receipt
+        ↓
 STOP
 
 NO BoundedRetryPolicy.drive()
 NO production Task execution
 ```
 
-The existing `BoundedRetryPolicy` remains the downstream authority for Task/Run/Workspace/retry/audit/sandbox execution semantics. `DISPEXEC-*` is only invocation-ownership evidence and never becomes a second Task or Run truth model.
+Phase 36 proves that all execution authority can be reconstructed from protected infrastructure state and exact existing evidence before Phase 37 is allowed to perform the first call.
 
 ---
 
-## 36A — One-shot execution identity and schema — DONE
+## 36A — One-shot dispatch execution identity and claim-consumption semantics
 
-Implemented:
-
-- infrastructure-owned `DISPEXEC-*` identity;
-- `DispatchExecution` frozen authority records;
-- execution lifecycle `STARTED → RETURNED | RAISED | INTERRUPTED`;
-- Phase-35 claim extension `ACTIVE → CONSUMED`;
-- schema migration v9 preserving all v8 dispatch-claim columns/rows while widening only the claim terminal-status constraint;
-- `dispatch_executions` with exact claim/task/Phase-34/owner/dependency-plan bindings;
-- database uniqueness for one execution per claim;
-- database defense allowing at most one `STARTED` execution per Task;
-- adversarial migration/model/database coverage.
-
-`CONSUMED` means execution authority was used exactly once. It does not mean the Task succeeded.
-
-Accepted 36A head:
+Add one infrastructure-owned identity family:
 
 ```text
-8977103dcb18276d9dfab41ff900c0c60be780dc
+DISPEXEC-*   DispatchExecution
 ```
 
-Normal matrix: GitHub Actions run `31528424230`, Python 3.12 PASS and Python 3.13 PASS.
+A `DispatchExecution` is an invocation-ownership receipt, not a second Run or Task truth model.
+
+Frozen authority fields bind at minimum:
+
+```text
+execution_id
+project_id
+claim_id
+claim_revision_at_start
+task_id
+task_revision
+task_content_hash
+work_order_id/work_order_hash
+input_resolution_id/input_resolution_hash
+dispatch_binding_id/dispatch_binding_hash
+binding_audit_id/binding_audit_hash
+selected_adapter_id/selected_adapter_fingerprint
+dispatch_contract_id/dispatch_contract_hash
+binder_id/binder_fingerprint
+execution_owner_id/execution_owner_fingerprint
+runtime_dependency_plan_hash
+status
+revision
+created_at
+updated_at
+terminal_detail_hash/null
+```
+
+Initial execution lifecycle:
+
+```text
+STARTED → RETURNED
+STARTED → RAISED
+STARTED → INTERRUPTED
+```
+
+These states describe invocation mechanics only:
+
+- `RETURNED`: the trusted execution owner returned normally.
+- `RAISED`: the trusted execution owner was actually called and raised/failed at the invocation boundary.
+- `INTERRUPTED`: ownership was lost or abandoned before a trustworthy terminal return/raise could be recorded.
+
+They do **not** reinterpret the Task outcome. The existing Task/Run/Workspace state produced by `BoundedRetryPolicy` remains authoritative.
+
+Phase 36 extends the Phase-35 claim lifecycle with one terminal state:
+
+```text
+ACTIVE → CONSUMED
+```
+
+`CONSUMED` means only that execution authority was used exactly once. It does not mean success.
+
+Critical ordering:
+
+- while `DISPEXEC` is `STARTED`, its originating claim remains `ACTIVE`;
+- therefore Phase-35 one-ACTIVE-claim-per-Task continues blocking a second owner during the invocation window;
+- one immutable uniqueness relation permits at most one `DISPEXEC-*` for a claim;
+- a normal `RETURNED` or `RAISED` terminalization atomically terminalizes the execution record and changes the exact claim `ACTIVE → CONSUMED`;
+- explicit interrupted recovery atomically changes `DISPEXEC STARTED → INTERRUPTED` and the exact claim `ACTIVE → INTERRUPTED`.
+
+This avoids the unsafe gap that would exist if a claim were freed before the executor call completed.
+
+No Phase-36 API may mark a claim `RELEASED` after execution authority has been consumed. Phase-35 `RELEASED` retains its original meaning: unused/abandoned before invocation.
 
 ---
 
-## 36B — Trusted execution-owner registry — DONE
+## 36B — Trusted execution-owner catalog
 
-Implemented one inert code-owned execution-owner descriptor for the reviewed bounded-code path:
+Introduce an infrastructure-owned, code-defined execution-owner registry. Persistent/model-visible descriptors are inert and content-addressed; they contain no callable, module path, import string, shell, argv, endpoint, credential, executable handle, or dynamically supplied plugin metadata.
+
+The initial reviewed execution owner is exactly:
 
 ```text
-owner_id:             originforge.execution.bounded-retry@1
-adapter_id:           originforge.code.bounded-retry
+owner_id: originforge.execution.bounded-retry@1
+adapter_id: originforge.code.bounded-retry
 dispatch_contract_id: code.bounded-retry@1
-binder_id:            binder.code.bounded-retry@1
-request_type_id:      BoundedRetryPolicy.drive@1
+binder_id: binder.code.bounded-retry@1
+request_type_id: BoundedRetryPolicy.drive@1
 ```
 
-The descriptor contains no callable, module/import path, shell, argv, endpoint, credential, executable handle, plugin metadata, or dynamically supplied backend authority.
-
-The initial execution strategy is deliberately narrow:
+The descriptor additionally freezes its dependency classes:
 
 ```text
-CODER_STRONG
+runtime: canonical OriginForgeRuntime
+sandbox: protected configured SandboxBackend
+workspace_manager: canonical GitWorkspaceManager
+model_strategy_roles: explicit ordered ModelRole sequence
+model_runtime_policy: protected Phase-36 runtime-provider binding
 ```
 
-Phase 36 does not infer `CODER_FAST → CODER_STRONG` merely because multiple profiles might exist. Phase-14 profile fallback remains separately governed by the explicit `ModelSelectionPolicy` for the declared semantic role.
+The model strategy sequence is explicit because two existing policies must not be conflated:
 
-Accepted 36B head:
+- `BoundedRetryPolicy` uses a sequence of model adapters for strategy escalation across attempts.
+- Phase-14 `ModelSelectionPolicy` chooses an explicitly allowed primary/fallback profile within one semantic `ModelRole` under resource admission.
+
+Phase 36 must never infer the bounded-retry escalation sequence from whichever profiles happen to exist. The execution-owner descriptor owns the allowed role sequence, initially a deliberately narrow code-owned sequence such as:
 
 ```text
-4de123faa0b036cff7740be376aab1983f6ba3a8
+CODER_FAST → CODER_STRONG
 ```
 
-Normal matrix: GitHub Actions run `31528805134`, Python 3.12 PASS and Python 3.13 PASS.
+or an even narrower single-role sequence if the repository/config cannot prove both roles are present. Missing required policies fail closed; there is no implicit role downgrade or profile fallback beyond explicit Phase-14 policy.
 
 ---
 
-## 36C — Protected managed-runtime configuration — DONE
+## 36C — Protected model-runtime provider configuration
 
-Protected project configuration advances to v6 with a separate safe-disabled runtime-provider section:
+Advance protected project configuration only as much as required to bind a model profile's inert `runtime_id` to a code-owned runtime provider.
 
-```toml
-[model_runtimes]
-providers = []
+The configuration must remain declarative. It may identify exact local runtime/model files and bounded runtime settings, but it may not contain arbitrary command arrays, shell fragments, import paths, Python callables, plugin names, environment maps, or unrestricted network endpoints.
+
+The initial runtime-provider configuration must bind:
+
+```text
+runtime_id
+provider_kind
+provider_contract_version
+executable_path
+executable_sha256
+profile_id → model_path/model_sha256 relation
+loopback-only serving policy
+bounded startup timeout
+bounded request timeout
+bounded shutdown timeout
 ```
 
-Existing Phase-14 `[resources]` / `[models]` profile semantics remain unchanged. Prior v1–v5 configurations remain readable; non-empty managed runtime bindings require v6.
+The provider kind is a closed code-owned enum/registry. Unknown provider kinds fail closed.
 
-The initial closed provider kind is:
+The initial accepted provider is intentionally narrow:
 
 ```text
 originforge.llamacpp-managed-cpu@1
 ```
 
-A provider binds exact:
+It is local-only and CPU-only in v1. GPU device binding is deferred until a separately proven provider can map Phase-14 GPU leases to exact llama.cpp runtime placement without relying on ambiguous backend-specific behavior.
 
-- `runtime_id`;
-- provider kind and contract version;
-- local executable path and lowercase SHA-256;
-- fixed protected port;
-- bounded startup/request/shutdown timeouts;
-- profile ID → local model path / lowercase SHA-256 relation.
+CPU-only v1 keeps the resource-ownership statement truthful: the provider may start the model runtime only while holding the exact Phase-14 CPU/RAM lease assigned to the selected profile. A profile requesting GPU resources is rejected by this provider rather than silently ignoring the lease.
 
-Validation rejects unknown fields/provider kinds, remote-style paths, malformed/non-finite values, model/profile/runtime/hash mismatch, and GPU-bearing profiles for the CPU-only provider. The parser performs no filesystem access, process start, network request, dynamic import, loader construction, model generation, or lease operation.
+Backward compatibility requirements:
 
-The first 36C candidate `6a0c20a344b3d1a428265c29cc7ba32366b87e70` was **rejected**: normal run `31529766913` failed on both interpreters because two pre-existing tests still hard-coded the old default config version `5` after the intentional v6 default bump. The correction changed only those two stale assertions; no production byte changed after the rejected candidate.
-
-Accepted 36C head:
-
-```text
-4e4a5fcad8194537ab5df66e71d7c5687aaa9155
-```
-
-Normal matrix: GitHub Actions run `31595604003`, Python 3.12 job `94110293998` PASS and Python 3.13 job `94110294042` PASS.
+- prior protected config versions remain readable/migratable according to existing project rules;
+- the new runtime-provider section defaults safe-disabled/empty;
+- an enabled model profile with no compatible protected runtime binding is inspectable but **not dispatch-constructible**;
+- no release-only dependency broadening is introduced.
 
 ---
 
-## 36D — Managed local CPU llama.cpp loader — DONE
+## 36D — Managed local llama.cpp runtime loader
 
-Implemented `ManagedLlamaCppCpuLoader` as the code-owned `ManagedModelLoader` for `originforge.llamacpp-managed-cpu@1`.
+Implement one code-owned `ManagedModelLoader` for the protected `originforge.llamacpp-managed-cpu@1` provider.
 
-Before process start it proves:
+It owns the process lifecycle rather than merely connecting to an arbitrary caller endpoint.
 
-- exact provider kind/version and profile/runtime relation;
-- exact protected profile binding;
-- exact lowercase model SHA-256 matching both profile and bound model file;
-- executable and model are existing regular non-symlink files outside protected `.origin-forge` state;
-- executable/model bytes match protected SHA-256 values;
-- CPU/RAM lease exactly matches the selected profile request;
-- no GPU request or lease is present;
-- configured fixed loopback port is available.
+Before process start it must prove:
 
-The process surface is infrastructure-owned:
+- exact runtime provider kind/version;
+- exact configured runtime ID matches the selected `ModelResourceProfile.runtime_id`;
+- exact selected profile ID is bound by protected runtime configuration;
+- exact executable exists, is a regular non-symlink file, is outside protected Origin Forge state, and matches configured SHA-256;
+- exact model file exists, is a regular non-symlink file, is outside protected Origin Forge state, and matches the profile/runtime-binding SHA-256;
+- the profile's `model_hash` is exact and matches the bound model file hash;
+- the supplied Phase-14 resource lease belongs to that exact profile/request and contains no GPU lease for the CPU-only provider;
+- serving is loopback-only.
 
+Process construction rules:
+
+- infrastructure-owned fixed argv builder only;
 - no shell;
 - no caller/model argv;
-- no caller environment map;
-- loopback `127.0.0.1` only;
-- fixed configured port with collision failure and no random/remote fallback;
-- explicit CPU-only llama.cpp arguments;
-- minimal locale environment;
+- no arbitrary caller/model environment map;
+- minimal code-owned environment plus only explicitly required process/runtime fields;
+- loopback host only;
+- bounded fixed/protected port policy with explicit collision failure rather than fallback to remote/random authority;
 - bounded stdout/stderr capture;
-- bounded `/health` readiness polling;
-- cleanup on startup failure, timeout, and unload;
-- POSIX process-group descendant cleanup where the host contract supports it;
-- no download, internet lookup, secret discovery, daemonization, or hidden persistence.
+- bounded startup health/readiness checks;
+- process-group/descendant cleanup on timeout/error/unload where the host platform supports the existing governed process-cleanup contract;
+- no daemonization or hidden background persistence after loader unload;
+- no automatic binary/model download;
+- no internet lookup;
+- no secret discovery.
 
-The loaded object is the existing bounded `LlamaCppAdapter` configured only from trusted provider/profile state. `unload()` accepts only the exact active adapter instance owned by that loader and rejects unknown/reused instances.
+The loaded object returned to `ScheduledModelAdapter` is the existing bounded text `LlamaCppAdapter`, configured exclusively from trusted provider/profile state. The loader verifies the adapter model identity and the exact selected profile relation before returning it.
 
-Normal CI uses a controlled fake llama-server executable, so no heavyweight model is required for the standard gate.
+`unload()` must terminate only the exact process instance owned by that loader session and must fail closed on unknown/reused instances.
 
-Accepted 36D head:
-
-```text
-16131a847f768d2c2eafbd2ab7196babce3da28a
-```
-
-Normal matrix: GitHub Actions run `31597526290`; Python 3.12 job `94116594991` PASS and Python 3.13 job `94116594821` PASS.
+Normal CI uses a controlled fake llama-server process contract to prove argv/environment/loopback/readiness/cleanup and identity binding without requiring a heavyweight model. A separately governed real-runtime evidence path may be added if required to prove a pinned production llama.cpp binary/model combination, but it remains distinct from the normal Python matrix.
 
 ---
 
-## 36E — Lazy execution dependency assembly — DONE
+## 36E — Execution dependency assembler
 
-Implemented one code-owned assembler that accepts only:
+Add one code-owned assembler that reconstructs the complete bounded-code execution dependencies from protected state and the exact ACTIVE claim without invoking them.
 
-```text
-OriginForgeRuntime + exact DISPCLAIM ID
-```
-
-It derives everything else from current persisted authority, code-owned registries, and protected configuration:
-
-- exact current Phase-35 claim;
-- exact Phase-34 binding/request identity;
-- trusted execution owner;
-- protected config v6;
-- explicit Phase-14 model-role policy;
-- all profiles reachable through that explicit policy;
-- trusted runtime-provider bindings for every reachable profile;
-- model scheduler and lazy scheduled adapters;
-- runtime-loader registry/dispatcher;
-- protected sandbox backend;
-- canonical `GitWorkspaceManager`;
-- constructed but uninvoked `BoundedRetryPolicy`;
-- deterministic dependency-plan hash over the complete non-secret authority surface.
-
-The dependency-plan identity includes Phase-14 scheduling semantics, not merely selected profile names. Changing resource/model policy state changes the plan hash.
-
-Assembly creates no model/resource lease, llama.cpp process, Run, Workspace, Task transition, Artifact, Verification, claim terminalization, or executor call.
-
-Accepted 36E head:
+Conceptually:
 
 ```text
-4b636adea33a4132171520d15f1ff15e65c544ef
+assemble_bounded_retry_execution(
+    runtime,
+    active_claim,
+    trusted_owner_registry,
+    protected_config,
+    runtime_provider_registry,
+)
+        ↓
+BoundedExecutionAssembly(
+    execution_owner_descriptor,
+    exact Phase-34 request projection,
+    model strategy adapters,
+    sandbox backend,
+    workspace manager,
+    dependency_plan_hash,
+)
 ```
 
-Normal matrix: GitHub Actions run `31599083299`; Python 3.12 job `94121763572` PASS and Python 3.13 job `94121763386` PASS.
+The caller may nominate only the exact claim ID (or exact already-read claim object where an internal API requires it). It may not supply:
+
+- model objects;
+- runtime loaders;
+- model/profile IDs;
+- endpoints;
+- API keys;
+- executable/model paths;
+- sandbox backend objects;
+- Workspace manager implementations;
+- model-role escalation order;
+- adapter/contract/binder IDs;
+- arbitrary environment/process settings.
+
+The assembler derives all of those from code-owned registries, protected configuration, and the exact Phase-34/35 authority chain.
+
+Assembly currentness requires:
+
+- exact claim status `ACTIVE` and Phase-35 currentness `CURRENT_ACTIVE`;
+- exact execution-owner descriptor match for adapter/contract/binder/request schema;
+- every required Phase-14 model role has an explicit configured policy;
+- every profile reachable from those explicit policies has a compatible trusted runtime provider or is rejected before dispatch construction;
+- sandbox backend is constructible from protected config;
+- no active/previous `DISPEXEC` already consumes the claim;
+- deterministic dependency-plan hashing over all non-secret authority identities/fingerprints.
+
+Assembly may construct objects but must not:
+
+- call `BoundedRetryPolicy.drive()`;
+- call `ModelAdapter.generate()`;
+- acquire a model resource lease;
+- start a llama.cpp process;
+- create a Run or Workspace;
+- transition Task/Flow/Goal state;
+- publish Artifacts/Verifications;
+- consume or terminalize the dispatch claim.
+
+The managed loader remains lazy under `ScheduledModelAdapter`; actual model process loading is exercised only through the loader's own isolated tests/evidence until the later dispatcher phase.
 
 ---
 
-## 36F — Execution ownership transactions — DONE
+## 36F — Execution ownership transaction primitives
 
-Implemented internal execution lifecycle primitives around exact expected revisions.
+Provide internal coordinator primitives that atomically establish and recover invocation ownership without performing the call themselves.
 
-`begin_dispatch_execution(runtime, claim_id, expected_revision)`:
-
-1. assembles the trusted dependency graph without invoking it;
-2. enters `BEGIN IMMEDIATE`;
-3. rechecks exact claim project/status/revision/frozen authority;
-4. rechecks exact Task revision/content/status/dependency readiness;
-5. rejects prior execution for the claim or competing `STARTED` execution for the Task;
-6. inserts one `DISPEXEC STARTED` record + state event;
-7. proves the originating claim is byte-for-byte/lifecycle unchanged and remains `ACTIVE`;
-8. returns the frozen receipt plus lazy dependencies.
-
-Terminalization requires exact execution and claim revisions and updates both in one transaction:
+Start primitive:
 
 ```text
-STARTED → RETURNED     + claim ACTIVE → CONSUMED
-STARTED → RAISED       + claim ACTIVE → CONSUMED
-STARTED → INTERRUPTED  + claim ACTIVE → INTERRUPTED
+begin_dispatch_execution(runtime, claim_id, expected_claim_revision)
 ```
 
-Every frozen execution/claim authority field is preserved. Terminal detail is represented by bounded content-hash evidence rather than becoming Task-outcome truth.
+It must:
 
-Accepted initial 36F transaction head:
+1. revalidate exact Phase-35 claim ownership/currentness;
+2. revalidate exact trusted execution-owner relation and dependency-plan fingerprint;
+3. enter one authoritative SQLite transaction;
+4. recheck claim `ACTIVE`, revision, Task identity/revision/hash/status, and absence of a prior execution for the claim;
+5. insert one `DISPEXEC STARTED` row plus event;
+6. leave the claim `ACTIVE` while the execution receipt is `STARTED`;
+7. return the exact frozen receipt.
+
+It performs no executor/model/backend call.
+
+Terminal primitives require exact `execution_id + expected_execution_revision + expected_claim_revision` and update execution + claim atomically:
 
 ```text
-b987a5481820a4e7cae6096f5515d9dacbca29af
+finish_dispatch_execution_returned(...)
+finish_dispatch_execution_raised(...)
+interrupt_dispatch_execution(...)
 ```
 
-Normal matrix: GitHub Actions run `31599943350`; Python 3.12 job `94124605158` PASS and Python 3.13 job `94124605054` PASS.
+Only a future trusted coordinator may call `RETURNED`/`RAISED` after the corresponding actual invocation boundary has occurred. Phase-36 public/operator surfaces must not expose a generic way to forge those terminal states.
 
-The later cross-phase invariant review superseded some already-green ownership/currentness semantics; the final accepted integrated semantics are recorded below.
+Tests may exercise the internal transaction functions with explicit test-owned simulated invocation evidence, but no model or backend is called.
 
 ---
 
-## 36G — Immutable execution inspection/currentness — DONE
+## 36G — Read-only inspection and pre-dispatch acceptance
 
-Implemented non-creating inspection through the existing immutable SQLite boundary for:
+Add an immutable/non-creating read surface using the existing Phase-30 SQLite guard for:
 
-- exact `DISPEXEC-*` records;
-- claim/execution frozen relation validation;
-- `CURRENT_STARTED` ownership;
-- returned/raised/interrupted historical terminal state;
-- restart recovery detection;
-- consumed/interrupted claim history;
-- current-vs-stale execution authority without creating migrations, WAL/SHM sidecars, leases, processes, Runs, or Workspaces.
+- runtime-provider configuration status/fingerprint;
+- execution-owner registry status/fingerprint;
+- exact dependency assembly eligibility without constructing/starting a model process;
+- `DISPEXEC-*` show/currentness;
+- ACTIVE claim + STARTED execution recovery detection;
+- claim/execution historical relation validation.
 
-Accepted initial 36G reader head:
+No mutating CLI is required in Phase 36. If an operator CLI is added, it is inspection-only.
+
+The cross-phase acceptance proof must establish:
 
 ```text
-e3b24a5346aa3d275c5ce2d842f4e02d2082426e
+READY Task
+→ exact Phase-32/33/34 chain
+→ ACTIVE Phase-35 claim
+→ trusted execution-owner selection
+→ protected runtime dependency plan
+→ exact lazy dependency assembly
+→ one DISPEXEC STARTED receipt
+→ STOP
 ```
 
-Normal matrix: GitHub Actions run `31600511052`; Python 3.12 job `94126511618` PASS and Python 3.13 job `94126511645` PASS.
+It must also prove:
+
+- a second execution cannot start for the same claim;
+- a second claim cannot be acquired for the Task while `DISPEXEC` is STARTED because the originating claim remains ACTIVE;
+- restart preserves STARTED execution + ACTIVE claim and fails closed;
+- explicit interrupted recovery terminalizes both consistently;
+- returned/raised terminalization consumes the claim exactly once in simulated transaction tests;
+- no Phase-36 production path invokes `BoundedRetryPolicy.drive()`, `ModelAdapter.generate()`, or a production backend;
+- no Task/Run/Workspace truth is duplicated in `DISPEXEC`.
 
 ---
 
-## Cross-phase acceptance and semantic repair
+## Required adversarial tests
 
-The first full Phase-36 cross-phase acceptance head was:
+At minimum:
+
+- malformed/forged execution-owner descriptor rejected;
+- owner mismatch against adapter/contract/binder/request schema rejected;
+- missing model-role strategy policy rejected;
+- implicit role/profile fallback rejected;
+- unknown runtime provider rejected;
+- caller-supplied loader/model/backend/endpoint/argv/environment authority impossible by API shape;
+- runtime executable/model symlink, missing file, hash drift, wrong profile/runtime relation rejected before process start;
+- CPU provider rejects GPU-bearing profile/lease;
+- remote/non-loopback runtime serving rejected;
+- fake runtime proves fixed argv/minimal environment/readiness/timeout/cleanup;
+- loader rejects unknown/reused unload instance;
+- dependency assembly creates no lease/process/Run/Workspace/Task mutation;
+- stale/terminal Phase-35 claim cannot assemble or start execution;
+- exact claim may create only one execution receipt;
+- STARTED execution leaves claim ACTIVE;
+- concurrent start attempts yield exactly one STARTED receipt;
+- STARTED execution survives restart and blocks duplicate ownership;
+- interrupted recovery requires expected revisions and atomically terminalizes execution + claim;
+- simulated RETURNED/RAISED terminalization changes claim exactly `ACTIVE → CONSUMED` and preserves all frozen authority;
+- terminal execution/claim states cannot be rewritten;
+- immutable inspection creates no SQLite sidecars or protected-state mutations;
+- source-level authority guards reject direct calls to `BoundedRetryPolicy.drive()`, model generation, production adapter execution, arbitrary subprocess construction, Artifact adoption/signing, merge, release, or self-training.
+
+---
+
+## Explicit authority exclusions
+
+Phase 36 does **not** add:
+
+- production `BoundedRetryPolicy.drive()` invocation;
+- production Task execution;
+- automatic Task retry/resume beyond existing bounded-policy semantics;
+- background dispatch workers/queues;
+- model-selected runtime/provider/profile/endpoint authority;
+- remote model endpoints in the initial managed provider;
+- GPU runtime placement in the initial managed provider;
+- caller/model shell, argv, environment, import, callable, executable, model path, or credential authority;
+- generic process execution;
+- Task success/failure/quarantine interpretation from `DISPEXEC` status;
+- a replacement Run/Workspace truth model;
+- Artifact adoption/signing;
+- Project Intelligence mutation;
+- merge/release/self-training authority.
+
+The first actual production executor call is explicitly deferred to the next phase after Phase 36 is merged and independently proven.
+
+---
+
+## Proposed implementation slices
 
 ```text
-8e537868568ed055ac344d631255ac3acecd4c1d
+36A  DISPEXEC + CONSUMED contracts/schema
+36B  trusted execution-owner registry + explicit model-role strategy
+36C  protected runtime-provider config and validation
+36D  managed local CPU llama.cpp loader + isolated fake-process proof
+36E  lazy bounded-code dependency assembler
+36F  execution ownership/start/terminal/recovery transaction primitives
+36G  immutable read/currentness + cross-phase acceptance + canonical closure
 ```
 
-Normal matrix run `31600818873` passed on Python 3.12 job `94127475782` and Python 3.13 job `94127475867`.
+Every authority-expanding slice must freeze one exact SHA and pass the normal Ubuntu Python 3.12/3.13 matrix before the next slice begins. Managed-runtime real evidence, if introduced, is separately governed and cannot replace the normal exact-head matrix.
 
-A subsequent invariant review identified that STARTED execution ownership and claim *eligibility for starting a new execution* must not be conflated. The architecture requires the original claim to remain `ACTIVE` for the entire STARTED invocation window so the durable Phase-35 uniqueness constraint continues to exclude a second dispatch owner.
+---
 
-The repair sequence therefore tightened the implementation and tests so that:
+## Exit condition
 
-- begin creates `DISPEXEC STARTED` while leaving the exact claim `ACTIVE` and at its original revision;
-- a STARTED execution can be `CURRENT_STARTED` while its claim is no longer eligible to start another execution because a receipt already exists;
-- a second claim for the Task remains blocked by the original ACTIVE claim;
-- terminalization alone releases the STARTED ownership window by atomically consuming/interruption-terminalizing the claim;
-- reader/currentness and cross-phase tests use this same distinction.
+Phase 36 is complete when Origin Forge can take one exact current Phase-35 ACTIVE claim, deterministically select the only trusted bounded-code execution owner, reconstruct every non-secret execution dependency from protected configuration/code-owned registries, prove the selected profiles have trusted managed runtime bindings, construct the lazy model/sandbox/workspace dependency graph without caller authority, atomically establish one durable one-shot `DISPEXEC STARTED` receipt, recover/terminalize that ownership safely across restart, and still stop before `BoundedRetryPolicy.drive()`.
+
+Only then may Phase 37 introduce the first governed single-shot production dispatcher.
+
+---
+
+## Implementation closure evidence
+
+The planned boundary above was implemented without adding the deferred production executor call.
+
+Accepted slice evidence:
+
+```text
+36A  8977103dcb18276d9dfab41ff900c0c60be780dc  run 31528424230  Python 3.12/3.13 PASS
+36B  4de123faa0b036cff7740be376aab1983f6ba3a8  run 31528805134  Python 3.12/3.13 PASS
+36C  4e4a5fcad8194537ab5df66e71d7c5687aaa9155  run 31595604003  Python 3.12/3.13 PASS
+36D  16131a847f768d2c2eafbd2ab7196babce3da28a  run 31597526290  Python 3.12/3.13 PASS
+36E  4b636adea33a4132171520d15f1ff15e65c544ef  run 31599083299  Python 3.12/3.13 PASS
+36F  b987a5481820a4e7cae6096f5515d9dacbca29af  run 31599943350  Python 3.12/3.13 PASS
+36G  e3b24a5346aa3d275c5ce2d842f4e02d2082426e  run 31600511052  Python 3.12/3.13 PASS
+```
+
+The first full cross-phase acceptance head `8e537868568ed055ac344d631255ac3acecd4c1d` also passed run `31600818873` on both interpreters. A later invariant review deliberately superseded those already-green ownership/currentness semantics: a `STARTED` execution must keep its originating claim `ACTIVE`, while the presence of that execution receipt separately makes the claim ineligible to start another execution. The repair aligned transaction, reader, and acceptance semantics with that distinction.
 
 Final integrated code/test head:
 
@@ -311,71 +525,14 @@ Final integrated normal matrix: GitHub Actions run `31601843122`:
 - Python 3.12 job `94131030717`: PASS
 - Python 3.13 job `94131030600`: PASS
 
-Heavy editor/media evidence workflows were skipped/disarmed and are not part of the Phase-36 standard gate.
+The integrated cross-phase proof actively fails if `ManagedLlamaCppCpuLoader.load()`, `ResourceScheduler.acquire()`, `GitWorkspaceManager.create()`, `OriginForgeRuntime.start_run()`, `BoundedRetryPolicy.drive()`, or `subprocess.Popen()` is reached while establishing execution ownership. Source-level acceptance separately requires the Phase-36 production modules to contain no `.drive(` call and the execution coordinator to contain no `.generate(` call.
 
----
+The initial 36C candidate `6a0c20a344b3d1a428265c29cc7ba32366b87e70` remains explicit rejection evidence: run `31529766913` failed on both interpreters because two pre-existing tests still expected default config version 5 after the intentional v6 default bump. The accepted 36C repair changed only those stale assertions.
 
-## Final acceptance proof
+The implementation chooses the narrower initial execution strategy `CODER_STRONG` only. It does not infer a `CODER_FAST → CODER_STRONG` escalation chain from inventory. The initial managed provider remains local, loopback-only, CPU-only, and protected-config-owned.
 
-The integrated acceptance test establishes:
+Heavy editor/media evidence workflows remain separately governed and are skipped/disarmed for the normal Phase-36 matrix.
 
-```text
-QUEUED dependency-ready Task
-→ explicit READY activation
-→ exact Phase-32 route
-→ exact Phase-33 WorkOrder + audit
-→ exact Phase-34 input resolution + binding + audit
-→ exact Phase-35 ACTIVE claim
-→ trusted execution-owner selection
-→ protected config/runtime dependency plan
-→ lazy dependency assembly
-→ one DISPEXEC STARTED receipt
-→ immutable CURRENT_STARTED inspection
-→ explicit interrupted recovery
-→ STOP
-```
+**Exit condition met in implementation:** Origin Forge can reconstruct the complete trusted lazy dependency graph from one exact current ACTIVE claim, create one durable `DISPEXEC STARTED` receipt while preserving that claim as the ownership lock, inspect/recover/terminalize the ownership relation atomically, and still stop before `BoundedRetryPolicy.drive()`.
 
-During `begin_dispatch_execution()` the acceptance test installs fail-fast guards against:
-
-- `ManagedLlamaCppCpuLoader.load()`;
-- `ResourceScheduler.acquire()`;
-- `GitWorkspaceManager.create()`;
-- `OriginForgeRuntime.start_run()`;
-- `BoundedRetryPolicy.drive()`;
-- `subprocess.Popen()`.
-
-The test passes only if none is called. It also proves Task state, Run count, Workspace count, resource leases, runtime instances, and missing configured runtime/model files remain unchanged.
-
-Source-level acceptance separately requires the Phase-36 owner/config/loader/assembly/execution/read modules to contain no `.drive(` call; the execution coordinator contains no `.generate(` call.
-
----
-
-## Authority exclusions retained
-
-Phase 36 does **not** add:
-
-- production `BoundedRetryPolicy.drive()` invocation;
-- production Task execution/completion/failure/quarantine authority;
-- model-selected runtime/provider/profile/endpoint authority;
-- background dispatch workers or queues;
-- implicit model-role downgrade/escalation;
-- remote managed-model endpoints;
-- managed GPU runtime placement;
-- caller/model shell, argv, environment, import, callable, executable/model path, credential, or generic process authority;
-- automatic runtime/model download;
-- a replacement Run/Workspace truth model;
-- Artifact adoption/signing;
-- Project Intelligence mutation;
-- merge, release, or self-training authority.
-
-`RETURNED` and `RAISED` remain invocation-mechanics states only. They may be written by a future trusted coordinator only after the corresponding real invocation boundary has occurred.
-
----
-
-## Exit condition — MET
-
-Origin Forge can now take one exact current Phase-35 ACTIVE claim, deterministically select the reviewed bounded-code execution owner, reconstruct every non-secret execution dependency from protected configuration and code-owned registries, bind all reachable model profiles to trusted managed runtimes, construct the lazy model/sandbox/workspace/executor graph without caller authority, atomically establish one durable one-shot `DISPEXEC STARTED` ownership receipt, preserve the ACTIVE claim throughout the ownership window, inspect/recover/terminalize that ownership safely, and still stop before `BoundedRetryPolicy.drive()`.
-
-The implementation head `59d40bbd37b8228faa58d4711b2a4c699ecdfd1c` is green on the normal Python 3.12/3.13 matrix. This documentation commit changes the exact PR head, so it is **not** the final merge gate by itself; the final immutable documentation/roadmap closure SHA must pass the normal matrix before ready-for-review and SHA-guarded merge.
-
-Only after Phase 36 is merged may Phase 37 introduce the first governed single-shot production dispatcher.
+This documentation update changes the PR SHA. The final immutable documentation/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix before ready-for-review and SHA-guarded merge.
