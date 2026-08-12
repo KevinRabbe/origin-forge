@@ -176,12 +176,22 @@ def _project_dispatch_error(
         )
     except ProductionDispatchInvocationReadError:
         return ManagerDispatchTickResult(
-            ManagerDispatchTickStatus.DISPATCH_NOT_STARTED,
+            ManagerDispatchTickStatus.RECOVERY_REQUIRED,
             ManagerDispatchTickDetail.DISPATCH_STATUS_UNREADABLE,
             claim_id=claim.claim_id,
             **fields,
         )
 
+    if projection.claim_id != claim.claim_id or (
+        projection.task_id is not None and projection.task_id != candidate.task_id
+    ):
+        return ManagerDispatchTickResult(
+            ManagerDispatchTickStatus.RECOVERY_REQUIRED,
+            ManagerDispatchTickDetail.DISPATCH_RECOVERY_REQUIRED,
+            claim_id=claim.claim_id,
+            execution_id=projection.execution_id,
+            **fields,
+        )
     if projection.status is DispatchInvocationStatus.RAISED:
         return ManagerDispatchTickResult(
             ManagerDispatchTickStatus.DISPATCH_RAISED,
@@ -190,25 +200,16 @@ def _project_dispatch_error(
             execution_id=projection.execution_id,
             **fields,
         )
-    if projection.status is DispatchInvocationStatus.STARTED_RECOVERY_REQUIRED:
+    if projection.status is DispatchInvocationStatus.READY_TO_INVOKE:
         return ManagerDispatchTickResult(
-            ManagerDispatchTickStatus.RECOVERY_REQUIRED,
-            ManagerDispatchTickDetail.DISPATCH_RECOVERY_REQUIRED,
+            ManagerDispatchTickStatus.DISPATCH_NOT_STARTED,
+            ManagerDispatchTickDetail.DISPATCH_PRESTART_FAILED,
             claim_id=claim.claim_id,
-            execution_id=projection.execution_id,
-            **fields,
-        )
-    if projection.status is DispatchInvocationStatus.RETURNED:
-        return ManagerDispatchTickResult(
-            ManagerDispatchTickStatus.DISPATCH_RETURNED,
-            ManagerDispatchTickDetail.DISPATCH_RETURNED,
-            claim_id=claim.claim_id,
-            execution_id=projection.execution_id,
             **fields,
         )
     return ManagerDispatchTickResult(
-        ManagerDispatchTickStatus.DISPATCH_NOT_STARTED,
-        ManagerDispatchTickDetail.DISPATCH_PRESTART_FAILED,
+        ManagerDispatchTickStatus.RECOVERY_REQUIRED,
+        ManagerDispatchTickDetail.DISPATCH_RECOVERY_REQUIRED,
         claim_id=claim.claim_id,
         execution_id=projection.execution_id,
         **fields,
