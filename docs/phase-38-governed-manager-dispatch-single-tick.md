@@ -1,6 +1,6 @@
 # Phase 38 — Governed Manager Dispatch Admission & Single Tick
 
-Status: **PLANNED — architecture freeze before implementation**
+Status: **DONE — implementation complete; final exact-head closure gate pending**
 
 Phase 38 adds the smallest Manager-side scheduling boundary permitted after Phase 37: inspect already-existing durable dispatch authority, deterministically admit at most one already-READY Task, acquire one Phase-35 claim for its exact current Phase-34 chain, and invoke the existing Phase-37 single-shot dispatcher once.
 
@@ -204,3 +204,35 @@ Every authority-expanding slice freezes one exact SHA and must pass the normal U
 ## Exit condition
 
 Phase 38 is complete when Origin Forge can inspect a complete bounded set of already-READY Tasks with pre-existing current audited Phase-34 authority, fail closed on incomplete/ambiguous admission, deterministically select exactly one candidate without priority/runtime heuristics, attempt exactly one Phase-35 claim, invoke the exact Phase-37 dispatcher at most once, stop on every race/staleness/recovery boundary without trying another Task, and expose Manager mechanics without creating a background scheduler or second production truth model.
+
+---
+
+## Implementation and CI closure evidence
+
+Phase 38 was implemented cumulatively on PR #58 from the exact planning merge `0b1d3726cff048a4a4ec1b581d8d5aa968c3b92d`.
+
+Accepted slice gates:
+
+- **38A — immutable admission:** head `9b2a86a8c20c63db969cce90641b555488042457`; normal run `31625194743`; Python 3.12 PASS, Python 3.13 PASS.
+- **38B — pure deterministic selector:** final head `d7acac42f1d10573a0485b7d728a95cd1742fa76`; normal run `31625741982`; Python 3.12 PASS, Python 3.13 PASS. Earlier selector heads cancelled only because later tightening commits superseded them.
+- **38C — one Manager tick:** final head `61fca4185b980f529a128820f9ac09c0d4a52398`; normal run `31626571404`; Python 3.12 PASS, Python 3.13 PASS. The final semantics fail closed to `RECOVERY_REQUIRED` for uncertain post-dispatch state and never fall through to another Task.
+- **38D — read-only Manager status:** final head `f3799d4f33c570851763fa844c5c221ba6106c22`; normal run `31626974464`; Python 3.12 PASS, Python 3.13 PASS. Later commits over the first 38D head were test-only proof tightening; production status code was unchanged.
+- **38E — cross-phase concurrency/no-fallback acceptance:** final head `5888524b1977126c62541681bb610aa086e11136`; normal run `31628078866`; Python 3.12 PASS, Python 3.13 PASS.
+
+Rejected 38E evidence:
+
+- head `7f82d56ddf9f04f947936a0f91414565e129b34a`, run `31627443373`: Python 3.13 PASS; Python 3.12 FAIL in the exact concurrent-Manager acceptance case. The real concurrent `acquire_dispatch_claim()` race behaved correctly; the mocked Phase-37 boundary performed an extra immutable `read_dispatch_claim()` while the losing authoritative writer still held journal state, and the Phase-30 read guard correctly failed closed. The accepted repair changed only `tests/test_phase38_manager_dispatch_acceptance.py`, passing the already-returned winning `DispatchClaim` object into the mock instead of introducing that unrelated extra read. No production code or immutable-read guard was weakened.
+
+Final implemented authority remains exactly the frozen boundary:
+
+```text
+bounded immutable admission
+→ pure one-candidate selection
+→ one Phase-35 claim attempt
+→ one Phase-37 dispatch attempt
+→ STOP
+```
+
+There is still no automatic Task activation, Phase-32/33/34 authority synthesis, fallback to a second Task, dispatcher retry/replay, daemon/background polling, priority/resource/cost/model scheduling, mutating Manager CLI/HTTP/cockpit surface, generic backend authority, or second production truth model.
+
+The documentation/roadmap closure commit created after these code/test proofs is intentionally a new SHA and must independently pass the normal Python 3.12/3.13 matrix before PR #58 may leave draft state or merge.

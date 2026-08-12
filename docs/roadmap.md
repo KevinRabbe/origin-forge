@@ -753,6 +753,28 @@ See `docs/phase-37-governed-single-shot-production-dispatch.md` for the finalize
 
 **Merge gate:** the immutable documentation/roadmap closure head created after those proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 38 — Governed Manager Dispatch Admission & Single Tick — DONE
+
+Implemented the smallest Manager-side scheduling boundary over existing pre-authorized production state:
+
+- bounded non-creating Phase-34 binding-audit admission scans with existing canonical JSON, byte/count, symlink/alias, hash, frozen-relation, and currentness defenses preserved;
+- one immutable SQLite snapshot for canonical READY state, dependency readiness, revision/content hash, created-at ordering, and ACTIVE-claim exclusion;
+- semantic-equivalence collapse for duplicate current Phase-34 chains only when execution-authority semantics match exactly, with conflicting current authority failing closed as `AMBIGUOUS_AUTHORITY`;
+- deterministic v1 candidate order solely by `(Task.created_at, Task.id)`, explicitly ignoring legacy priority, resource pressure, model availability, cost, retry history, and objective text;
+- a pure no-I/O selector that validates admission consistency and selects at most one already-canonical candidate;
+- one narrow `dispatch_manager_tick(runtime)` path with exactly one Phase-35 claim attempt and at most one Phase-37 `dispatch_claim_once()` attempt, never falling through to a second Task after races, stale authority, claim failure, or recovery-required state;
+- explicit Manager mechanics statuses without reinterpretation of `PolicyResult.outcome` or introduction of a second Task/Run/Workspace truth model;
+- fail-closed projection of uncertain post-dispatch state to `RECOVERY_REQUIRED`, preserving Phase-37 no-replay semantics;
+- non-creating read-only Manager status exposing admission/selection counts and exact selected authority IDs without acquiring claims or invoking production work;
+- cross-phase acceptance proving READY-without-authority exclusion, stale-selected no-fallback behavior, exactly one winner under concurrent Manager claim races, exactly one mocked Phase-37 call, recovery surfacing without replay, and no priority-driven selection;
+- no automatic Task activation, Phase-32/33/34 authority synthesis, multi-candidate fallback, daemon/background polling, mutating Manager CLI/HTTP/cockpit surface, generic backend/model/tool execution expansion, Artifact adoption/signing, Project Intelligence mutation, Dream promotion, training, merge, or release authority.
+
+See `docs/phase-38-governed-manager-dispatch-single-tick.md` for the finalized architecture, exact accepted/rejected slice evidence, concurrency race-fixture correction, and authority exclusions.
+
+**Exit condition met in implementation:** Phase-38 slices 38A–38E independently passed the normal Python 3.12/3.13 matrix through final code/test head `5888524b1977126c62541681bb610aa086e11136`; its acceptance run `31628078866` passed both interpreters after a test-only correction removed an unrelated immutable-read race from the mocked Phase-37 boundary without changing production code.
+
+**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release
