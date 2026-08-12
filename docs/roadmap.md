@@ -708,6 +708,31 @@ See `docs/phase-35-governed-task-activation-dispatch-claims.md` for the finalize
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 36 — Governed Dispatch Execution Ownership & Runtime Binding — DONE
+
+Implemented the final pre-invocation authority layer between one exact current Phase-35 ACTIVE dispatch claim and the first future production call into the bounded-code execution owner:
+
+- infrastructure-owned `DISPEXEC-*` identity plus schema v9 durable execution receipts;
+- one-execution-per-claim and one-STARTED-execution-per-Task database uniqueness defenses;
+- claim lifecycle extension `ACTIVE → CONSUMED` without treating consumption as Task success;
+- inert code-owned `originforge.execution.bounded-retry@1` execution-owner descriptor with exact adapter/contract/binder/request-schema binding and explicit `CODER_STRONG` model-role strategy;
+- protected config v6 `[model_runtimes]` bindings, safe-disabled by default and backward-compatible with v1–v5 project configuration;
+- closed local CPU-only `originforge.llamacpp-managed-cpu@1` provider with exact executable/model SHA-256 binding, loopback fixed-port policy, bounded timeouts, no arbitrary argv/environment/endpoint authority, and fail-closed GPU rejection;
+- code-owned managed llama.cpp loader with fixed CPU-only argv, bounded `/health` readiness, bounded logs, exact owned-instance unload, and POSIX process-group cleanup where supported;
+- lazy dependency assembly deriving Phase-14 scheduling, runtime loaders, sandbox, Workspace manager, and an uninvoked `BoundedRetryPolicy` solely from protected/code-owned authority;
+- deterministic dependency-plan hashing over exact claim/binding/owner/config/model/runtime/sandbox semantics;
+- atomic `begin_dispatch_execution()` creating one STARTED receipt while leaving the exact originating claim ACTIVE and unchanged throughout the ownership window;
+- atomic terminalization `RETURNED|RAISED + ACTIVE→CONSUMED` or `INTERRUPTED + ACTIVE→INTERRUPTED`, with exact revision checks and frozen-authority preservation;
+- immutable execution/currentness inspection distinguishing `CURRENT_STARTED` ownership from eligibility to start another execution;
+- cross-phase acceptance proving READY → Phase-32/33/34 chain → ACTIVE claim → trusted lazy assembly → one STARTED receipt → recovery terminalization, while fail-fast guards prove no model load, resource acquire, Workspace create, Run start, policy drive, or process start occurs;
+- source-level proof that Phase 36 stops before `BoundedRetryPolicy.drive()`, `ModelAdapter.generate()`, production backend execution, Task outcome authority, Artifact adoption/signing, merge, release, or self-training authority.
+
+See `docs/phase-36-governed-dispatch-execution-runtime-binding.md` for the finalized execution-ownership contract, runtime-provider/loader boundary, transaction/currentness semantics, rejected-candidate history, authority exclusions, and exact slice-by-slice CI evidence.
+
+**Exit condition met in implementation:** the final integrated Phase-36 code/test head `59d40bbd37b8228faa58d4711b2a4c699ecdfd1c` passed normal GitHub Actions run `31601843122` on Python 3.12 and Python 3.13 after the STARTED/ACTIVE ownership-currentness repair. The canonical documentation/roadmap closure head created after that proof must itself pass the final normal matrix before SHA-guarded merge.
+
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release

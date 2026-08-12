@@ -5,13 +5,14 @@ import unittest
 from pathlib import Path
 
 from origin_forge.config import load_config
+from origin_forge.model_scheduler import ModelRole
 
 
 class ConfigTests(unittest.TestCase):
-    def test_default_config_is_v5_network_off_and_resource_scheduling_disabled(self) -> None:
+    def test_default_config_is_v6_network_off_and_runtime_scheduling_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             config = load_config(Path(temp))
-            self.assertEqual(config.version, 5)
+            self.assertEqual(config.version, 6)
             self.assertFalse(config.sandbox_network)
             self.assertEqual(config.sandbox_backend, "unconfigured")
             self.assertIsNone(config.sandbox_image)
@@ -25,6 +26,7 @@ class ConfigTests(unittest.TestCase):
             self.assertIsNone(config.resource_models.capacity)
             self.assertEqual(config.resource_models.profiles, ())
             self.assertEqual(config.resource_models.policies, ())
+            self.assertEqual(config.model_runtimes.providers, ())
 
     def test_v1_empty_command_config_remains_readable(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -41,6 +43,7 @@ class ConfigTests(unittest.TestCase):
             self.assertFalse(config.sandbox_network)
             self.assertEqual(config.lsp_servers, ())
             self.assertFalse(config.resource_models.enabled)
+            self.assertEqual(config.model_runtimes.providers, ())
 
     def test_v1_shell_command_strings_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -71,6 +74,7 @@ class ConfigTests(unittest.TestCase):
             self.assertFalse(config.sandbox_network)
             self.assertEqual(config.lsp_servers, ())
             self.assertFalse(config.resource_models.enabled)
+            self.assertEqual(config.model_runtimes.providers, ())
 
     def test_v3_config_remains_readable_without_lsp_servers(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -86,6 +90,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.sandbox_backend, "podman")
             self.assertEqual(config.lsp_servers, ())
             self.assertFalse(config.resource_models.enabled)
+            self.assertEqual(config.model_runtimes.providers, ())
 
     def test_duplicate_command_names_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -131,6 +136,7 @@ lsp_servers = [
             self.assertEqual(server.max_pending_notifications, 32)
             self.assertEqual(server.max_stderr_bytes, 4096)
             self.assertFalse(config.resource_models.enabled)
+            self.assertEqual(config.model_runtimes.providers, ())
 
     def test_lsp_server_ids_must_be_unique(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -212,6 +218,110 @@ lsp_servers = [
             )
             with self.assertRaisesRegex(ValueError, "pids_limit must be positive"):
                 load_config(root)
+
+    def test_v5_resource_model_config_remains_readable_without_runtime_bindings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / ".origin-forge"
+            state.mkdir()
+            (state / "config.toml").write_text(
+                '''version = 5
+[commands]
+build = []
+test = []
+[resources]
+enabled = false
+gpus = []
+[models]
+profiles = []
+policies = []
+''',
+                encoding="utf-8",
+            )
+            config = load_config(root)
+            self.assertEqual(config.version, 5)
+            self.assertFalse(config.resource_models.enabled)
+            self.assertEqual(config.model_runtimes.providers, ())
+
+    def test_managed_model_runtime_bindings_require_v6(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / ".origin-forge"
+            state.mkdir()
+            (state / "config.toml").write_text(
+                '''version = 5
+[commands]
+build = []
+test = []
+[resources]
+enabled = false
+gpus = []
+[models]
+profiles = []
+policies = []
+[model_runtimes]
+providers = [{ runtime_id = "not-allowed-yet" }]
+''',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "require config version 6"):
+                load_config(root)
+
+    def test_v6_parses_exact_cpu_runtime_provider_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / ".origin-forge"
+            state.mkdir()
+            (state / "config.toml").write_text(
+                f'''version = 6
+[commands]
+build = []
+test = []
+[resources]
+enabled = true
+cpu_slots = 8
+ram_mib = 16384
+max_active_leases = 8
+gpus = []
+[[models.profiles]]
+profile_id = "coder-strong"
+role = "coder_strong"
+model_id = "qwen"
+model_hash = "{'a' * 64}"
+runtime_id = "llamacpp-cpu"
+[models.profiles.resources]
+cpu_slots = 4
+ram_mib = 8192
+[[models.policies]]
+role = "coder_strong"
+primary_profile_id = "coder-strong"
+fallback_profile_ids = []
+[[model_runtimes.providers]]
+runtime_id = "llamacpp-cpu"
+provider_kind = "originforge.llamacpp-managed-cpu@1"
+provider_contract_version = "1"
+executable_path = "/opt/llama-server"
+executable_sha256 = "{'b' * 64}"
+port = 18080
+startup_timeout_seconds = 30
+request_timeout_seconds = 300
+shutdown_timeout_seconds = 10
+[[model_runtimes.providers.profile_bindings]]
+profile_id = "coder-strong"
+model_path = "/models/qwen.gguf"
+model_sha256 = "{'a' * 64}"
+''',
+                encoding="utf-8",
+            )
+            config = load_config(root)
+            provider = config.model_runtimes.provider("llamacpp-cpu")
+            self.assertEqual(config.version, 6)
+            self.assertEqual(provider.to_dict()["loopback_host"], "127.0.0.1")
+            self.assertEqual(provider.binding("coder-strong").model_sha256, "a" * 64)
+            self.assertEqual(
+                config.resource_models.policy(ModelRole.CODER_STRONG).primary_profile_id,
+                "coder-strong",
+            )
 
 
 if __name__ == "__main__":

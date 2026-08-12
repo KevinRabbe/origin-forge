@@ -86,6 +86,7 @@ class IdKind(StrEnum):
     DISPATCH_BINDING = "DISPBIND"
     DISPATCH_BINDING_AUDIT = "BINDAUD"
     DISPATCH_CLAIM = "DISPCLAIM"
+    DISPATCH_EXECUTION = "DISPEXEC"
 
 
 def new_id(kind: IdKind) -> str:

@@ -1,6 +1,6 @@
 # Phase 36 — Governed Dispatch Execution Ownership & Runtime Binding
 
-Status: **PLANNED — architecture only; no production executor invocation**
+Status: **DONE — implementation complete; final documentation-head CI pending**
 
 Phase 36 prepares the last execution-side infrastructure required after Phase 35 and before the first production dispatcher may call a trusted execution owner.
 
@@ -493,3 +493,46 @@ Every authority-expanding slice must freeze one exact SHA and pass the normal Ub
 Phase 36 is complete when Origin Forge can take one exact current Phase-35 ACTIVE claim, deterministically select the only trusted bounded-code execution owner, reconstruct every non-secret execution dependency from protected configuration/code-owned registries, prove the selected profiles have trusted managed runtime bindings, construct the lazy model/sandbox/workspace dependency graph without caller authority, atomically establish one durable one-shot `DISPEXEC STARTED` receipt, recover/terminalize that ownership safely across restart, and still stop before `BoundedRetryPolicy.drive()`.
 
 Only then may Phase 37 introduce the first governed single-shot production dispatcher.
+
+---
+
+## Implementation closure evidence
+
+The planned boundary above was implemented without adding the deferred production executor call.
+
+Accepted slice evidence:
+
+```text
+36A  8977103dcb18276d9dfab41ff900c0c60be780dc  run 31528424230  Python 3.12/3.13 PASS
+36B  4de123faa0b036cff7740be376aab1983f6ba3a8  run 31528805134  Python 3.12/3.13 PASS
+36C  4e4a5fcad8194537ab5df66e71d7c5687aaa9155  run 31595604003  Python 3.12/3.13 PASS
+36D  16131a847f768d2c2eafbd2ab7196babce3da28a  run 31597526290  Python 3.12/3.13 PASS
+36E  4b636adea33a4132171520d15f1ff15e65c544ef  run 31599083299  Python 3.12/3.13 PASS
+36F  b987a5481820a4e7cae6096f5515d9dacbca29af  run 31599943350  Python 3.12/3.13 PASS
+36G  e3b24a5346aa3d275c5ce2d842f4e02d2082426e  run 31600511052  Python 3.12/3.13 PASS
+```
+
+The first full cross-phase acceptance head `8e537868568ed055ac344d631255ac3acecd4c1d` also passed run `31600818873` on both interpreters. A later invariant review deliberately superseded those already-green ownership/currentness semantics: a `STARTED` execution must keep its originating claim `ACTIVE`, while the presence of that execution receipt separately makes the claim ineligible to start another execution. The repair aligned transaction, reader, and acceptance semantics with that distinction.
+
+Final integrated code/test head:
+
+```text
+59d40bbd37b8228faa58d4711b2a4c699ecdfd1c
+```
+
+Final integrated normal matrix: GitHub Actions run `31601843122`:
+
+- Python 3.12 job `94131030717`: PASS
+- Python 3.13 job `94131030600`: PASS
+
+The integrated cross-phase proof actively fails if `ManagedLlamaCppCpuLoader.load()`, `ResourceScheduler.acquire()`, `GitWorkspaceManager.create()`, `OriginForgeRuntime.start_run()`, `BoundedRetryPolicy.drive()`, or `subprocess.Popen()` is reached while establishing execution ownership. Source-level acceptance separately requires the Phase-36 production modules to contain no `.drive(` call and the execution coordinator to contain no `.generate(` call.
+
+The initial 36C candidate `6a0c20a344b3d1a428265c29cc7ba32366b87e70` remains explicit rejection evidence: run `31529766913` failed on both interpreters because two pre-existing tests still expected default config version 5 after the intentional v6 default bump. The accepted 36C repair changed only those stale assertions.
+
+The implementation chooses the narrower initial execution strategy `CODER_STRONG` only. It does not infer a `CODER_FAST → CODER_STRONG` escalation chain from inventory. The initial managed provider remains local, loopback-only, CPU-only, and protected-config-owned.
+
+Heavy editor/media evidence workflows remain separately governed and are skipped/disarmed for the normal Phase-36 matrix.
+
+**Exit condition met in implementation:** Origin Forge can reconstruct the complete trusted lazy dependency graph from one exact current ACTIVE claim, create one durable `DISPEXEC STARTED` receipt while preserving that claim as the ownership lock, inspect/recover/terminalize the ownership relation atomically, and still stop before `BoundedRetryPolicy.drive()`.
+
+This documentation update changes the PR SHA. The final immutable documentation/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix before ready-for-review and SHA-guarded merge.
