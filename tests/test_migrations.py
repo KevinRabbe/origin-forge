@@ -34,7 +34,7 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 10)
+            self.assertEqual(SCHEMA_VERSION, 11)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -87,6 +87,14 @@ class MigrationTests(unittest.TestCase):
                     row["name"]
                     for row in upgraded.execute("PRAGMA index_list(dispatch_executions)")
                 }
+                preparation_columns = {
+                    row["name"]
+                    for row in upgraded.execute("PRAGMA table_info(task_preparations)")
+                }
+                preparation_indexes = {
+                    row["name"]
+                    for row in upgraded.execute("PRAGMA index_list(task_preparations)")
+                }
             self.assertIn("revision", workspace_columns)
             self.assertIn("base_commit", workspace_columns)
             for table in (
@@ -101,6 +109,7 @@ class MigrationTests(unittest.TestCase):
                 "plan_materializations",
                 "dispatch_claims",
                 "dispatch_executions",
+                "task_preparations",
             ):
                 self.assertIn(table, tables)
             self.assertIn("idx_entity_relations_active_unique", relation_indexes)
@@ -162,8 +171,59 @@ class MigrationTests(unittest.TestCase):
                 "idx_dispatch_executions_one_started_per_task",
                 dispatch_execution_indexes,
             )
+            self.assertTrue(
+                {
+                    "preparation_id",
+                    "project_id",
+                    "preparation_policy_id",
+                    "preparation_policy_hash",
+                    "materialization_id",
+                    "materialization_hash",
+                    "planning_input_id",
+                    "planning_input_hash",
+                    "task_id",
+                    "queued_task_revision",
+                    "queued_task_hash",
+                    "ready_task_revision",
+                    "ready_task_hash",
+                    "route_decision_id",
+                    "route_decision_hash",
+                    "planner_dependency_plan_hash",
+                    "planner_run_id",
+                    "work_order_id",
+                    "work_order_hash",
+                    "work_order_audit_id",
+                    "work_order_audit_hash",
+                    "input_resolution_id",
+                    "input_resolution_hash",
+                    "dispatch_binding_id",
+                    "dispatch_binding_hash",
+                    "binding_audit_id",
+                    "binding_audit_hash",
+                    "stage",
+                    "status",
+                    "revision",
+                    "terminal_reason",
+                }.issubset(preparation_columns)
+            )
+            self.assertIn(
+                "idx_task_preparations_task_history",
+                preparation_indexes,
+            )
+            self.assertIn(
+                "idx_task_preparations_policy_status",
+                preparation_indexes,
+            )
+            self.assertIn(
+                "idx_task_preparations_status",
+                preparation_indexes,
+            )
+            self.assertIn(
+                "idx_task_preparations_one_active_per_task",
+                preparation_indexes,
+            )
 
-    def test_version_nine_claim_rows_are_preserved_exactly_by_version_ten(self) -> None:
+    def test_version_ten_claim_rows_are_preserved_exactly_by_version_eleven(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "project.db"
             conn = sqlite3.connect(path)
@@ -274,7 +334,7 @@ class MigrationTests(unittest.TestCase):
                     (claim_id,),
                 ).fetchone()
 
-            self.assertEqual(version, 10)
+            self.assertEqual(version, 11)
             self.assertEqual(after, before)
             self.assertEqual(consumed["status"], "CONSUMED")
             self.assertEqual(consumed["revision"], 1)
