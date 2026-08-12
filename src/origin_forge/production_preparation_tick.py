@@ -4,15 +4,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .production_capability_routing import CapabilityRouteOutcome
-from .production_capability_store import ProductionCapabilityStore, ProductionCapabilityStoreError
+from .production_capability_store import ProductionCapabilityStore
 from .production_preparation_admission import (
     PreparationAdmissionStatus,
     inspect_materialization_preparation_eligibility_readonly,
 )
-from .production_preparation_assembly import (
-    ProductionPreparationAssemblyError,
-    assemble_preparation_planner_dependencies,
-)
+from .production_preparation_assembly import assemble_preparation_planner_dependencies
 from .production_preparation_models import PreparationStage, TaskPreparationReceipt
 from .production_preparation_policy_store import (
     ProductionPreparationPolicyStoreError,
@@ -36,11 +33,10 @@ from .production_preparation_selection import (
     PreparationSelectionStatus,
     select_preparation_candidate,
 )
-from .production_task_activation import TaskActivationError, activate_dependency_ready_task
+from .production_task_activation import activate_dependency_ready_task
 from .production_work_order_builtin import build_builtin_dispatch_validator_registry
 from .production_work_order_planner import (
     BoundedProductionWorkOrderPlanner,
-    ProductionWorkOrderPlannerError,
     WorkOrderPlannerResult,
 )
 from .runtime import OriginForgeRuntime
@@ -279,7 +275,7 @@ def prepare_materialization_tick(
             runtime,
             receipt.preparation_id,
             receipt.revision,
-            dependencies.plan.plan_hash,
+            dependencies.plan,
         )
     except BaseException as exc:
         # Before PLANNER_STARTED every failure is known to have occurred before
