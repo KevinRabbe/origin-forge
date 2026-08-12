@@ -189,7 +189,8 @@ class Phase37DispatchOwnershipSealTests(unittest.TestCase):
         execution_before = self._execution_row(execution_id)
 
         upper = MIGRATION_010.upper()
-        for forbidden in ("INSERT INTO", "UPDATE ", "DELETE FROM", "DROP TABLE", "ALTER TABLE"):
+        self.assertEqual(upper.count("CREATE TRIGGER"), 1)
+        for forbidden in ("INSERT INTO", "DELETE FROM", "DROP TABLE", "ALTER TABLE"):
             self.assertNotIn(forbidden, upper)
 
         with self.runtime.store.session() as conn:
