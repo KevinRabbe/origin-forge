@@ -316,8 +316,6 @@ class ProductionDispatchInvocationRequestTests(unittest.TestCase):
                 )
 
     def test_37b_surface_contains_no_execution_authority(self) -> None:
-        source = inspect.getsource(invocation_module)
-        tree = ast.parse(source)
         forbidden_calls = {
             "drive",
             "begin_dispatch_execution",
@@ -332,15 +330,22 @@ class ProductionDispatchInvocationRequestTests(unittest.TestCase):
             "Popen",
             "run",
         }
-        called = {
-            node.func.attr
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-        } | {
-            node.func.id
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        }
+        called = set()
+        for target in (
+            freeze_bounded_retry_invocation_request,
+            _decode_request_projection,
+            _require_trusted_bounded_retry_relation,
+        ):
+            tree = ast.parse(inspect.getsource(target))
+            called |= {
+                node.func.attr
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            } | {
+                node.func.id
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            }
         self.assertTrue(forbidden_calls.isdisjoint(called))
         signature = inspect.signature(freeze_bounded_retry_invocation_request)
         self.assertEqual(
