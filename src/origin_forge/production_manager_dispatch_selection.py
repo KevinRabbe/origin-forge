@@ -40,6 +40,42 @@ class ManagerDispatchSelection:
         }
 
 
+def _invalid() -> ManagerDispatchSelection:
+    return ManagerDispatchSelection(
+        ManagerDispatchSelectionStatus.INVALID_STATE,
+        None,
+    )
+
+
+def _complete_admission_is_well_formed(admission: ManagerDispatchAdmission) -> bool:
+    if admission.detail is not None or admission.ambiguous_task_ids:
+        return False
+
+    counters = (
+        admission.scanned_audit_count,
+        admission.current_chain_count,
+        admission.active_claim_exclusion_count,
+        admission.not_ready_exclusion_count,
+    )
+    if any(type(value) is not int or value < 0 for value in counters):
+        return False
+    if admission.current_chain_count > admission.scanned_audit_count:
+        return False
+
+    candidates = admission.candidates
+    if not isinstance(candidates, tuple) or any(
+        not isinstance(candidate, ManagerDispatchCandidate) for candidate in candidates
+    ):
+        return False
+    if len({candidate.task_id for candidate in candidates}) != len(candidates):
+        return False
+    if any(not candidate.created_at for candidate in candidates):
+        return False
+    return candidates == tuple(
+        sorted(candidates, key=lambda candidate: (candidate.created_at, candidate.task_id))
+    )
+
+
 def select_manager_dispatch_candidate(
     admission: ManagerDispatchAdmission,
 ) -> ManagerDispatchSelection:
@@ -59,40 +95,17 @@ def select_manager_dispatch_candidate(
             None,
         )
     if admission.status is ManagerDispatchAdmissionStatus.INVALID_STATE:
-        return ManagerDispatchSelection(
-            ManagerDispatchSelectionStatus.INVALID_STATE,
-            None,
-        )
+        return _invalid()
     if admission.status is not ManagerDispatchAdmissionStatus.COMPLETE:
-        return ManagerDispatchSelection(
-            ManagerDispatchSelectionStatus.INVALID_STATE,
-            None,
-        )
-
-    # COMPLETE is the only selection-bearing admission.  Defensive relation
-    # checks prevent a hand-constructed inconsistent object from becoming
-    # Manager authority.
-    if admission.detail is not None or admission.ambiguous_task_ids:
-        return ManagerDispatchSelection(
-            ManagerDispatchSelectionStatus.INVALID_STATE,
-            None,
-        )
+        return _invalid()
+    if not _complete_admission_is_well_formed(admission):
+        return _invalid()
     if not admission.candidates:
         return ManagerDispatchSelection(
             ManagerDispatchSelectionStatus.NO_ELIGIBLE_TASK,
             None,
         )
-    if any(not isinstance(value, ManagerDispatchCandidate) for value in admission.candidates):
-        return ManagerDispatchSelection(
-            ManagerDispatchSelectionStatus.INVALID_STATE,
-            None,
-        )
-
-    candidate = min(
-        admission.candidates,
-        key=lambda value: (value.created_at, value.task_id),
-    )
     return ManagerDispatchSelection(
         ManagerDispatchSelectionStatus.ONE_SELECTED,
-        candidate,
+        admission.candidates[0],
     )
