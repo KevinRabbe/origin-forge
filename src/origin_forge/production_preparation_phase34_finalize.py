@@ -21,8 +21,8 @@ from .production_dispatch_binding_models import (
     DispatchBindingAudit,
     DispatchBindingCurrentnessStatus,
 )
+from .production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
 from .production_dispatch_resolution_models import InputResolutionBundle
-from .production_dispatch_resolvers import build_core_input_resolver_registry
 from .production_dispatch_store import (
     ProductionDispatchStore,
     ProductionDispatchStoreError,
@@ -167,7 +167,7 @@ def _build_stores(runtime: OriginForgeRuntime, receipt: TaskPreparationReceipt):
         raise PreparationReceiptError(
             f"PREP WorkOrder is not CURRENT_READY: {currentness.status.value}"
         )
-    resolvers = build_core_input_resolver_registry()
+    resolvers = build_dispatch_input_resolver_registry()
     binders = build_builtin_dispatch_binder_registry()
     dispatch_store = ProductionDispatchStore(work_order_store, resolvers, binders)
     return policy, work_order_store, dispatch_store, resolvers, binders, work_order, work_order_audit

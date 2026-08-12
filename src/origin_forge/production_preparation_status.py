@@ -13,6 +13,7 @@ from .production_capability_read import (
 from .production_capability_routing import CapabilityRouteOutcome, TaskRouteInput
 from .production_dispatch_binding import build_builtin_dispatch_binder_registry
 from .production_dispatch_binding_models import DispatchBindingCurrentnessStatus
+from .production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
 from .production_dispatch_read import (
     ProductionDispatchReadError,
     inspect_dispatch_binding_currentness_readonly,
@@ -20,7 +21,6 @@ from .production_dispatch_read import (
     read_dispatch_binding_audit,
     read_input_resolution,
 )
-from .production_dispatch_resolvers import build_core_input_resolver_registry
 from .production_preparation_admission import (
     PreparationAdmissionStatus,
     inspect_materialization_preparation_eligibility_readonly,
@@ -722,7 +722,7 @@ def _require_bound_checkpoint_current(
         bundle.input_resolution_id,
         binding.dispatch_binding_id,
         audit.binding_audit_id,
-        build_core_input_resolver_registry(),
+        build_dispatch_input_resolver_registry(),
         build_builtin_dispatch_binder_registry(),
     )
     if (

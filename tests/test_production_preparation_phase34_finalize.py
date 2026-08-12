@@ -17,7 +17,7 @@ from origin_forge.production_dispatch_binding import (
     create_dispatch_binding,
     create_input_resolution_bundle,
 )
-from origin_forge.production_dispatch_resolvers import build_core_input_resolver_registry
+from origin_forge.production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
 from origin_forge.production_dispatch_store import ProductionDispatchStore
 from origin_forge.production_planning_capabilities import freeze_governed_planning_input
 from origin_forge.production_planning_evidence import ProductionPlanningEvidenceStore
@@ -120,7 +120,7 @@ class PreparationPhase34FinalizeTests(unittest.TestCase):
         )
         publish_preparation_policy(self.runtime, self.policy)
         self._write_model_config()
-        self.resolvers = build_core_input_resolver_registry()
+        self.resolvers = build_dispatch_input_resolver_registry()
         self.binders = build_builtin_dispatch_binder_registry()
         self.dispatch_store = ProductionDispatchStore(
             self.work_order_store,
