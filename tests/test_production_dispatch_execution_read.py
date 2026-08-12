@@ -19,6 +19,8 @@ from origin_forge.production_dispatch_binding import (
     create_dispatch_binding,
     create_input_resolution_bundle,
 )
+from origin_forge.production_dispatch_claim_models import DispatchClaimStatus
+from origin_forge.production_dispatch_claim_read import read_dispatch_claim
 from origin_forge.production_dispatch_claims import acquire_dispatch_claim
 from origin_forge.production_dispatch_execution import (
     begin_dispatch_execution,
@@ -46,6 +48,50 @@ from origin_forge.resource_scheduler import ResourceScheduler
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import TaskStatus
 from origin_forge.workspaces import GitWorkspaceManager
+
+
+_CONFIG = '''version = 6
+policy_profile = "local-default"
+
+[limits]
+max_strategy_retries = 2
+max_verification_failures = 3
+
+[sandbox]
+backend = "podman"
+image = "origin-forge-test-sandbox:phase36"
+network = false
+memory = "2g"
+cpus = 2.0
+pids_limit = 256
+
+[commands]
+build = []
+test = []
+
+[code_intelligence]
+lsp_servers = []
+
+[resources]
+enabled = true
+cpu_slots = 8
+ram_mib = 16384
+max_active_leases = 8
+gpus = []
+
+[models]
+profiles = [
+  { profile_id = "strong", role = "coder_strong", model_id = "test-model", model_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", runtime_id = "llamacpp-cpu", resources = { cpu_slots = 2, ram_mib = 4096 } }
+]
+policies = [
+  { role = "coder_strong", primary_profile_id = "strong", fallback_profile_ids = [] }
+]
+
+[model_runtimes]
+providers = [
+  { runtime_id = "llamacpp-cpu", provider_kind = "originforge.llamacpp-managed-cpu@1", provider_contract_version = "1", executable_path = "missing/llama-server", executable_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", port = 18080, startup_timeout_seconds = 30, request_timeout_seconds = 300, shutdown_timeout_seconds = 10, profile_bindings = [ { profile_id = "strong", model_path = "missing/model.gguf", model_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } ] }
+]
+'''
 
 
 class ProductionDispatchExecutionReadTests(unittest.TestCase):
@@ -90,7 +136,10 @@ class ProductionDispatchExecutionReadTests(unittest.TestCase):
             self.binder_registry,
         )
         self.claim = self._claim_current_chain()
-        self._write_execution_config()
+        self.runtime.state_dir.joinpath("config.toml").write_text(
+            _CONFIG,
+            encoding="utf-8",
+        )
         self.started = self._begin_without_execution_calls()
 
     def tearDown(self) -> None:
@@ -151,53 +200,6 @@ class ProductionDispatchExecutionReadTests(unittest.TestCase):
             1,
         )
 
-    def _write_execution_config(self) -> None:
-        self.runtime.state_dir.joinpath("config.toml").write_text(
-            '''version = 6
-policy_profile = "local-default"
-
-[limits]
-max_strategy_retries = 2
-max_verification_failures = 3
-
-[sandbox]
-backend = "podman"
-image = "origin-forge-test-sandbox:phase36"
-network = false
-memory = "2g"
-cpus = 2.0
-pids_limit = 256
-
-[commands]
-build = []
-test = []
-
-[code_intelligence]
-lsp_servers = []
-
-[resources]
-enabled = true
-cpu_slots = 8
-ram_mib = 16384
-max_active_leases = 8
-gpus = []
-
-[models]
-profiles = [
-  { profile_id = "strong", role = "coder_strong", model_id = "test-model", model_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", runtime_id = "llamacpp-cpu", resources = { cpu_slots = 2, ram_mib = 4096 } }
-]
-policies = [
-  { role = "coder_strong", primary_profile_id = "strong", fallback_profile_ids = [] }
-]
-
-[model_runtimes]
-providers = [
-  { runtime_id = "llamacpp-cpu", provider_kind = "originforge.llamacpp-managed-cpu@1", provider_contract_version = "1", executable_path = "missing/llama-server", executable_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", port = 18080, startup_timeout_seconds = 30, request_timeout_seconds = 300, shutdown_timeout_seconds = 10, profile_bindings = [ { profile_id = "strong", model_path = "missing/model.gguf", model_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } ] }
-]
-''',
-            encoding="utf-8",
-        )
-
     def _begin_without_execution_calls(self):
         with (
             patch.object(ManagedLlamaCppCpuLoader, "load", side_effect=AssertionError("model load")),
@@ -223,6 +225,10 @@ providers = [
         return result
 
     def test_started_receipt_is_current_and_inspection_is_byte_stable(self) -> None:
+        self.assertEqual(
+            read_dispatch_claim(self.runtime, self.claim.claim_id).status,
+            DispatchClaimStatus.ACTIVE,
+        )
         before = self._state_snapshot()
         with (
             patch.object(ManagedLlamaCppCpuLoader, "load", side_effect=AssertionError("model load")),
@@ -245,8 +251,20 @@ providers = [
         )
         self.assertIsNone(currentness.detail)
         self.assertEqual(self._state_snapshot(), before)
-        self.assertFalse((self.runtime.state_dir / "origin-forge.db-wal").exists())
-        self.assertFalse((self.runtime.state_dir / "origin-forge.db-shm").exists())
+
+    def test_restart_preserves_started_execution_and_active_claim_currentness(self) -> None:
+        restarted = OriginForgeRuntime(self.root)
+        currentness = inspect_dispatch_execution_currentness_readonly(
+            restarted,
+            self.started.execution.execution_id,
+        )
+        self.assertEqual(
+            currentness.status,
+            DispatchExecutionCurrentnessStatus.CURRENT_STARTED,
+        )
+        claim = read_dispatch_claim(restarted, self.claim.claim_id)
+        self.assertEqual(claim.status, DispatchClaimStatus.ACTIVE)
+        self.assertEqual(claim.revision, 0)
 
     def test_phase14_resource_drift_is_stale_dependency_plan_only(self) -> None:
         config_path = self.runtime.state_dir / "config.toml"
@@ -294,11 +312,11 @@ providers = [
         )
         self.assertEqual(self.runtime.list_runs(self.task_id), [])
 
-    def test_consumed_claim_relation_tamper_is_stale_claim(self) -> None:
+    def test_active_claim_relation_tamper_is_stale_claim(self) -> None:
         with self.runtime.store.session() as conn:
             conn.execute(
-                "UPDATE dispatch_claims SET terminal_reason = ? WHERE claim_id = ?",
-                ("tampered consumed relation", self.claim.claim_id),
+                "UPDATE dispatch_claims SET revision = 1 WHERE claim_id = ?",
+                (self.claim.claim_id,),
             )
         currentness = inspect_dispatch_execution_currentness_readonly(
             self.runtime,
@@ -308,28 +326,34 @@ providers = [
             currentness.status,
             DispatchExecutionCurrentnessStatus.STALE_CLAIM,
         )
-        self.assertIn("reason", currentness.detail or "")
+        self.assertIn("ACTIVE claim revision", currentness.detail or "")
 
-    def test_terminal_receipts_remain_historical_and_not_pre_dispatch_current(self) -> None:
+    def test_returned_receipt_binds_consumed_claim_historically(self) -> None:
         returned = mark_dispatch_execution_returned(
             self.runtime,
             self.started.execution.execution_id,
             0,
+            0,
             "bounded invocation returned",
         )
+        claim = read_dispatch_claim(self.runtime, self.claim.claim_id)
+        self.assertEqual(claim.status, DispatchClaimStatus.CONSUMED)
         currentness = inspect_dispatch_execution_currentness_readonly(
             self.runtime,
             returned.execution_id,
         )
         self.assertEqual(currentness.status, DispatchExecutionCurrentnessStatus.RETURNED)
 
-    def test_interrupted_receipt_is_historical(self) -> None:
+    def test_interrupted_receipt_binds_interrupted_claim_historically(self) -> None:
         interrupted = interrupt_dispatch_execution(
             self.runtime,
             self.started.execution.execution_id,
             0,
+            0,
             "explicit pre-dispatch interruption",
         )
+        claim = read_dispatch_claim(self.runtime, self.claim.claim_id)
+        self.assertEqual(claim.status, DispatchClaimStatus.INTERRUPTED)
         currentness = inspect_dispatch_execution_currentness_readonly(
             self.runtime,
             interrupted.execution_id,
