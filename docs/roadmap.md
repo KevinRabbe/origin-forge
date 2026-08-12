@@ -733,6 +733,26 @@ See `docs/phase-36-governed-dispatch-execution-runtime-binding.md` for the final
 
 **Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 37 — Governed Single-Shot Production Dispatch Invocation — DONE
+
+Implemented the first real governed invocation boundary over one exact current Phase-35 claim while preserving Phase-36 ownership/recovery semantics:
+
+- schema v10 database trigger plus same-transaction Phase-35 lifecycle guard sealing an `ACTIVE` claim against legacy RELEASED/INTERRUPTED terminalization while its exact `DISPEXEC` remains STARTED;
+- strict read-only reconstruction of the exact persisted Phase-34 `BoundedRetryPolicy.drive@1` projection with current adapter/contract/binder/request-schema/owner validation and no caller execution-parameter overrides;
+- one narrow `dispatch_claim_once(runtime, claim_id, expected_claim_revision)` coordinator with exactly one reviewed `.drive()` call site and no dispatcher loop, retry, background scheduling, or generic adapter/model/tool/backend authority;
+- normal `PolicyResult` returns for SUCCEEDED/BLOCKED/FAILED/QUARANTINED recorded only as `DISPEXEC RETURNED` plus claim CONSUMED, without dispatcher reinterpretation of canonical Task outcome;
+- ordinary Python owner exceptions recorded as bounded `DISPEXEC RAISED` evidence plus claim CONSUMED without persisting arbitrary exception messages/tracebacks;
+- BaseException, crash, and post-call terminalization uncertainty preserving STARTED + ACTIVE for explicit Phase-36 recovery with no automatic replay;
+- immutable six-state invocation status projection: READY_TO_INVOKE, STARTED_RECOVERY_REQUIRED, RETURNED, RAISED, INTERRUPTED, and STALE_OR_INVALID;
+- cross-phase acceptance proving exact READY→route→WorkOrder→binding→claim→STARTED→single-owner-call→terminal ordering, duplicate-call exclusion, restart/recovery behavior, forged-authority rejection before begin, and unchanged dispatcher-side Task/Run/Workspace truth;
+- no automatic Task activation/claim acquisition, mutating dispatch CLI, Artifact adoption/signing, Project Intelligence mutation, Dream promotion, training, merge, release, or generic execution expansion.
+
+See `docs/phase-37-governed-single-shot-production-dispatch.md` for the finalized invocation contract, exactly-once-at-the-dispatch-boundary semantics, recovery/read boundary, rejected-candidate history, authority exclusions, and exact slice-by-slice CI evidence.
+
+**Exit condition met in implementation:** Phase-37 slices 37A–37E independently passed the normal Python 3.12/3.13 matrix through final code/test head `c8efd0d81b61708513f1b720eb969b6d25b93a18`; its acceptance run `31619897574` passed both interpreters after the test-only forged-binding fixture repair.
+
+**Merge gate:** the immutable documentation/roadmap closure head created after those proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release
