@@ -34,7 +34,7 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 9)
+            self.assertEqual(SCHEMA_VERSION, 10)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -163,7 +163,7 @@ class MigrationTests(unittest.TestCase):
                 dispatch_execution_indexes,
             )
 
-    def test_version_eight_claim_rows_are_preserved_exactly_by_version_nine(self) -> None:
+    def test_version_nine_claim_rows_are_preserved_exactly_by_version_ten(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "project.db"
             conn = sqlite3.connect(path)
@@ -274,7 +274,7 @@ class MigrationTests(unittest.TestCase):
                     (claim_id,),
                 ).fetchone()
 
-            self.assertEqual(version, 9)
+            self.assertEqual(version, 10)
             self.assertEqual(after, before)
             self.assertEqual(consumed["status"], "CONSUMED")
             self.assertEqual(consumed["revision"], 1)
