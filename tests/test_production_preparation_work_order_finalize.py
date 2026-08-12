@@ -338,7 +338,7 @@ providers = [
         current = self.runtime.get_task(self.task_id)
         self.runtime.transition_task(
             self.task_id,
-            TaskStatus.READY,
+            TaskStatus.BLOCKED,
             expected_revision=int(current["revision"]),
         )
         result = finalize_preparation_work_order_audit(
