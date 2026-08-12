@@ -37,6 +37,14 @@ def _write_executable(path: Path, source: str) -> None:
     path.chmod(0o755)
 
 
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 _FAKE_SERVER = textwrap.dedent(
     f"""\
     #!{sys.executable}
@@ -325,11 +333,12 @@ class ManagedLlamaCppCpuLoaderTests(unittest.TestCase):
             pid_path = model.with_suffix(".pids")
             self.assertTrue(pid_path.exists())
             parent_pid, child_pid = (int(value) for value in pid_path.read_text().split())
-            time.sleep(0.05)
             for pid in (parent_pid, child_pid):
                 with self.subTest(pid=pid):
-                    with self.assertRaises(ProcessLookupError):
-                        os.kill(pid, 0)
+                    deadline = time.monotonic() + 2.0
+                    while _pid_exists(pid) and time.monotonic() < deadline:
+                        time.sleep(0.02)
+                    self.assertFalse(_pid_exists(pid))
             self.assertEqual(loader.active_instance_count(), 0)
 
     def test_loader_api_contains_no_caller_runtime_authority(self) -> None:
