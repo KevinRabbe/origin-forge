@@ -4,13 +4,24 @@ import re
 from dataclasses import dataclass
 
 from .ids import IdKind, validate_id
+from .orchestration_policy import PolicyResult
 from .production_dispatch_binding import CodeBoundedRetryInputBinder
 from .production_dispatch_binding_models import BindingAuditStatus, DispatchBinding
-from .production_dispatch_claim_models import DispatchClaimStatus
+from .production_dispatch_claim_models import DispatchClaim, DispatchClaimStatus
 from .production_dispatch_claim_read import (
     DispatchClaimCurrentnessStatus,
     inspect_dispatch_claim_currentness_readonly,
     read_dispatch_claim,
+)
+from .production_dispatch_execution import (
+    StartedDispatchExecution,
+    begin_dispatch_execution,
+    mark_dispatch_execution_raised,
+    mark_dispatch_execution_returned,
+)
+from .production_dispatch_execution_models import (
+    DispatchExecution,
+    DispatchExecutionStatus,
 )
 from .production_dispatch_read import (
     ProductionDispatchReadError,
@@ -30,11 +41,13 @@ from .runtime import OriginForgeRuntime
 
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+_EXCEPTION_TYPE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,255}$")
 _EXPECTED_OWNER_ID = "originforge.execution.bounded-retry@1"
 _EXPECTED_ADAPTER_ID = "originforge.code.bounded-retry"
 _EXPECTED_CONTRACT_ID = "code.bounded-retry@1"
 _EXPECTED_BINDER_ID = "binder.code.bounded-retry@1"
 _EXPECTED_REQUEST_TYPE_ID = "BoundedRetryPolicy.drive@1"
+_RETURNED_DETAIL = "trusted bounded-retry execution owner returned normally"
 _REQUEST_FIELDS = {
     "task_id",
     "selected_paths",
@@ -47,6 +60,29 @@ _REQUEST_FIELDS = {
 
 class ProductionDispatchInvocationError(RuntimeError):
     pass
+
+
+class ProductionDispatchInvocationRecoveryRequired(ProductionDispatchInvocationError):
+    """The owner boundary was crossed and the durable STARTED receipt must be reviewed."""
+
+    def __init__(self, execution_id: str, reason_code: str):
+        if not isinstance(execution_id, str) or not validate_id(
+            execution_id,
+            IdKind.DISPATCH_EXECUTION,
+        ):
+            raise ValueError("recovery error requires a valid DISPEXEC ID")
+        if reason_code not in {
+            "STARTED_RELATION_MISMATCH",
+            "OWNER_RETURN_CONTRACT_MISMATCH",
+            "RETURNED_TERMINALIZATION_FAILED",
+            "RAISED_TERMINALIZATION_FAILED",
+        }:
+            raise ValueError("recovery error reason_code is unsupported")
+        self.execution_id = execution_id
+        self.reason_code = reason_code
+        super().__init__(
+            f"dispatch execution {execution_id} requires explicit recovery: {reason_code}"
+        )
 
 
 def _digest(value: object, label: str) -> str:
@@ -69,6 +105,16 @@ def _path_tuple(value: object, label: str) -> tuple[str, ...]:
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
         raise ProductionDispatchInvocationError(f"{label} must be a canonical string list")
     return tuple(value)
+
+
+def _exception_type_commitment(exc: Exception) -> str:
+    candidate = f"{type(exc).__module__}.{type(exc).__qualname__}"
+    if _EXCEPTION_TYPE_RE.fullmatch(candidate) is not None:
+        return candidate
+    candidate = type(exc).__name__
+    if _EXCEPTION_TYPE_RE.fullmatch(candidate) is not None:
+        return candidate
+    return "Exception"
 
 
 @dataclass(frozen=True)
@@ -150,6 +196,32 @@ class BoundedRetryInvocationRequest:
             "structural_context": self.structural_context,
             "semantic_context": self.semantic_context,
         }
+
+
+@dataclass(frozen=True)
+class CompletedDispatchInvocation:
+    """Synchronous non-canonical wrapper around the existing PolicyResult."""
+
+    execution: DispatchExecution
+    policy_result: PolicyResult
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.execution, DispatchExecution):
+            raise TypeError("execution must be a DispatchExecution")
+        if not isinstance(self.policy_result, PolicyResult):
+            raise TypeError("policy_result must be a PolicyResult")
+        if self.execution.status is not DispatchExecutionStatus.RETURNED:
+            raise ProductionDispatchInvocationError(
+                "completed invocation wrapper requires RETURNED execution"
+            )
+        if self.execution.task_id != self.policy_result.task_id:
+            raise ProductionDispatchInvocationError(
+                "completed invocation Task relation drifted"
+            )
+
+    @property
+    def execution_id(self) -> str:
+        return self.execution.execution_id
 
 
 def _require_trusted_bounded_retry_relation(binding: DispatchBinding) -> None:
@@ -301,3 +373,121 @@ def freeze_bounded_retry_invocation_request(
             "frozen invocation request task_id does not match the exact claim Task"
         )
     return request
+
+
+def _require_started_matches_frozen(
+    started: StartedDispatchExecution,
+    claim: DispatchClaim,
+    request: BoundedRetryInvocationRequest,
+) -> None:
+    if not isinstance(started, StartedDispatchExecution):
+        raise TypeError("started must be a StartedDispatchExecution")
+    execution = started.execution
+    plan = started.dependencies.plan
+    if (
+        execution.claim_id != claim.claim_id
+        or execution.claim_revision_at_start != claim.revision
+        or execution.task_id != claim.task_id
+        or execution.task_id != request.task_id
+        or execution.dispatch_binding_id != claim.dispatch_binding_id
+        or execution.dispatch_binding_hash != claim.dispatch_binding_hash
+        or execution.execution_owner_id != _EXPECTED_OWNER_ID
+        or plan.claim_id != claim.claim_id
+        or plan.claim_revision != claim.revision
+        or plan.task_id != request.task_id
+        or plan.dispatch_binding_id != claim.dispatch_binding_id
+        or plan.dispatch_binding_hash != claim.dispatch_binding_hash
+        or plan.request_type_id != _EXPECTED_REQUEST_TYPE_ID
+        or plan.request_content_hash != request.request_content_hash
+        or plan.owner_id != _EXPECTED_OWNER_ID
+    ):
+        raise ProductionDispatchInvocationRecoveryRequired(
+            execution.execution_id,
+            "STARTED_RELATION_MISMATCH",
+        )
+
+
+def dispatch_claim_once(
+    runtime: OriginForgeRuntime,
+    claim_id: str,
+    expected_claim_revision: int,
+) -> CompletedDispatchInvocation:
+    """Invoke exactly one reviewed production owner for one exact ACTIVE claim.
+
+    There is deliberately no dispatcher-level retry or replay. Once STARTED is
+    committed, any uncertain or failed terminalization state requires explicit
+    Phase-36 recovery instead of a second owner call.
+    """
+
+    request = freeze_bounded_retry_invocation_request(
+        runtime,
+        claim_id,
+        expected_claim_revision,
+    )
+    frozen_claim = read_dispatch_claim(runtime, claim_id)
+    if (
+        frozen_claim.status is not DispatchClaimStatus.ACTIVE
+        or frozen_claim.revision != expected_claim_revision
+        or frozen_claim.task_id != request.task_id
+    ):
+        raise ProductionDispatchInvocationError(
+            "dispatch claim changed before execution ownership begin"
+        )
+
+    started = begin_dispatch_execution(
+        runtime,
+        claim_id,
+        expected_claim_revision,
+    )
+    _require_started_matches_frozen(started, frozen_claim, request)
+
+    try:
+        policy_result = started.dependencies.bounded_retry_policy.drive(
+            task_id=request.task_id,
+            selected_paths=request.selected_paths,
+            auto_context=request.auto_context,
+            context_seed_paths=request.context_seed_paths,
+            structural_context=request.structural_context,
+            semantic_context=request.semantic_context,
+        )
+    except Exception as exc:
+        exception_type = _exception_type_commitment(exc)
+        try:
+            mark_dispatch_execution_raised(
+                runtime,
+                started.execution.execution_id,
+                started.execution.revision,
+                frozen_claim.revision,
+                f"trusted bounded-retry execution owner raised {exception_type}",
+            )
+        except Exception as terminalization_exc:
+            raise ProductionDispatchInvocationRecoveryRequired(
+                started.execution.execution_id,
+                "RAISED_TERMINALIZATION_FAILED",
+            ) from terminalization_exc
+        raise ProductionDispatchInvocationError(
+            "trusted bounded-retry execution owner raised "
+            f"{exception_type}; dispatch execution "
+            f"{started.execution.execution_id} recorded RAISED"
+        ) from exc
+
+    if not isinstance(policy_result, PolicyResult) or policy_result.task_id != request.task_id:
+        raise ProductionDispatchInvocationRecoveryRequired(
+            started.execution.execution_id,
+            "OWNER_RETURN_CONTRACT_MISMATCH",
+        )
+
+    try:
+        returned = mark_dispatch_execution_returned(
+            runtime,
+            started.execution.execution_id,
+            started.execution.revision,
+            frozen_claim.revision,
+            _RETURNED_DETAIL,
+        )
+    except Exception as exc:
+        raise ProductionDispatchInvocationRecoveryRequired(
+            started.execution.execution_id,
+            "RETURNED_TERMINALIZATION_FAILED",
+        ) from exc
+    return CompletedDispatchInvocation(returned, policy_result)
