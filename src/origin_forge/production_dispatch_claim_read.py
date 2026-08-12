@@ -41,6 +41,7 @@ class DispatchClaimCurrentnessStatus(StrEnum):
     NOT_READY = "NOT_READY"
     RELEASED = "RELEASED"
     INTERRUPTED = "INTERRUPTED"
+    CONSUMED = "CONSUMED"
     INVALID = "INVALID"
 
 
@@ -345,6 +346,12 @@ def inspect_dispatch_claim_currentness_readonly(
         return result(
             claim.task_id,
             DispatchClaimCurrentnessStatus.INTERRUPTED,
+            claim.terminal_reason,
+        )
+    if claim.status is DispatchClaimStatus.CONSUMED:
+        return result(
+            claim.task_id,
+            DispatchClaimCurrentnessStatus.CONSUMED,
             claim.terminal_reason,
         )
     if claim.status is not DispatchClaimStatus.ACTIVE:
