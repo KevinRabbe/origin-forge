@@ -70,13 +70,33 @@ class ProductionManagerDispatchSelectionTests(unittest.TestCase):
         self.assertEqual(result.status, ManagerDispatchSelectionStatus.NO_ELIGIBLE_TASK)
         self.assertIsNone(result.candidate)
 
-    def test_complete_candidates_select_created_at_then_task_id_only(self) -> None:
+    def test_complete_ordered_candidates_select_first_only(self) -> None:
+        oldest_low_id = _candidate(
+            "TASK-00000000-0000-4000-8000-000000000010",
+            "2026-08-12T12:00:00Z",
+            "10",
+        )
         oldest_high_id = _candidate(
             "TASK-00000000-0000-4000-8000-000000000020",
             "2026-08-12T12:00:00Z",
             "20",
         )
-        oldest_low_id = _candidate(
+        newer = _candidate(
+            "TASK-00000000-0000-4000-8000-000000000001",
+            "2026-08-12T12:00:01Z",
+            "01",
+        )
+        result = select_manager_dispatch_candidate(
+            _admission(
+                ManagerDispatchAdmissionStatus.COMPLETE,
+                (oldest_low_id, oldest_high_id, newer),
+            )
+        )
+        self.assertEqual(result.status, ManagerDispatchSelectionStatus.ONE_SELECTED)
+        self.assertEqual(result.candidate, oldest_low_id)
+
+    def test_unsorted_complete_admission_fails_closed_instead_of_reordering(self) -> None:
+        older = _candidate(
             "TASK-00000000-0000-4000-8000-000000000010",
             "2026-08-12T12:00:00Z",
             "10",
@@ -89,11 +109,11 @@ class ProductionManagerDispatchSelectionTests(unittest.TestCase):
         result = select_manager_dispatch_candidate(
             _admission(
                 ManagerDispatchAdmissionStatus.COMPLETE,
-                (newer, oldest_high_id, oldest_low_id),
+                (newer, older),
             )
         )
-        self.assertEqual(result.status, ManagerDispatchSelectionStatus.ONE_SELECTED)
-        self.assertEqual(result.candidate, oldest_low_id)
+        self.assertEqual(result.status, ManagerDispatchSelectionStatus.INVALID_STATE)
+        self.assertIsNone(result.candidate)
 
     def test_ambiguous_admission_never_falls_through_to_valid_candidate(self) -> None:
         candidate = _candidate(
@@ -147,6 +167,26 @@ class ProductionManagerDispatchSelectionTests(unittest.TestCase):
         self.assertEqual(result.status, ManagerDispatchSelectionStatus.INVALID_STATE)
         self.assertIsNone(result.candidate)
 
+    def test_duplicate_task_in_complete_admission_fails_closed(self) -> None:
+        first = _candidate(
+            "TASK-00000000-0000-4000-8000-000000000001",
+            "2026-08-12T12:00:00Z",
+            "01",
+        )
+        duplicate = _candidate(
+            first.task_id,
+            "2026-08-12T12:00:01Z",
+            "02",
+        )
+        result = select_manager_dispatch_candidate(
+            _admission(
+                ManagerDispatchAdmissionStatus.COMPLETE,
+                (first, duplicate),
+            )
+        )
+        self.assertEqual(result.status, ManagerDispatchSelectionStatus.INVALID_STATE)
+        self.assertIsNone(result.candidate)
+
     def test_selection_model_enforces_candidate_relation(self) -> None:
         candidate = _candidate(
             "TASK-00000000-0000-4000-8000-000000000001",
@@ -156,7 +196,10 @@ class ProductionManagerDispatchSelectionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ManagerDispatchSelection(ManagerDispatchSelectionStatus.ONE_SELECTED, None)
         with self.assertRaises(ValueError):
-            ManagerDispatchSelection(ManagerDispatchSelectionStatus.NO_ELIGIBLE_TASK, candidate)
+            ManagerDispatchSelection(
+                ManagerDispatchSelectionStatus.NO_ELIGIBLE_TASK,
+                candidate,
+            )
 
     def test_selector_surface_is_pure_and_has_no_manager_mutation_authority(self) -> None:
         source = inspect.getsource(selection_module)
