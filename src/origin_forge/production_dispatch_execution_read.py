@@ -20,6 +20,8 @@ from .production_dispatch_read import (
     ProductionDispatchReadError,
     inspect_dispatch_binding_currentness_readonly,
     read_dispatch_binding,
+    read_dispatch_binding_audit,
+    read_input_resolution,
 )
 from .production_execution_assembly import (
     ProductionExecutionDependencyPlan,
@@ -197,51 +199,92 @@ def read_dispatch_execution(
         raise ProductionDispatchExecutionReadError(str(exc)) from exc
 
 
-def _consumed_claim_matches_execution(runtime: OriginForgeRuntime, execution: DispatchExecution):
+def _claim_matches_execution_authority(claim, execution: DispatchExecution) -> bool:
+    return (
+        claim.project_id == execution.project_id
+        and claim.claim_id == execution.claim_id
+        and claim.task_id == execution.task_id
+        and claim.task_revision == execution.task_revision
+        and claim.task_content_hash == execution.task_content_hash
+        and claim.work_order_id == execution.work_order_id
+        and claim.work_order_hash == execution.work_order_hash
+        and claim.input_resolution_id == execution.input_resolution_id
+        and claim.input_resolution_hash == execution.input_resolution_hash
+        and claim.dispatch_binding_id == execution.dispatch_binding_id
+        and claim.dispatch_binding_hash == execution.dispatch_binding_hash
+        and claim.binding_audit_id == execution.binding_audit_id
+        and claim.binding_audit_hash == execution.binding_audit_hash
+        and claim.selected_adapter_id == execution.selected_adapter_id
+        and claim.selected_adapter_fingerprint
+        == execution.selected_adapter_fingerprint
+        and claim.dispatch_contract_id == execution.dispatch_contract_id
+        and claim.dispatch_contract_hash == execution.dispatch_contract_hash
+        and claim.binder_id == execution.binder_id
+        and claim.binder_fingerprint == execution.binder_fingerprint
+    )
+
+
+def _require_claim_lifecycle_relation(
+    runtime: OriginForgeRuntime,
+    execution: DispatchExecution,
+):
     try:
         claim = read_dispatch_claim(runtime, execution.claim_id)
     except Exception as exc:
         raise ProductionDispatchExecutionReadError(
             "execution claim cannot be read canonically"
         ) from exc
-    if claim.status is not DispatchClaimStatus.CONSUMED:
+    if not _claim_matches_execution_authority(claim, execution):
         raise ProductionDispatchExecutionReadError(
-            f"execution claim is not CONSUMED: {claim.status.value}"
+            "execution receipt does not match frozen claim authority"
         )
-    if claim.revision != execution.claim_revision_at_start + 1:
-        raise ProductionDispatchExecutionReadError(
-            "consumed claim revision does not match execution start boundary"
+
+    if execution.status is DispatchExecutionStatus.STARTED:
+        if (
+            claim.status is not DispatchClaimStatus.ACTIVE
+            or claim.revision != execution.claim_revision_at_start
+            or claim.terminal_reason is not None
+        ):
+            raise ProductionDispatchExecutionReadError(
+                "STARTED execution does not retain its exact ACTIVE claim revision"
+            )
+        return claim
+
+    if execution.status in {
+        DispatchExecutionStatus.RETURNED,
+        DispatchExecutionStatus.RAISED,
+    }:
+        expected_reason = (
+            f"claim consumed by dispatch execution {execution.execution_id} "
+            f"after {execution.status.value.lower()}"
         )
-    if claim.terminal_reason != f"claim consumed by dispatch execution {execution.execution_id}":
-        raise ProductionDispatchExecutionReadError(
-            "consumed claim reason does not bind exact execution ID"
+        if (
+            claim.status is not DispatchClaimStatus.CONSUMED
+            or claim.revision != execution.claim_revision_at_start + 1
+            or claim.terminal_reason != expected_reason
+        ):
+            raise ProductionDispatchExecutionReadError(
+                "terminal execution does not bind exact CONSUMED claim lifecycle"
+            )
+        return claim
+
+    if execution.status is DispatchExecutionStatus.INTERRUPTED:
+        expected_reason = (
+            f"claim interrupted with dispatch execution {execution.execution_id}"
         )
-    if (
-        claim.project_id != execution.project_id
-        or claim.claim_id != execution.claim_id
-        or claim.task_id != execution.task_id
-        or claim.task_revision != execution.task_revision
-        or claim.task_content_hash != execution.task_content_hash
-        or claim.work_order_id != execution.work_order_id
-        or claim.work_order_hash != execution.work_order_hash
-        or claim.input_resolution_id != execution.input_resolution_id
-        or claim.input_resolution_hash != execution.input_resolution_hash
-        or claim.dispatch_binding_id != execution.dispatch_binding_id
-        or claim.dispatch_binding_hash != execution.dispatch_binding_hash
-        or claim.binding_audit_id != execution.binding_audit_id
-        or claim.binding_audit_hash != execution.binding_audit_hash
-        or claim.selected_adapter_id != execution.selected_adapter_id
-        or claim.selected_adapter_fingerprint
-        != execution.selected_adapter_fingerprint
-        or claim.dispatch_contract_id != execution.dispatch_contract_id
-        or claim.dispatch_contract_hash != execution.dispatch_contract_hash
-        or claim.binder_id != execution.binder_id
-        or claim.binder_fingerprint != execution.binder_fingerprint
-    ):
-        raise ProductionDispatchExecutionReadError(
-            "execution receipt does not match frozen consumed-claim authority"
-        )
-    return claim
+        if (
+            claim.status is not DispatchClaimStatus.INTERRUPTED
+            or claim.revision != execution.claim_revision_at_start + 1
+            or claim.terminal_reason != expected_reason
+        ):
+            raise ProductionDispatchExecutionReadError(
+                "interrupted execution does not bind exact INTERRUPTED claim lifecycle"
+            )
+        return claim
+
+    raise ProductionDispatchExecutionReadError(
+        "dispatch execution has unsupported lifecycle state"
+    )
 
 
 def _reconstruct_dependency_plan(
@@ -249,13 +292,20 @@ def _reconstruct_dependency_plan(
     execution: DispatchExecution,
 ) -> ProductionExecutionDependencyPlan:
     try:
+        bundle = read_input_resolution(runtime, execution.input_resolution_id)
         binding = read_dispatch_binding(runtime, execution.dispatch_binding_id)
+        audit = read_dispatch_binding_audit(runtime, execution.binding_audit_id)
     except ProductionDispatchReadError as exc:
         raise ProductionDispatchExecutionReadError(
-            "execution dispatch binding cannot be read canonically"
+            "execution Phase-34 evidence cannot be read canonically"
         ) from exc
     if (
-        binding.content_hash != execution.dispatch_binding_hash
+        bundle.content_hash != execution.input_resolution_hash
+        or binding.content_hash != execution.dispatch_binding_hash
+        or audit.content_hash != execution.binding_audit_hash
+        or binding.input_resolution_id != bundle.input_resolution_id
+        or audit.input_resolution_id != bundle.input_resolution_id
+        or audit.dispatch_binding_id != binding.dispatch_binding_id
         or binding.task_id != execution.task_id
         or binding.task_revision != execution.task_revision
         or binding.task_content_hash != execution.task_content_hash
@@ -270,7 +320,7 @@ def _reconstruct_dependency_plan(
         or binding.binder_fingerprint != execution.binder_fingerprint
     ):
         raise ProductionDispatchExecutionReadError(
-            "current dispatch binding does not match execution receipt"
+            "current Phase-34 evidence does not match execution receipt"
         )
 
     owner_registry = build_builtin_execution_owner_registry()
@@ -296,7 +346,12 @@ def _reconstruct_dependency_plan(
             "execution owner identity/fingerprint drifted"
         )
 
-    config = load_config(runtime.project_root)
+    try:
+        config = load_config(runtime.project_root)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise ProductionDispatchExecutionReadError(
+            "current protected config cannot reconstruct managed execution"
+        ) from exc
     if config.version < 6:
         raise ProductionDispatchExecutionReadError(
             "current protected config version cannot reconstruct managed execution"
@@ -396,7 +451,7 @@ def inspect_dispatch_execution_currentness_readonly(
         return result(None, DispatchExecutionCurrentnessStatus.INVALID, str(exc))
 
     try:
-        _consumed_claim_matches_execution(runtime, execution)
+        _require_claim_lifecycle_relation(runtime, execution)
     except ProductionDispatchExecutionReadError as exc:
         return result(
             execution,
