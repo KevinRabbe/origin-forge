@@ -10,12 +10,17 @@ from .production_planning_inspection import (
     _load_materialization_connection,
 )
 from .production_preparation_admission import PreparationCandidate
+from .production_preparation_assembly import PreparationPlannerDependencyPlan
 from .production_preparation_models import (
     PreparationStage,
     PreparationStatus,
     ProductionPreparationModelError,
     TaskPreparationPolicyBinding,
     TaskPreparationReceipt,
+)
+from .production_preparation_policy_store import (
+    ProductionPreparationPolicyStoreError,
+    read_preparation_policy,
 )
 from .production_preparation_provenance import (
     ProductionPreparationProvenanceError,
@@ -52,7 +57,9 @@ def _receipt_from_row(row: sqlite3.Row) -> TaskPreparationReceipt:
             queued_task_revision=int(row["queued_task_revision"]),
             queued_task_hash=row["queued_task_hash"],
             ready_task_revision=(
-                None if row["ready_task_revision"] is None else int(row["ready_task_revision"])
+                None
+                if row["ready_task_revision"] is None
+                else int(row["ready_task_revision"])
             ),
             ready_task_hash=row["ready_task_hash"],
             route_decision_id=row["route_decision_id"],
@@ -118,7 +125,9 @@ def _require_active_checkpoint(
     expected_revision: int,
 ) -> None:
     if type(expected_revision) is not int or expected_revision < 0:
-        raise PreparationReceiptError("expected_revision must be a non-negative integer")
+        raise PreparationReceiptError(
+            "expected_revision must be a non-negative integer"
+        )
     if receipt.status is not PreparationStatus.ACTIVE:
         raise PreparationReceiptError("PREP receipt is not ACTIVE")
     if receipt.stage is not expected_stage:
@@ -131,6 +140,21 @@ def _require_active_checkpoint(
         )
 
 
+def _read_receipt_policy(
+    runtime: OriginForgeRuntime,
+    receipt: TaskPreparationReceipt,
+) -> TaskPreparationPolicyBinding:
+    try:
+        policy = read_preparation_policy(runtime, receipt.preparation_policy_id)
+    except ProductionPreparationPolicyStoreError as exc:
+        raise PreparationReceiptError(
+            "PREP policy is unavailable or no longer current"
+        ) from exc
+    if policy.content_hash != receipt.preparation_policy_hash:
+        raise PreparationReceiptError("PREP policy hash drifted from durable receipt")
+    return policy
+
+
 def acquire_preparation_receipt(
     runtime: OriginForgeRuntime,
     policy: TaskPreparationPolicyBinding,
@@ -139,7 +163,7 @@ def acquire_preparation_receipt(
     """Acquire durable exclusive PREP ownership for one exact queued candidate.
 
     Admission is evidence only. This transaction independently revalidates the
-    selected candidate and exact PLMAT/Task/dependency relation under
+    persisted PREPPOL plus selected PLMAT/Task/dependency relation under
     BEGIN IMMEDIATE before creating the ACTIVE receipt. It never activates,
     routes, plans, or dispatches work.
     """
@@ -151,9 +175,17 @@ def acquire_preparation_receipt(
     if not isinstance(candidate, PreparationCandidate):
         raise TypeError("candidate must be a PreparationCandidate")
     try:
-        provenance = resolve_preparation_policy_provenance(runtime, policy)
-    except ProductionPreparationProvenanceError as exc:
-        raise PreparationReceiptError("PREPPOL provenance is not current") from exc
+        persisted = read_preparation_policy(runtime, policy.preparation_policy_id)
+        if persisted != policy or persisted.content_hash != policy.content_hash:
+            raise PreparationReceiptError(
+                "caller PREPPOL differs from protected persisted authority"
+            )
+        provenance = resolve_preparation_policy_provenance(runtime, persisted)
+    except (
+        ProductionPreparationPolicyStoreError,
+        ProductionPreparationProvenanceError,
+    ) as exc:
+        raise PreparationReceiptError("PREPPOL authority is not current") from exc
 
     project_id = runtime.project_id()
     preparation_id = new_id(IdKind.TASK_PREPARATION)
@@ -164,12 +196,12 @@ def acquire_preparation_receipt(
             materialization = _load_materialization_connection(
                 conn,
                 project_id,
-                policy.materialization_id,
+                persisted.materialization_id,
             )
             if (
-                materialization.content_hash != policy.materialization_hash
-                or materialization.planning_input_id != policy.planning_input_id
-                or materialization.planning_input_hash != policy.planning_input_hash
+                materialization.content_hash != persisted.materialization_hash
+                or materialization.planning_input_id != persisted.planning_input_id
+                or materialization.planning_input_hash != persisted.planning_input_hash
             ):
                 raise PreparationReceiptError(
                     "PREPPOL materialization relation changed before acquisition"
@@ -193,7 +225,9 @@ def acquire_preparation_receipt(
                 (candidate.task_id,),
             ).fetchone()
             if row is None or row["project_id"] != project_id:
-                raise PreparationReceiptError("selected Task is not in current project")
+                raise PreparationReceiptError(
+                    "selected Task is not in current project"
+                )
             if row["flow_id"] != materialization.flow_id:
                 raise PreparationReceiptError("selected Task left materialized Flow")
             try:
@@ -242,12 +276,12 @@ def acquire_preparation_receipt(
             receipt = TaskPreparationReceipt(
                 preparation_id=preparation_id,
                 project_id=project_id,
-                preparation_policy_id=policy.preparation_policy_id,
-                preparation_policy_hash=policy.content_hash,
-                materialization_id=policy.materialization_id,
-                materialization_hash=policy.materialization_hash,
-                planning_input_id=policy.planning_input_id,
-                planning_input_hash=policy.planning_input_hash,
+                preparation_policy_id=persisted.preparation_policy_id,
+                preparation_policy_hash=persisted.content_hash,
+                materialization_id=persisted.materialization_id,
+                materialization_hash=persisted.materialization_hash,
+                planning_input_id=persisted.planning_input_id,
+                planning_input_hash=persisted.planning_input_hash,
                 task_id=candidate.task_id,
                 queued_task_revision=candidate.task_revision,
                 queued_task_hash=candidate.task_content_hash,
@@ -320,7 +354,7 @@ def acquire_preparation_receipt(
                 "SYSTEM",
                 None,
                 {
-                    "preparation_policy_id": policy.preparation_policy_id,
+                    "preparation_policy_id": persisted.preparation_policy_id,
                     "task_id": candidate.task_id,
                     "queued_task_revision": candidate.task_revision,
                     "queued_task_hash": candidate.task_content_hash,
@@ -374,7 +408,9 @@ def checkpoint_preparation_activated(
             status = TaskStatus(row["status"])
             current = TaskRouteInput.from_row(row)
         except (TypeError, ValueError) as exc:
-            raise PreparationReceiptError("activated Task canonical state is invalid") from exc
+            raise PreparationReceiptError(
+                "activated Task canonical state is invalid"
+            ) from exc
         if (
             status is not TaskStatus.READY
             or current.task_revision != activation.new_revision
@@ -410,11 +446,29 @@ def checkpoint_preparation_routed(
     expected_revision: int,
     route_decision_id: str,
 ) -> TaskPreparationReceipt:
+    snapshot = read_preparation_receipt(runtime, preparation_id)
+    _require_active_checkpoint(
+        snapshot,
+        expected_stage=PreparationStage.ACTIVATED,
+        expected_revision=expected_revision,
+    )
+    policy = _read_receipt_policy(runtime, snapshot)
     capability_store = ProductionCapabilityStore(runtime)
     try:
         route = capability_store.require_current_route(route_decision_id)
     except ProductionCapabilityStoreError as exc:
         raise PreparationReceiptError("Phase-32 route is unavailable or stale") from exc
+    resolution = route.resolution
+    if (
+        resolution.catalog_id != policy.capability_catalog_id
+        or resolution.catalog_hash != policy.capability_catalog_hash
+        or resolution.routing_policy_id != policy.capability_routing_policy_id
+        or resolution.routing_policy_hash != policy.capability_routing_policy_hash
+    ):
+        raise PreparationReceiptError(
+            "Phase-32 route does not use exact PREPPOL CAPCAT/CAPPOL authority"
+        )
+
     now = utc_now()
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -424,7 +478,7 @@ def checkpoint_preparation_routed(
             expected_stage=PreparationStage.ACTIVATED,
             expected_revision=expected_revision,
         )
-        route_input = route.resolution.route_input
+        route_input = resolution.route_input
         if (
             route_input.task_id != receipt.task_id
             or route_input.task_revision != receipt.ready_task_revision
@@ -458,16 +512,25 @@ def checkpoint_preparation_planner_started(
     runtime: OriginForgeRuntime,
     preparation_id: str,
     expected_revision: int,
-    planner_dependency_plan_hash: str,
+    plan: PreparationPlannerDependencyPlan,
 ) -> TaskPreparationReceipt:
+    if not isinstance(plan, PreparationPlannerDependencyPlan):
+        raise TypeError("plan must be a PreparationPlannerDependencyPlan")
+    snapshot = read_preparation_receipt(runtime, preparation_id)
+    _require_active_checkpoint(
+        snapshot,
+        expected_stage=PreparationStage.ROUTED,
+        expected_revision=expected_revision,
+    )
+    policy = _read_receipt_policy(runtime, snapshot)
     if (
-        not isinstance(planner_dependency_plan_hash, str)
-        or len(planner_dependency_plan_hash) != 64
-        or any(character not in "0123456789abcdef" for character in planner_dependency_plan_hash)
+        plan.preparation_policy_id != policy.preparation_policy_id
+        or plan.preparation_policy_hash != policy.content_hash
     ):
         raise PreparationReceiptError(
-            "planner_dependency_plan_hash must be a lowercase SHA-256 digest"
+            "planner dependency plan does not bind exact durable PREPPOL authority"
         )
+
     now = utc_now()
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -485,7 +548,7 @@ def checkpoint_preparation_planner_started(
                WHERE preparation_id = ? AND status = 'ACTIVE'
                  AND stage = 'ROUTED' AND revision = ?""",
             (
-                planner_dependency_plan_hash,
+                plan.plan_hash,
                 new_revision,
                 now,
                 receipt.preparation_id,
@@ -505,8 +568,52 @@ def checkpoint_preparation_planner_returned(
 ) -> TaskPreparationReceipt:
     if not isinstance(result, WorkOrderPlannerResult):
         raise TypeError("result must be a WorkOrderPlannerResult")
-    run = runtime.get_run(result.run_id)
+    snapshot = read_preparation_receipt(runtime, preparation_id)
+    _require_active_checkpoint(
+        snapshot,
+        expected_stage=PreparationStage.PLANNER_STARTED,
+        expected_revision=expected_revision,
+    )
+    policy = _read_receipt_policy(runtime, snapshot)
+    try:
+        provenance = resolve_preparation_policy_provenance(runtime, policy)
+        route = ProductionCapabilityStore(runtime).require_current_route(
+            snapshot.route_decision_id
+        )
+    except (
+        ProductionPreparationProvenanceError,
+        ProductionCapabilityStoreError,
+    ) as exc:
+        raise PreparationReceiptError(
+            "planner return authority cannot be revalidated"
+        ) from exc
+    if route.content_hash != snapshot.route_decision_hash:
+        raise PreparationReceiptError("PREP route hash drifted before planner return")
+    resolution = route.resolution
     work_order = result.work_order
+    try:
+        contract = provenance.dispatch_contract_catalog.contract_for_adapter(
+            resolution.selected_adapter_id
+        )
+    except KeyError as exc:
+        raise PreparationReceiptError(
+            "PREPPOL DISPCAT has no contract for returned route"
+        ) from exc
+    if (
+        work_order.dispatch_catalog_id != policy.dispatch_contract_catalog_id
+        or work_order.dispatch_catalog_hash != policy.dispatch_contract_catalog_hash
+        or work_order.dispatch_contract_id != contract.contract_id
+        or work_order.dispatch_contract_hash != contract.content_hash
+        or work_order.selected_adapter_id != resolution.selected_adapter_id
+        or work_order.selected_adapter_fingerprint
+        != resolution.selected_adapter_fingerprint
+        or work_order.input_refs
+    ):
+        raise PreparationReceiptError(
+            "planner WorkOrder exceeds exact PREPPOL route/dispatch authority"
+        )
+
+    run = runtime.get_run(result.run_id)
     now = utc_now()
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -571,7 +678,9 @@ def fail_preparation_before_planner(
         )
     normalized = reason.strip() if isinstance(reason, str) else ""
     if not normalized:
-        raise PreparationReceiptError("pre-planner failure reason must be non-empty")
+        raise PreparationReceiptError(
+            "pre-planner failure reason must be non-empty"
+        )
     normalized = normalized[:4096]
     now = utc_now()
     with runtime.store.session() as conn:
@@ -599,5 +708,7 @@ def fail_preparation_before_planner(
             ),
         )
         if cursor.rowcount != 1:
-            raise StaleRevision("PREP changed during pre-planner terminalization")
+            raise StaleRevision(
+                "PREP changed during pre-planner terminalization"
+            )
         return _load_receipt_connection(conn, preparation_id)
