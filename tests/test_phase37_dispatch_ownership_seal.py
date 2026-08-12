@@ -7,7 +7,7 @@ import unittest
 
 import origin_forge.production_dispatch_claim_lifecycle as claim_lifecycle_module
 from origin_forge.ids import IdKind, new_id
-from origin_forge.migrations import LATEST_SCHEMA_VERSION, MIGRATION_010
+from origin_forge.migrations import MIGRATION_010
 from origin_forge.production_dispatch_claim_lifecycle import (
     DispatchClaimLifecycleError,
     interrupt_dispatch_claim,
@@ -168,15 +168,17 @@ class Phase37DispatchOwnershipSealTests(unittest.TestCase):
                 ).fetchone()
             )
 
-    def test_schema_v10_installs_exact_ownership_trigger(self) -> None:
-        self.assertEqual(LATEST_SCHEMA_VERSION, 10)
+    def test_schema_keeps_v10_ownership_trigger_after_later_migrations(self) -> None:
         with self.runtime.store.session() as conn:
-            version = conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
+            versions = {
+                row["version"]
+                for row in conn.execute("SELECT version FROM schema_migrations")
+            }
             trigger = conn.execute(
                 "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?",
                 (_TRIGGER,),
             ).fetchone()
-        self.assertEqual(version, 10)
+        self.assertIn(10, versions)
         self.assertIsNotNone(trigger)
         self.assertIn("status = 'STARTED'", trigger["sql"])
         self.assertIn("'RELEASED', 'INTERRUPTED'", trigger["sql"])
