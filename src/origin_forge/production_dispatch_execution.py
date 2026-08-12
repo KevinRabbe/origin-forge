@@ -52,6 +52,8 @@ class StartedDispatchExecution:
             )
         if (
             self.execution.claim_id != self.dependencies.plan.claim_id
+            or self.execution.claim_revision_at_start
+            != self.dependencies.plan.claim_revision
             or self.execution.task_id != self.dependencies.plan.task_id
             or self.execution.dispatch_binding_id
             != self.dependencies.plan.dispatch_binding_id
@@ -141,10 +143,10 @@ def _execution_from_row(row) -> DispatchExecution:
         ) from exc
 
 
-def _expected_revision(value: object) -> int:
+def _expected_revision(value: object, label: str) -> int:
     if type(value) is not int or value < 0:
         raise ProductionDispatchExecutionError(
-            "expected_revision must be a non-negative integer"
+            f"{label} must be a non-negative integer"
         )
     return value
 
@@ -206,17 +208,41 @@ def _validate_transactional_task_currentness(conn, claim: DispatchClaim) -> None
         )
 
 
+def _claim_matches_execution(claim: DispatchClaim, execution: DispatchExecution) -> bool:
+    return (
+        claim.project_id == execution.project_id
+        and claim.claim_id == execution.claim_id
+        and claim.task_id == execution.task_id
+        and claim.task_revision == execution.task_revision
+        and claim.task_content_hash == execution.task_content_hash
+        and claim.work_order_id == execution.work_order_id
+        and claim.work_order_hash == execution.work_order_hash
+        and claim.input_resolution_id == execution.input_resolution_id
+        and claim.input_resolution_hash == execution.input_resolution_hash
+        and claim.dispatch_binding_id == execution.dispatch_binding_id
+        and claim.dispatch_binding_hash == execution.dispatch_binding_hash
+        and claim.binding_audit_id == execution.binding_audit_id
+        and claim.binding_audit_hash == execution.binding_audit_hash
+        and claim.selected_adapter_id == execution.selected_adapter_id
+        and claim.selected_adapter_fingerprint
+        == execution.selected_adapter_fingerprint
+        and claim.dispatch_contract_id == execution.dispatch_contract_id
+        and claim.dispatch_contract_hash == execution.dispatch_contract_hash
+        and claim.binder_id == execution.binder_id
+        and claim.binder_fingerprint == execution.binder_fingerprint
+    )
+
+
 def begin_dispatch_execution(
     runtime: OriginForgeRuntime,
     claim_id: str,
     expected_revision: int,
 ) -> StartedDispatchExecution:
-    """Consume one exact current claim and create one STARTED receipt atomically.
+    """Create one STARTED execution receipt while retaining the ACTIVE claim.
 
-    Dependencies are assembled before the transaction but are never invoked.
-    The returned wrapper retains those exact lazy dependencies for the later
-    execution boundary; this function itself stops before model/sandbox policy
-    execution.
+    Dependencies are assembled before the transaction but never invoked. The
+    ACTIVE claim remains the durable exclusivity lock throughout the STARTED
+    execution window; only a later terminalization may consume or interrupt it.
     """
 
     if not isinstance(runtime, OriginForgeRuntime):
@@ -228,7 +254,7 @@ def begin_dispatch_execution(
         raise ProductionDispatchExecutionError(
             "claim_id must be a valid DISPCLAIM ID"
         )
-    expected_revision = _expected_revision(expected_revision)
+    expected_revision = _expected_revision(expected_revision, "expected_revision")
 
     dependencies = assemble_production_execution_dependencies(runtime, claim_id)
     if dependencies.plan.claim_revision != expected_revision:
@@ -281,26 +307,14 @@ def begin_dispatch_execution(
             raise ProductionDispatchExecutionError(
                 "dispatch claim already has an execution receipt"
             )
-
-        consumed_revision = claim.revision + 1
-        terminal_reason = f"claim consumed by dispatch execution {execution_id}"
-        cursor = conn.execute(
-            """UPDATE dispatch_claims
-               SET status = 'CONSUMED', revision = ?, updated_at = ?, terminal_reason = ?
-               WHERE claim_id = ? AND project_id = ?
-                 AND status = 'ACTIVE' AND revision = ?""",
-            (
-                consumed_revision,
-                now,
-                terminal_reason,
-                claim_id,
-                project_id,
-                claim.revision,
-            ),
-        )
-        if cursor.rowcount != 1:
-            raise StaleRevision(
-                f"dispatch claim {claim_id} changed concurrently"
+        competing = conn.execute(
+            """SELECT execution_id FROM dispatch_executions
+               WHERE task_id = ? AND status = 'STARTED'""",
+            (claim.task_id,),
+        ).fetchone()
+        if competing is not None:
+            raise ProductionDispatchExecutionError(
+                "Task already has a STARTED dispatch execution"
             )
 
         conn.execute(
@@ -350,24 +364,6 @@ def begin_dispatch_execution(
                 now,
             ),
         )
-
-        runtime.store._append_event(
-            conn,
-            "DISPATCH_CLAIM",
-            claim.claim_id,
-            "DISPATCH_CLAIM_CONSUMED",
-            DispatchClaimStatus.ACTIVE.value,
-            DispatchClaimStatus.CONSUMED.value,
-            consumed_revision,
-            "SYSTEM",
-            None,
-            {
-                "task_id": claim.task_id,
-                "execution_id": execution_id,
-                "runtime_dependency_plan_hash": dependencies.plan.plan_hash,
-            },
-            now,
-        )
         runtime.store._append_event(
             conn,
             "DISPATCH_EXECUTION",
@@ -380,6 +376,7 @@ def begin_dispatch_execution(
             None,
             {
                 "claim_id": claim.claim_id,
+                "claim_revision": claim.revision,
                 "task_id": claim.task_id,
                 "execution_owner_id": dependencies.plan.owner_id,
                 "execution_owner_fingerprint": dependencies.plan.owner_fingerprint,
@@ -396,6 +393,19 @@ def begin_dispatch_execution(
                 "dispatch execution disappeared during begin transaction"
             )
         result = _execution_from_row(execution_row)
+        claim_after = conn.execute(
+            "SELECT * FROM dispatch_claims WHERE claim_id = ?",
+            (claim_id,),
+        ).fetchone()
+        if claim_after is None:
+            raise ProductionDispatchExecutionError(
+                "dispatch claim disappeared during begin transaction"
+            )
+        unchanged_claim = _claim_from_row(claim_after)
+        if unchanged_claim != claim:
+            raise ProductionDispatchExecutionError(
+                "begin transaction changed ACTIVE claim authority or lifecycle"
+            )
 
     return StartedDispatchExecution(result, dependencies)
 
@@ -414,7 +424,8 @@ def _validate_execution_id(execution_id: object) -> str:
 def _terminalize_dispatch_execution(
     runtime: OriginForgeRuntime,
     execution_id: str,
-    expected_revision: int,
+    expected_execution_revision: int,
+    expected_claim_revision: int,
     *,
     target: DispatchExecutionStatus,
     detail: str,
@@ -422,7 +433,14 @@ def _terminalize_dispatch_execution(
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
     execution_id = _validate_execution_id(execution_id)
-    expected_revision = _expected_revision(expected_revision)
+    expected_execution_revision = _expected_revision(
+        expected_execution_revision,
+        "expected_execution_revision",
+    )
+    expected_claim_revision = _expected_revision(
+        expected_claim_revision,
+        "expected_claim_revision",
+    )
     if target not in {
         DispatchExecutionStatus.RETURNED,
         DispatchExecutionStatus.RAISED,
@@ -435,6 +453,18 @@ def _terminalize_dispatch_execution(
     detail_hash = _terminal_detail_hash(target, detail)
     project_id = runtime.project_id()
     now = utc_now()
+
+    if target is DispatchExecutionStatus.INTERRUPTED:
+        claim_target = DispatchClaimStatus.INTERRUPTED
+        claim_event = "DISPATCH_CLAIM_INTERRUPTED"
+        claim_reason = f"claim interrupted with dispatch execution {execution_id}"
+    else:
+        claim_target = DispatchClaimStatus.CONSUMED
+        claim_event = "DISPATCH_CLAIM_CONSUMED"
+        claim_reason = (
+            f"claim consumed by dispatch execution {execution_id} "
+            f"after {target.value.lower()}"
+        )
 
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -455,20 +485,49 @@ def _terminalize_dispatch_execution(
             raise ProductionDispatchExecutionError(
                 f"dispatch execution is terminal: {execution.status.value}"
             )
-        if execution.revision != expected_revision:
+        if execution.revision != expected_execution_revision:
             raise StaleRevision(
                 f"dispatch execution {execution_id} revision {execution.revision} "
-                f"!= expected {expected_revision}"
+                f"!= expected {expected_execution_revision}"
             )
-        new_revision = execution.revision + 1
-        cursor = conn.execute(
+
+        claim_row = conn.execute(
+            "SELECT * FROM dispatch_claims WHERE claim_id = ?",
+            (execution.claim_id,),
+        ).fetchone()
+        if claim_row is None:
+            raise ProductionDispatchExecutionError(
+                "dispatch execution claim does not exist"
+            )
+        claim = _claim_from_row(claim_row)
+        if claim.project_id != project_id or not _claim_matches_execution(claim, execution):
+            raise ProductionDispatchExecutionError(
+                "dispatch execution no longer matches exact claim authority"
+            )
+        if claim.status is not DispatchClaimStatus.ACTIVE:
+            raise ProductionDispatchExecutionError(
+                f"dispatch execution claim is not ACTIVE: {claim.status.value}"
+            )
+        if claim.revision != expected_claim_revision:
+            raise StaleRevision(
+                f"dispatch claim {claim.claim_id} revision {claim.revision} "
+                f"!= expected {expected_claim_revision}"
+            )
+        if claim.revision != execution.claim_revision_at_start:
+            raise ProductionDispatchExecutionError(
+                "STARTED execution no longer owns its original ACTIVE claim revision"
+            )
+
+        new_execution_revision = execution.revision + 1
+        new_claim_revision = claim.revision + 1
+        execution_cursor = conn.execute(
             """UPDATE dispatch_executions
                SET status = ?, revision = ?, updated_at = ?, terminal_detail_hash = ?
                WHERE execution_id = ? AND project_id = ?
                  AND status = 'STARTED' AND revision = ?""",
             (
                 target.value,
-                new_revision,
+                new_execution_revision,
                 now,
                 detail_hash,
                 execution_id,
@@ -476,10 +535,30 @@ def _terminalize_dispatch_execution(
                 execution.revision,
             ),
         )
-        if cursor.rowcount != 1:
+        if execution_cursor.rowcount != 1:
             raise StaleRevision(
                 f"dispatch execution {execution_id} changed concurrently"
             )
+        claim_cursor = conn.execute(
+            """UPDATE dispatch_claims
+               SET status = ?, revision = ?, updated_at = ?, terminal_reason = ?
+               WHERE claim_id = ? AND project_id = ?
+                 AND status = 'ACTIVE' AND revision = ?""",
+            (
+                claim_target.value,
+                new_claim_revision,
+                now,
+                claim_reason,
+                claim.claim_id,
+                project_id,
+                claim.revision,
+            ),
+        )
+        if claim_cursor.rowcount != 1:
+            raise StaleRevision(
+                f"dispatch claim {claim.claim_id} changed concurrently"
+            )
+
         runtime.store._append_event(
             conn,
             "DISPATCH_EXECUTION",
@@ -487,7 +566,7 @@ def _terminalize_dispatch_execution(
             f"DISPATCH_EXECUTION_{target.value}",
             DispatchExecutionStatus.STARTED.value,
             target.value,
-            new_revision,
+            new_execution_revision,
             "SYSTEM",
             None,
             {
@@ -497,18 +576,46 @@ def _terminalize_dispatch_execution(
             },
             now,
         )
-        updated = conn.execute(
+        runtime.store._append_event(
+            conn,
+            "DISPATCH_CLAIM",
+            claim.claim_id,
+            claim_event,
+            DispatchClaimStatus.ACTIVE.value,
+            claim_target.value,
+            new_claim_revision,
+            "SYSTEM",
+            None,
+            {
+                "task_id": claim.task_id,
+                "execution_id": execution_id,
+                "execution_status": target.value,
+                "terminal_detail_hash": detail_hash,
+            },
+            now,
+        )
+
+        updated_execution_row = conn.execute(
             "SELECT * FROM dispatch_executions WHERE execution_id = ?",
             (execution_id,),
         ).fetchone()
-        if updated is None:
+        updated_claim_row = conn.execute(
+            "SELECT * FROM dispatch_claims WHERE claim_id = ?",
+            (claim.claim_id,),
+        ).fetchone()
+        if updated_execution_row is None or updated_claim_row is None:
             raise ProductionDispatchExecutionError(
-                "dispatch execution disappeared during terminal transition"
+                "execution or claim disappeared during terminal transition"
             )
-        result = _execution_from_row(updated)
+        result = _execution_from_row(updated_execution_row)
+        updated_claim = _claim_from_row(updated_claim_row)
         if result.frozen_authority_dict() != execution.frozen_authority_dict():
             raise ProductionDispatchExecutionError(
                 "dispatch execution frozen authority changed during terminal transition"
+            )
+        if updated_claim.frozen_authority_dict() != claim.frozen_authority_dict():
+            raise ProductionDispatchExecutionError(
+                "dispatch claim frozen authority changed during terminal transition"
             )
         return result
 
@@ -516,13 +623,15 @@ def _terminalize_dispatch_execution(
 def mark_dispatch_execution_returned(
     runtime: OriginForgeRuntime,
     execution_id: str,
-    expected_revision: int,
+    expected_execution_revision: int,
+    expected_claim_revision: int,
     detail: str,
 ) -> DispatchExecution:
     return _terminalize_dispatch_execution(
         runtime,
         execution_id,
-        expected_revision,
+        expected_execution_revision,
+        expected_claim_revision,
         target=DispatchExecutionStatus.RETURNED,
         detail=detail,
     )
@@ -531,13 +640,15 @@ def mark_dispatch_execution_returned(
 def mark_dispatch_execution_raised(
     runtime: OriginForgeRuntime,
     execution_id: str,
-    expected_revision: int,
+    expected_execution_revision: int,
+    expected_claim_revision: int,
     detail: str,
 ) -> DispatchExecution:
     return _terminalize_dispatch_execution(
         runtime,
         execution_id,
-        expected_revision,
+        expected_execution_revision,
+        expected_claim_revision,
         target=DispatchExecutionStatus.RAISED,
         detail=detail,
     )
@@ -546,13 +657,15 @@ def mark_dispatch_execution_raised(
 def interrupt_dispatch_execution(
     runtime: OriginForgeRuntime,
     execution_id: str,
-    expected_revision: int,
+    expected_execution_revision: int,
+    expected_claim_revision: int,
     reason: str,
 ) -> DispatchExecution:
     return _terminalize_dispatch_execution(
         runtime,
         execution_id,
-        expected_revision,
+        expected_execution_revision,
+        expected_claim_revision,
         target=DispatchExecutionStatus.INTERRUPTED,
         detail=reason,
     )
