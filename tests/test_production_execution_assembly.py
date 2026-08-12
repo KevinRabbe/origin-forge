@@ -218,9 +218,9 @@ providers = [
         return result
 
     def test_current_claim_assembles_exact_lazy_dependencies_without_mutation(self) -> None:
-        before = self._state_snapshot()
         task_before = self.runtime.get_task(self.task_id)
         runs_before = self.runtime.list_runs(self.task_id)
+        before = self._state_snapshot()
 
         with (
             patch.object(ManagedLlamaCppCpuLoader, "load", side_effect=AssertionError("model load")),
@@ -235,6 +235,7 @@ providers = [
                 self.claim.claim_id,
             )
 
+        self.assertEqual(self._state_snapshot(), before)
         self.assertEqual(assembled.plan.claim_id, self.claim.claim_id)
         self.assertEqual(assembled.plan.claim_revision, 0)
         self.assertEqual(assembled.plan.task_id, self.task_id)
@@ -271,9 +272,9 @@ providers = [
         self.assertEqual(second.plan.plan_hash, assembled.plan.plan_hash)
         self.assertEqual(second.model_scheduling.resources.status().active_leases, ())
         self.assertEqual(second.runtime_dispatch_loader.active_runtime_ids(), ())
+        self.assertEqual(self._state_snapshot(), before)
         self.assertEqual(self.runtime.get_task(self.task_id), task_before)
         self.assertEqual(self.runtime.list_runs(self.task_id), runs_before)
-        self.assertEqual(self._state_snapshot(), before)
 
     def test_missing_runtime_binding_and_unconfigured_sandbox_fail_before_authority(self) -> None:
         config_path = self.runtime.state_dir / "config.toml"
