@@ -55,6 +55,7 @@ from origin_forge.production_work_order_builtin import (
     build_builtin_dispatch_catalog,
     build_builtin_dispatch_validator_registry,
 )
+from origin_forge.production_work_order_models import canonical_bytes
 from origin_forge.production_work_order_store import ProductionWorkOrderStore
 from origin_forge.production_work_orders import create_current_work_order
 from origin_forge.resource_scheduler import ResourceScheduler
@@ -531,9 +532,14 @@ class Phase37CrossPhaseAcceptanceTests(unittest.TestCase):
             harness = _Phase37Harness(Path(temp))
             runtime = harness.runtime
             _, binding, _, claim = harness.new_claim()
+            drifted_projection = dict(binding.request_projection)
+            drifted_projection["semantic_context"] = not drifted_projection["semantic_context"]
             forged_bindings = (
                 replace(binding, request_schema_hash="0" * 64),
-                replace(binding, request_content_hash="1" * 64),
+                replace(
+                    binding,
+                    request_projection_json=canonical_bytes(drifted_projection).decode("utf-8"),
+                ),
                 replace(binding, binder_fingerprint="2" * 64),
                 replace(binding, selected_adapter_id="originforge.other.adapter"),
                 replace(binding, dispatch_contract_id="other.contract@1"),
