@@ -55,6 +55,50 @@ from origin_forge.state import TaskStatus
 from origin_forge.workspaces import GitWorkspaceManager
 
 
+_CONFIG = '''version = 6
+policy_profile = "local-default"
+
+[limits]
+max_strategy_retries = 2
+max_verification_failures = 3
+
+[sandbox]
+backend = "podman"
+image = "origin-forge-test-sandbox:phase36"
+network = false
+memory = "2g"
+cpus = 2.0
+pids_limit = 256
+
+[commands]
+build = []
+test = []
+
+[code_intelligence]
+lsp_servers = []
+
+[resources]
+enabled = true
+cpu_slots = 8
+ram_mib = 16384
+max_active_leases = 8
+gpus = []
+
+[models]
+profiles = [
+  { profile_id = "strong", role = "coder_strong", model_id = "test-model", model_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", runtime_id = "llamacpp-cpu", resources = { cpu_slots = 2, ram_mib = 4096 } }
+]
+policies = [
+  { role = "coder_strong", primary_profile_id = "strong", fallback_profile_ids = [] }
+]
+
+[model_runtimes]
+providers = [
+  { runtime_id = "llamacpp-cpu", provider_kind = "originforge.llamacpp-managed-cpu@1", provider_contract_version = "1", executable_path = "missing/llama-server", executable_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", port = 18080, startup_timeout_seconds = 30, request_timeout_seconds = 300, shutdown_timeout_seconds = 10, profile_bindings = [ { profile_id = "strong", model_path = "missing/model.gguf", model_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } ] }
+]
+'''
+
+
 class ProductionDispatchExecutionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
@@ -97,8 +141,11 @@ class ProductionDispatchExecutionTests(unittest.TestCase):
             self.resolver_registry,
             self.binder_registry,
         )
-        self.claim = self._claim_current_chain()
-        self._write_execution_config()
+        self.binding, self.binding_audit, self.claim = self._claim_current_chain()
+        self.runtime.state_dir.joinpath("config.toml").write_text(
+            _CONFIG,
+            encoding="utf-8",
+        )
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()
@@ -151,59 +198,13 @@ class ProductionDispatchExecutionTests(unittest.TestCase):
         self.dispatch_store.publish_input_resolution(bundle)
         self.dispatch_store.publish_binding(binding)
         self.dispatch_store.publish_audit(binding_audit)
-        return acquire_dispatch_claim(
+        claim = acquire_dispatch_claim(
             self.runtime,
             binding.dispatch_binding_id,
             binding_audit.binding_audit_id,
             1,
         )
-
-    def _write_execution_config(self) -> None:
-        self.runtime.state_dir.joinpath("config.toml").write_text(
-            '''version = 6
-policy_profile = "local-default"
-
-[limits]
-max_strategy_retries = 2
-max_verification_failures = 3
-
-[sandbox]
-backend = "podman"
-image = "origin-forge-test-sandbox:phase36"
-network = false
-memory = "2g"
-cpus = 2.0
-pids_limit = 256
-
-[commands]
-build = []
-test = []
-
-[code_intelligence]
-lsp_servers = []
-
-[resources]
-enabled = true
-cpu_slots = 8
-ram_mib = 16384
-max_active_leases = 8
-gpus = []
-
-[models]
-profiles = [
-  { profile_id = "strong", role = "coder_strong", model_id = "test-model", model_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", runtime_id = "llamacpp-cpu", resources = { cpu_slots = 2, ram_mib = 4096 } }
-]
-policies = [
-  { role = "coder_strong", primary_profile_id = "strong", fallback_profile_ids = [] }
-]
-
-[model_runtimes]
-providers = [
-  { runtime_id = "llamacpp-cpu", provider_kind = "originforge.llamacpp-managed-cpu@1", provider_contract_version = "1", executable_path = "missing/llama-server", executable_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", port = 18080, startup_timeout_seconds = 30, request_timeout_seconds = 300, shutdown_timeout_seconds = 10, profile_bindings = [ { profile_id = "strong", model_path = "missing/model.gguf", model_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" } ] }
-]
-''',
-            encoding="utf-8",
-        )
+        return binding, binding_audit, claim
 
     def _workspace_count(self) -> int:
         with self.runtime.store.session() as conn:
@@ -243,52 +244,36 @@ providers = [
         ):
             return begin_dispatch_execution(self.runtime, self.claim.claim_id, 0)
 
-    def test_begin_atomically_consumes_claim_and_creates_one_inert_started_receipt(self) -> None:
+    def test_begin_creates_one_started_receipt_and_retains_exact_active_claim(self) -> None:
         task_before = self.runtime.get_task(self.task_id)
         runs_before = self.runtime.list_runs(self.task_id)
         workspaces_before = self._workspace_count()
+        claim_before = read_dispatch_claim(self.runtime, self.claim.claim_id)
+        claim_events_before = self._event_rows("DISPATCH_CLAIM", self.claim.claim_id)
+
         started = self._begin_without_execution_calls()
         execution = started.execution
-
         self.assertEqual(execution.status, DispatchExecutionStatus.STARTED)
         self.assertEqual(execution.revision, 0)
-        self.assertEqual(execution.claim_id, self.claim.claim_id)
         self.assertEqual(execution.claim_revision_at_start, 0)
-        self.assertEqual(execution.task_id, self.task_id)
-        self.assertEqual(execution.task_revision, 1)
         self.assertEqual(
             execution.runtime_dependency_plan_hash,
             started.dependencies.plan.plan_hash,
         )
-        self.assertEqual(execution.execution_owner_id, started.dependencies.plan.owner_id)
-        self.assertEqual(
-            execution.execution_owner_fingerprint,
-            started.dependencies.plan.owner_fingerprint,
-        )
-
-        consumed = read_dispatch_claim(self.runtime, self.claim.claim_id)
-        self.assertEqual(consumed.status, DispatchClaimStatus.CONSUMED)
-        self.assertEqual(consumed.revision, 1)
-        self.assertEqual(consumed.frozen_authority_dict(), self.claim.frozen_authority_dict())
-        self.assertEqual(
-            consumed.terminal_reason,
-            f"claim consumed by dispatch execution {execution.execution_id}",
-        )
+        self.assertEqual(read_dispatch_claim(self.runtime, self.claim.claim_id), claim_before)
         currentness = inspect_dispatch_claim_currentness_readonly(
             self.runtime,
             self.claim.claim_id,
         )
-        self.assertEqual(currentness.status, DispatchClaimCurrentnessStatus.CONSUMED)
-        self.assertEqual(currentness.detail, consumed.terminal_reason)
-
-        rows = self._execution_rows()
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["execution_id"], execution.execution_id)
-        self.assertEqual(rows[0]["runtime_dependency_plan_hash"], started.dependencies.plan.plan_hash)
-        claim_events = self._event_rows("DISPATCH_CLAIM", self.claim.claim_id)
+        self.assertEqual(currentness.status, DispatchClaimCurrentnessStatus.CURRENT_ACTIVE)
+        self.assertEqual(
+            self._event_rows("DISPATCH_CLAIM", self.claim.claim_id),
+            claim_events_before,
+        )
         execution_events = self._event_rows("DISPATCH_EXECUTION", execution.execution_id)
-        self.assertEqual(claim_events[-1]["event_type"], "DISPATCH_CLAIM_CONSUMED")
-        self.assertEqual(execution_events[-1]["event_type"], "DISPATCH_EXECUTION_STARTED")
+        self.assertEqual(len(execution_events), 1)
+        self.assertEqual(execution_events[0]["event_type"], "DISPATCH_EXECUTION_STARTED")
+        self.assertEqual(len(self._execution_rows()), 1)
 
         self.assertEqual(started.dependencies.model_scheduling.resources.status().active_leases, ())
         self.assertEqual(started.dependencies.runtime_dispatch_loader.active_runtime_ids(), ())
@@ -299,39 +284,34 @@ providers = [
         self.assertEqual(self.runtime.list_runs(self.task_id), runs_before)
         self.assertEqual(self._workspace_count(), workspaces_before)
 
-        with self.assertRaises((ProductionExecutionAssemblyError, ProductionDispatchExecutionError)):
+        with self.assertRaises(RuntimeError):
+            acquire_dispatch_claim(
+                self.runtime,
+                self.binding.dispatch_binding_id,
+                self.binding_audit.binding_audit_id,
+                1,
+            )
+        with self.assertRaises(ProductionDispatchExecutionError):
             begin_dispatch_execution(self.runtime, self.claim.claim_id, 0)
         self.assertEqual(len(self._execution_rows()), 1)
+        self.assertEqual(read_dispatch_claim(self.runtime, self.claim.claim_id), claim_before)
 
-    def test_second_event_failure_rolls_back_claim_receipt_and_first_event(self) -> None:
-        original_append = self.runtime.store._append_event
-        call_count = 0
-
-        def injected(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 2:
-                raise RuntimeError("injected second event failure")
-            return original_append(*args, **kwargs)
-
-        with patch.object(self.runtime.store, "_append_event", side_effect=injected):
-            with self.assertRaisesRegex(RuntimeError, "second event failure"):
+    def test_started_event_failure_rolls_back_receipt_and_preserves_active_claim(self) -> None:
+        claim_before = read_dispatch_claim(self.runtime, self.claim.claim_id)
+        with patch.object(
+            self.runtime.store,
+            "_append_event",
+            side_effect=RuntimeError("injected started event failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "started event failure"):
                 begin_dispatch_execution(self.runtime, self.claim.claim_id, 0)
-
-        claim = read_dispatch_claim(self.runtime, self.claim.claim_id)
-        self.assertEqual(claim.status, DispatchClaimStatus.ACTIVE)
-        self.assertEqual(claim.revision, 0)
-        self.assertIsNone(claim.terminal_reason)
+        self.assertEqual(read_dispatch_claim(self.runtime, self.claim.claim_id), claim_before)
         self.assertEqual(self._execution_rows(), [])
-        events = self._event_rows("DISPATCH_CLAIM", self.claim.claim_id)
-        self.assertFalse(any(row["event_type"] == "DISPATCH_CLAIM_CONSUMED" for row in events))
 
-    def test_stale_revision_and_nonready_task_fail_before_consumption(self) -> None:
+    def test_stale_revision_and_nonready_task_fail_before_started_receipt(self) -> None:
         with self.assertRaises(StaleRevision):
             begin_dispatch_execution(self.runtime, self.claim.claim_id, 1)
-        self.assertEqual(read_dispatch_claim(self.runtime, self.claim.claim_id).status, DispatchClaimStatus.ACTIVE)
         self.assertEqual(self._execution_rows(), [])
-
         self.runtime.transition_task(
             self.task_id,
             TaskStatus.RUNNING,
@@ -342,10 +322,9 @@ providers = [
         self.assertEqual(read_dispatch_claim(self.runtime, self.claim.claim_id).status, DispatchClaimStatus.ACTIVE)
         self.assertEqual(self._execution_rows(), [])
 
-    def test_returned_terminalization_changes_receipt_only_and_hashes_detail(self) -> None:
+    def test_returned_atomically_terminalizes_receipt_and_consumes_claim(self) -> None:
         started = self._begin_without_execution_calls()
         execution = started.execution
-        claim_before = read_dispatch_claim(self.runtime, self.claim.claim_id)
         task_before = self.runtime.get_task(self.task_id)
         runs_before = self.runtime.list_runs(self.task_id)
         workspaces_before = self._workspace_count()
@@ -355,61 +334,125 @@ providers = [
             self.runtime,
             execution.execution_id,
             0,
+            0,
             detail,
         )
         self.assertEqual(returned.status, DispatchExecutionStatus.RETURNED)
         self.assertEqual(returned.revision, 1)
         self.assertRegex(returned.terminal_detail_hash or "", r"^[0-9a-f]{64}$")
         self.assertEqual(returned.frozen_authority_dict(), execution.frozen_authority_dict())
-        self.assertEqual(read_dispatch_claim(self.runtime, self.claim.claim_id), claim_before)
+        consumed = read_dispatch_claim(self.runtime, self.claim.claim_id)
+        self.assertEqual(consumed.status, DispatchClaimStatus.CONSUMED)
+        self.assertEqual(consumed.revision, 1)
+        self.assertEqual(consumed.frozen_authority_dict(), self.claim.frozen_authority_dict())
+        self.assertEqual(
+            consumed.terminal_reason,
+            f"claim consumed by dispatch execution {execution.execution_id} after returned",
+        )
+        self.assertEqual(
+            inspect_dispatch_claim_currentness_readonly(
+                self.runtime,
+                self.claim.claim_id,
+            ).status,
+            DispatchClaimCurrentnessStatus.CONSUMED,
+        )
         self.assertEqual(self.runtime.get_task(self.task_id), task_before)
         self.assertEqual(self.runtime.list_runs(self.task_id), runs_before)
         self.assertEqual(self._workspace_count(), workspaces_before)
 
-        rows = self._execution_rows()
-        self.assertEqual(len(rows), 1)
-        self.assertNotIn(detail, json.dumps(rows[0], sort_keys=True))
-        events = self._event_rows("DISPATCH_EXECUTION", execution.execution_id)
-        self.assertEqual(events[-1]["event_type"], "DISPATCH_EXECUTION_RETURNED")
-        self.assertNotIn(detail, events[-1]["metadata_json"])
-        self.assertIn(returned.terminal_detail_hash, events[-1]["metadata_json"])
-        with self.assertRaisesRegex(ProductionDispatchExecutionError, "terminal"):
-            mark_dispatch_execution_raised(
-                self.runtime,
-                execution.execution_id,
-                1,
-                "must not rewrite terminal receipt",
-            )
+        row = self._execution_rows()[0]
+        self.assertNotIn(detail, json.dumps(row, sort_keys=True))
+        execution_events = self._event_rows("DISPATCH_EXECUTION", execution.execution_id)
+        claim_events = self._event_rows("DISPATCH_CLAIM", self.claim.claim_id)
+        self.assertEqual(execution_events[-1]["event_type"], "DISPATCH_EXECUTION_RETURNED")
+        self.assertEqual(claim_events[-1]["event_type"], "DISPATCH_CLAIM_CONSUMED")
+        self.assertNotIn(detail, execution_events[-1]["metadata_json"])
+        self.assertNotIn(detail, claim_events[-1]["metadata_json"])
+        self.assertNotIn(detail, consumed.terminal_reason or "")
 
-    def test_raised_and_interrupted_are_terminal_mechanics_not_task_authority(self) -> None:
+    def test_terminal_second_event_failure_rolls_back_execution_and_claim_together(self) -> None:
+        started = self._begin_without_execution_calls()
+        original_append = self.runtime.store._append_event
+        call_count = 0
+
+        def injected(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise RuntimeError("injected terminal claim-event failure")
+            return original_append(*args, **kwargs)
+
+        with patch.object(self.runtime.store, "_append_event", side_effect=injected):
+            with self.assertRaisesRegex(RuntimeError, "claim-event failure"):
+                mark_dispatch_execution_returned(
+                    self.runtime,
+                    started.execution.execution_id,
+                    0,
+                    0,
+                    "simulated return",
+                )
+        row = self._execution_rows()[0]
+        self.assertEqual(row["status"], DispatchExecutionStatus.STARTED.value)
+        self.assertEqual(row["revision"], 0)
+        self.assertIsNone(row["terminal_detail_hash"])
+        claim = read_dispatch_claim(self.runtime, self.claim.claim_id)
+        self.assertEqual(claim.status, DispatchClaimStatus.ACTIVE)
+        self.assertEqual(claim.revision, 0)
+        self.assertIsNone(claim.terminal_reason)
+
+    def test_raised_consumes_claim_without_task_authority(self) -> None:
         started = self._begin_without_execution_calls()
         task_before = self.runtime.get_task(self.task_id)
         raised = mark_dispatch_execution_raised(
             self.runtime,
             started.execution.execution_id,
             0,
+            0,
             "bounded invocation raised before returning",
         )
         self.assertEqual(raised.status, DispatchExecutionStatus.RAISED)
+        claim = read_dispatch_claim(self.runtime, self.claim.claim_id)
+        self.assertEqual(claim.status, DispatchClaimStatus.CONSUMED)
+        self.assertEqual(claim.revision, 1)
         self.assertEqual(self.runtime.get_task(self.task_id), task_before)
         self.assertEqual(self.runtime.list_runs(self.task_id), [])
 
-    def test_interrupted_execution_changes_no_task_or_consumed_claim(self) -> None:
+    def test_interrupted_terminalizes_execution_and_claim_without_task_authority(self) -> None:
         started = self._begin_without_execution_calls()
-        claim_before = read_dispatch_claim(self.runtime, self.claim.claim_id)
         task_before = self.runtime.get_task(self.task_id)
         interrupted = interrupt_dispatch_execution(
             self.runtime,
             started.execution.execution_id,
             0,
+            0,
             "explicit restart recovery interruption",
         )
         self.assertEqual(interrupted.status, DispatchExecutionStatus.INTERRUPTED)
         self.assertEqual(interrupted.revision, 1)
-        self.assertEqual(read_dispatch_claim(self.runtime, self.claim.claim_id), claim_before)
+        claim = read_dispatch_claim(self.runtime, self.claim.claim_id)
+        self.assertEqual(claim.status, DispatchClaimStatus.INTERRUPTED)
+        self.assertEqual(claim.revision, 1)
+        self.assertEqual(
+            claim.terminal_reason,
+            f"claim interrupted with dispatch execution {interrupted.execution_id}",
+        )
         self.assertEqual(self.runtime.get_task(self.task_id), task_before)
         self.assertEqual(self.runtime.list_runs(self.task_id), [])
         self.assertEqual(self._workspace_count(), 0)
+
+    def test_stale_claim_revision_blocks_terminal_transition(self) -> None:
+        started = self._begin_without_execution_calls()
+        with self.assertRaises(StaleRevision):
+            mark_dispatch_execution_returned(
+                self.runtime,
+                started.execution.execution_id,
+                0,
+                1,
+                "must not terminalize",
+            )
+        row = self._execution_rows()[0]
+        self.assertEqual(row["status"], DispatchExecutionStatus.STARTED.value)
+        self.assertEqual(read_dispatch_claim(self.runtime, self.claim.claim_id).status, DispatchClaimStatus.ACTIVE)
 
     def test_execution_service_source_stops_before_policy_or_backend_invocation(self) -> None:
         source = inspect.getsource(execution_module)
@@ -443,6 +486,17 @@ providers = [
         self.assertTrue(forbidden_calls.isdisjoint(called))
         begin = inspect.signature(begin_dispatch_execution)
         self.assertEqual(tuple(begin.parameters), ("runtime", "claim_id", "expected_revision"))
+        returned = inspect.signature(mark_dispatch_execution_returned)
+        self.assertEqual(
+            tuple(returned.parameters),
+            (
+                "runtime",
+                "execution_id",
+                "expected_execution_revision",
+                "expected_claim_revision",
+                "detail",
+            ),
+        )
         for forbidden in (
             "policy",
             "models",
