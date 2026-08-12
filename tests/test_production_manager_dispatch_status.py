@@ -11,6 +11,7 @@ import origin_forge.production_manager_dispatch_status as status_module
 from origin_forge.ids import IdKind, new_id
 from origin_forge.production_manager_dispatch_admission import (
     ManagerDispatchAdmission,
+    ManagerDispatchAdmissionDetail,
     ManagerDispatchAdmissionStatus,
     ManagerDispatchCandidate,
 )
@@ -91,15 +92,15 @@ class ProductionManagerDispatchStatusTests(unittest.TestCase):
             names = {path.name for path in runtime.state_dir.iterdir()}
             self.assertFalse(any(name.endswith(("-wal", "-shm", "-journal")) for name in names))
 
-    def test_projection_carries_exact_selected_ids_only_for_one_selected(self) -> None:
+    def test_projection_carries_exact_selected_ids_and_exclusion_counts(self) -> None:
         candidate = _candidate()
         admission = ManagerDispatchAdmission(
             status=ManagerDispatchAdmissionStatus.COMPLETE,
             candidates=(candidate,),
-            scanned_audit_count=1,
-            current_chain_count=1,
-            active_claim_exclusion_count=0,
-            not_ready_exclusion_count=0,
+            scanned_audit_count=5,
+            current_chain_count=3,
+            active_claim_exclusion_count=1,
+            not_ready_exclusion_count=1,
             ambiguous_task_ids=(),
             detail=None,
         )
@@ -111,9 +112,62 @@ class ProductionManagerDispatchStatusTests(unittest.TestCase):
         ):
             result = inspect_manager_dispatch_status_readonly(runtime)
         self.assertEqual(result.selection_status, ManagerDispatchSelectionStatus.ONE_SELECTED)
+        self.assertEqual(result.candidate_count, 1)
+        self.assertEqual(result.scanned_audit_count, 5)
+        self.assertEqual(result.current_chain_count, 3)
+        self.assertEqual(result.active_claim_exclusion_count, 1)
+        self.assertEqual(result.not_ready_exclusion_count, 1)
+        self.assertEqual(result.ambiguous_task_count, 0)
         self.assertEqual(result.selected_task_id, candidate.task_id)
         self.assertEqual(result.selected_dispatch_binding_id, candidate.dispatch_binding_id)
         self.assertEqual(result.selected_binding_audit_id, candidate.binding_audit_id)
+
+    def test_overflow_and_ambiguity_states_are_visible_without_selection(self) -> None:
+        runtime = OriginForgeRuntime("/tmp/origin-forge-phase38-status-boundary")
+        ambiguous_task = new_id(IdKind.TASK)
+        cases = (
+            (
+                ManagerDispatchAdmission(
+                    status=ManagerDispatchAdmissionStatus.LIMIT_EXCEEDED,
+                    candidates=(),
+                    scanned_audit_count=10_001,
+                    current_chain_count=0,
+                    active_claim_exclusion_count=0,
+                    not_ready_exclusion_count=0,
+                    ambiguous_task_ids=(),
+                    detail=ManagerDispatchAdmissionDetail.PHASE34_SCAN_LIMIT_EXCEEDED,
+                ),
+                ManagerDispatchSelectionStatus.LIMIT_EXCEEDED,
+                0,
+            ),
+            (
+                ManagerDispatchAdmission(
+                    status=ManagerDispatchAdmissionStatus.AMBIGUOUS_AUTHORITY,
+                    candidates=(),
+                    scanned_audit_count=2,
+                    current_chain_count=2,
+                    active_claim_exclusion_count=0,
+                    not_ready_exclusion_count=0,
+                    ambiguous_task_ids=(ambiguous_task,),
+                    detail=None,
+                ),
+                ManagerDispatchSelectionStatus.AMBIGUOUS_AUTHORITY,
+                1,
+            ),
+        )
+        for admission, expected_selection, ambiguous_count in cases:
+            with self.subTest(admission_status=admission.status):
+                with patch.object(
+                    status_module,
+                    "inspect_manager_dispatch_admission_readonly",
+                    return_value=admission,
+                ):
+                    result = inspect_manager_dispatch_status_readonly(runtime)
+                self.assertEqual(result.admission_status, admission.status)
+                self.assertEqual(result.selection_status, expected_selection)
+                self.assertEqual(result.ambiguous_task_count, ambiguous_count)
+                self.assertEqual(result.detail, admission.detail)
+                self.assertIsNone(result.selected_task_id)
 
     def test_projection_model_rejects_selected_ids_without_selection(self) -> None:
         candidate = _candidate()
