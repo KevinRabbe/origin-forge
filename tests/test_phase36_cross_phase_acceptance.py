@@ -227,9 +227,16 @@ class Phase36CrossPhaseAcceptanceTests(unittest.TestCase):
                 current.status,
                 DispatchExecutionCurrentnessStatus.CURRENT_STARTED,
             )
-            consumed = read_dispatch_claim(runtime, claim.claim_id)
-            self.assertEqual(consumed.status, DispatchClaimStatus.CONSUMED)
-            self.assertEqual(consumed.revision, 1)
+            active = read_dispatch_claim(runtime, claim.claim_id)
+            self.assertEqual(active.status, DispatchClaimStatus.ACTIVE)
+            self.assertEqual(active.revision, 0)
+            with self.assertRaises(RuntimeError):
+                acquire_dispatch_claim(
+                    runtime,
+                    binding.dispatch_binding_id,
+                    binding_audit.binding_audit_id,
+                    1,
+                )
             self.assertEqual(
                 started.execution.runtime_dependency_plan_hash,
                 started.dependencies.plan.plan_hash,
@@ -251,9 +258,13 @@ class Phase36CrossPhaseAcceptanceTests(unittest.TestCase):
                 runtime,
                 started.execution.execution_id,
                 0,
+                0,
                 "phase36 acceptance stops before production invocation",
             )
             self.assertEqual(terminal.status, DispatchExecutionStatus.INTERRUPTED)
+            interrupted_claim = read_dispatch_claim(runtime, claim.claim_id)
+            self.assertEqual(interrupted_claim.status, DispatchClaimStatus.INTERRUPTED)
+            self.assertEqual(interrupted_claim.revision, 1)
             historical = inspect_dispatch_execution_currentness_readonly(
                 runtime,
                 terminal.execution_id,
