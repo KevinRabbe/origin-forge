@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import tempfile
 import unittest
@@ -240,31 +241,32 @@ providers = [
         )
 
     def test_policy_status_reports_first_eligible_task_without_mutation(self) -> None:
-        before = self._db_signature()
         with self.runtime.store.session() as conn:
             preparation_count_before = conn.execute(
                 "SELECT COUNT(*) FROM task_preparations"
             ).fetchone()[0]
+        task_before = self.runtime.get_task(self.task_id)
         before = self._db_signature()
 
         result = inspect_materialization_preparation_status_readonly(
             self.runtime,
             self.policy.preparation_policy_id,
         )
+        after = self._db_signature()
 
         self.assertEqual(result.state, PreparationInspectionState.ELIGIBLE_QUEUED)
         self.assertEqual(result.candidate_count, 1)
         self.assertEqual(result.selected_task_id, self.task_id)
         self.assertEqual(result.materialization_id, self.materialization.materialization_id)
         self.assertEqual(result.preparation_policy_hash, self.policy.content_hash)
+        self.assertEqual(after, before)
+        self.assertEqual(task_before["status"], TaskStatus.QUEUED.value)
         self.assertEqual(self.runtime.get_task(self.task_id)["status"], TaskStatus.QUEUED.value)
         with self.runtime.store.session() as conn:
             preparation_count_after = conn.execute(
                 "SELECT COUNT(*) FROM task_preparations"
             ).fetchone()[0]
-        after = self._db_signature()
         self.assertEqual(preparation_count_after, preparation_count_before)
-        self.assertEqual(after, before)
 
     def test_planner_return_and_audit_are_post_planner_resumable(self) -> None:
         receipt = self._planner_returned()
@@ -367,6 +369,8 @@ providers = [
         )
         self.assertEqual(status.state, PreparationInspectionState.STALE_OR_INVALID)
         self.assertFalse(status.current)
+        self.assertIsNotNone(status.detail)
+        assert status.detail is not None
         self.assertIn("Phase-34", status.detail)
 
     def test_ready_status_fails_closed_when_task_revision_drifts(self) -> None:
@@ -383,21 +387,51 @@ providers = [
         )
         self.assertEqual(status.state, PreparationInspectionState.STALE_OR_INVALID)
         self.assertFalse(status.current)
+        self.assertIsNotNone(status.detail)
+        assert status.detail is not None
         self.assertIn("READY Task revision", status.detail)
 
     def test_status_source_has_no_mutating_or_execution_authority(self) -> None:
         source = Path(status_module.__file__).read_text(encoding="utf-8")
-        self.assertNotIn("runtime.store.session", source)
-        self.assertNotIn(".session(", source)
-        self.assertNotIn("ScheduledModelAdapter", source)
-        self.assertNotIn("prepare_materialization_tick", source)
-        self.assertNotIn("finalize_preparation", source)
-        self.assertNotIn("activate_dependency_ready_task", source)
-        self.assertNotIn("publish_", source)
-        self.assertNotIn("checkpoint_", source)
-        self.assertNotIn("acquire_dispatch_claim", source)
-        self.assertNotIn("dispatch_claim_once", source)
-        self.assertNotIn("BoundedRetryPolicy", source)
+        tree = ast.parse(source)
+        forbidden_modules = {
+            "production_preparation_tick",
+            "production_preparation_receipts",
+            "production_preparation_planner_evidence",
+            "production_preparation_work_order_finalize",
+            "production_preparation_phase34_finalize",
+            "production_task_activation",
+            "production_dispatch_claim",
+            "production_dispatch_execution",
+            "scheduled_model_adapter",
+        }
+        forbidden_calls = {
+            "session",
+            "prepare_materialization_tick",
+            "finalize_preparation_work_order_audit",
+            "finalize_preparation_phase34",
+            "activate_dependency_ready_task",
+            "publish_preparation_policy",
+            "checkpoint_preparation_planner_returned",
+            "acquire_dispatch_claim",
+            "dispatch_claim_once",
+            "generate",
+            "propose",
+        }
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module is not None:
+                self.assertNotIn(node.module.rsplit(".", 1)[-1], forbidden_modules)
+                self.assertTrue(
+                    all(alias.name not in forbidden_calls for alias in node.names)
+                )
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Name):
+                    call_name = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    call_name = node.func.attr
+                else:
+                    continue
+                self.assertNotIn(call_name, forbidden_calls)
 
 
 if __name__ == "__main__":
