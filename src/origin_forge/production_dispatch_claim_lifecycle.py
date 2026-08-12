@@ -119,6 +119,17 @@ def _terminalize_dispatch_claim(
                 f"dispatch claim {claim_id} revision {claim.revision} != expected {expected_revision}"
             )
 
+        started_execution = conn.execute(
+            """SELECT execution_id
+               FROM dispatch_executions
+               WHERE claim_id = ? AND status = 'STARTED'""",
+            (claim_id,),
+        ).fetchone()
+        if started_execution is not None:
+            raise DispatchClaimLifecycleError(
+                "dispatch claim has a STARTED execution; use the dispatch execution lifecycle"
+            )
+
         new_revision = claim.revision + 1
         cursor = conn.execute(
             """UPDATE dispatch_claims

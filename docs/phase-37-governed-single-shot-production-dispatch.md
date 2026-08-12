@@ -1,6 +1,6 @@
 # Phase 37 — Governed Single-Shot Production Dispatch Invocation
 
-Status: **PLANNED — architecture only; no production dispatch invocation yet**
+Status: **DONE — implementation complete; final documentation-only exact-head CI and merge evidence is recorded externally**
 
 Phase 37 is the first Origin Forge phase permitted to cross the production invocation boundary prepared by Phases 31–36.
 
@@ -443,3 +443,35 @@ Every authority-expanding slice freezes one exact SHA and must pass the normal U
 Phase 37 is complete when Origin Forge can take one exact current ACTIVE dispatch claim, durably seal its STARTED execution ownership against every legacy claim-release path, derive the exact reviewed `BoundedRetryPolicy.drive@1` request from immutable Phase-34 evidence, establish one Phase-36 STARTED receipt, invoke that trusted owner exactly once, atomically record RETURNED or RAISED plus claim consumption when a trustworthy call outcome is observed, preserve STARTED recovery state when it is not, and never automatically replay an uncertain invocation.
 
 Only after this boundary is independently proven may a later phase add a Manager-side automatic dispatch loop, claim acquisition policy, or multi-Task scheduling.
+
+---
+
+## Implementation / CI closure evidence
+
+The architecture above remained the authority contract throughout implementation. The accepted immutable slice heads are:
+
+- **37A — ownership seal:** `477977a2bf77ca009c35ad1ff87e37f79dbf2de5`; normal run `31616104237` passed Python 3.12 and 3.13.
+- **37B — frozen invocation decoder:** `e6a8235f785cdf447d3bf693a44040acb363bdf9`; normal run `31616945009` passed Python 3.12 and 3.13.
+- **37C — single-shot coordinator:** `d5973de965ee8406d7c6d514989a81d1deddb165`; normal run `31618143106` passed Python 3.12 and 3.13.
+- **37D — immutable invocation status:** `3192281c052e7d50ec2803bf8878a3ed805f51c3`; normal run `31618580598` passed Python 3.12 and 3.13.
+- **37E — cross-phase acceptance:** `c8efd0d81b61708513f1b720eb969b6d25b93a18`; normal run `31619897574` passed Python 3.12 and 3.13.
+
+Rejected candidates remain failure evidence and were never reused as acceptance heads:
+
+- `17a7eb0c64a6719afb3fadc1a3b56ba1f6635187` / run `31606853634`: 37A exposed stale schema-v9 migration-test expectations; repaired mechanically before the accepted 37A gate.
+- `52e2735f1815de288d491a23a920ff7a836347ec` / run `31617599618`: 37C exposed an obsolete 37B source-test scope after the coordinator legitimately introduced the first invocation call; production coordinator bytes were unchanged by the accepted test-only repair.
+- `5ef013a404b741f98fabc9cea4ff4a4a8552fba0` / run `31618951388`: 37E exposed an invalid adversarial fixture that attempted to replace a computed `request_content_hash` property; the accepted repair changed only the test fixture to drift canonical request-projection bytes.
+
+Final implemented properties proven by those gates include:
+
+- schema-v10 database and application-layer sealing of legacy claim release/interruption while an exact STARTED execution owns the ACTIVE claim;
+- exact reconstruction of all six `BoundedRetryPolicy.drive@1` arguments solely from immutable Phase-34 evidence;
+- exactly one reviewed `.drive()` call site with no dispatcher loop, retry, background scheduling, or caller-selected execution authority;
+- normal `PolicyResult` return for SUCCEEDED/BLOCKED/FAILED/QUARANTINED mapped only to invocation-mechanics `DISPEXEC RETURNED`, without dispatcher reinterpretation of Task outcome;
+- ordinary Python exceptions mapped to bounded `DISPEXEC RAISED` evidence and claim consumption without persisting arbitrary exception text;
+- BaseException/crash/uncertain terminalization preserving STARTED + ACTIVE for explicit Phase-36 recovery and never auto-replaying the owner;
+- six-state immutable invocation status projection using the existing read guard with no mutation or recovery authority;
+- adversarial concurrency proof that STARTED ownership blocks duplicate claim/lifecycle paths and at most one owner call occurs;
+- no new Artifact adoption/signing, Project Intelligence mutation, Dream promotion, training, merge, release, generic model/tool/backend execution, or mutating CLI authority.
+
+The 37F documentation/roadmap commit is intentionally frozen **after** all authority-expanding slices are green. Its own exact SHA cannot be written into this file without changing that SHA again; the final Python 3.12/3.13 gate, review/thread state, SHA-guarded merge result, and verified `main` commit therefore remain external immutable GitHub evidence.
