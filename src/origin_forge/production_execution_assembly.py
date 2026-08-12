@@ -46,6 +46,7 @@ class ProductionExecutionDependencyPlan:
     owner_fingerprint: str
     owner_registry_fingerprint: str
     config_version: int
+    resource_model_config_hash: str
     model_runtime_config_fingerprint: str
     model_strategy_roles: tuple[str, ...]
     model_profile_ids: tuple[str, ...]
@@ -70,6 +71,7 @@ class ProductionExecutionDependencyPlan:
             "owner_fingerprint": self.owner_fingerprint,
             "owner_registry_fingerprint": self.owner_registry_fingerprint,
             "config_version": self.config_version,
+            "resource_model_config_hash": self.resource_model_config_hash,
             "model_runtime_config_fingerprint": self.model_runtime_config_fingerprint,
             "model_strategy_roles": list(self.model_strategy_roles),
             "model_profile_ids": list(self.model_profile_ids),
@@ -99,6 +101,51 @@ class ProductionExecutionDependencies:
     sandbox_backend: SandboxBackend
     workspaces: GitWorkspaceManager
     bounded_retry_policy: BoundedRetryPolicy
+
+
+def _resource_model_config_hash(config: ProjectConfig) -> str:
+    resource_models = config.resource_models
+    capacity = resource_models.capacity
+    capacity_payload = None
+    if capacity is not None:
+        capacity_payload = {
+            "cpu_slots": capacity.cpu_slots,
+            "ram_mib": capacity.ram_mib,
+            "max_active_leases": capacity.max_active_leases,
+            "gpus": [
+                {
+                    "device_id": gpu.device_id,
+                    "vram_mib": gpu.vram_mib,
+                    "reserve_vram_mib": gpu.reserve_vram_mib,
+                    "compute_slots": gpu.compute_slots,
+                }
+                for gpu in sorted(capacity.gpus, key=lambda value: value.device_id)
+            ],
+        }
+    return content_hash(
+        {
+            "enabled": resource_models.enabled,
+            "capacity": capacity_payload,
+            "profiles": [
+                profile.to_dict()
+                for profile in sorted(
+                    resource_models.profiles,
+                    key=lambda value: value.profile_id,
+                )
+            ],
+            "policies": [
+                {
+                    "role": policy.role.value,
+                    "primary_profile_id": policy.primary_profile_id,
+                    "fallback_profile_ids": list(policy.fallback_profile_ids),
+                }
+                for policy in sorted(
+                    resource_models.policies,
+                    key=lambda value: value.role.value,
+                )
+            ],
+        }
+    )
 
 
 def _sandbox_config_hash(config: ProjectConfig) -> str:
@@ -269,6 +316,7 @@ def assemble_production_execution_dependencies(
         owner_fingerprint=owner.fingerprint,
         owner_registry_fingerprint=owner_registry.fingerprint,
         config_version=config.version,
+        resource_model_config_hash=_resource_model_config_hash(config),
         model_runtime_config_fingerprint=config.model_runtimes.fingerprint,
         model_strategy_roles=tuple(role.value for role in owner.model_strategy_roles),
         model_profile_ids=tuple(profile_ids),
