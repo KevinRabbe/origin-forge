@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import signal
 import socket
 import stat
@@ -27,7 +28,7 @@ from .resource_scheduler import ResourceLease
 _MAX_LOG_BYTES = 64 * 1024
 _MAX_HEALTH_BYTES = 4096
 _HEALTH_POLL_SECONDS = 0.05
-_HASH_RE = __import__("re").compile(r"^[0-9a-f]{64}$")
+_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ManagedLlamaCppLoaderError(RuntimeError):
@@ -41,7 +42,7 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 @dataclass
 class _OwnedRuntime:
-    adapter: LlamaCppAdapter
+    adapter: LlamaCppAdapter | None
     process: subprocess.Popen[bytes]
     stdout: bytearray
     stderr: bytearray
@@ -296,8 +297,7 @@ class ManagedLlamaCppCpuLoader:
         )
         for thread in threads:
             thread.start()
-        placeholder = LlamaCppAdapter()
-        return _OwnedRuntime(placeholder, process, stdout, stderr, overflow, threads)
+        return _OwnedRuntime(None, process, stdout, stderr, overflow, threads)
 
     def _health_ready(self, owned: _OwnedRuntime) -> None:
         deadline = time.monotonic() + self.provider.startup_timeout_seconds
