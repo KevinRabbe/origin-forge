@@ -18,7 +18,6 @@ from origin_forge.production_dispatch_binding import (
     create_dispatch_binding,
     create_input_resolution_bundle,
 )
-from origin_forge.production_dispatch_claim_read import read_dispatch_claim
 from origin_forge.production_dispatch_claims import acquire_dispatch_claim
 from origin_forge.production_dispatch_execution_models import (
     DispatchExecution,
@@ -157,8 +156,7 @@ class Phase38ManagerDispatchAcceptanceTests(unittest.TestCase):
         return binding, binding_audit
 
     @staticmethod
-    def _completed_for_claim(runtime: OriginForgeRuntime, claim_id: str):
-        claim = read_dispatch_claim(runtime, claim_id)
+    def _completed_for_claim(claim):
         execution = DispatchExecution(
             execution_id=new_id(IdKind.DISPATCH_EXECUTION),
             project_id=claim.project_id,
@@ -226,15 +224,21 @@ class Phase38ManagerDispatchAcceptanceTests(unittest.TestCase):
         claim_barrier = threading.Barrier(2)
         results = []
         failures: list[BaseException] = []
+        claims_by_id = {}
         lock = threading.Lock()
 
         def racing_acquire(runtime, binding_id, audit_id, revision):
             claim_barrier.wait(timeout=15)
-            return real_acquire(runtime, binding_id, audit_id, revision)
+            claim = real_acquire(runtime, binding_id, audit_id, revision)
+            with lock:
+                claims_by_id[claim.claim_id] = claim
+            return claim
 
         def fake_dispatch(runtime, claim_id, expected_revision):
             self.assertEqual(expected_revision, 0)
-            return self._completed_for_claim(runtime, claim_id)
+            with lock:
+                claim = claims_by_id[claim_id]
+            return self._completed_for_claim(claim)
 
         def worker() -> None:
             runtime = OriginForgeRuntime(self.root)
