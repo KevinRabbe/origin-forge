@@ -242,8 +242,8 @@ class ManagedLlamaCppCpuLoaderTests(unittest.TestCase):
             self.assertEqual(loader.active_instance_count(), 0)
             with self.assertRaisesRegex(ManagedLlamaCppLoaderError, "not owned"):
                 loader.unload(adapter)
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.bind(("127.0.0.1", provider.port))
+            with self.assertRaises(OSError):
+                socket.create_connection(("127.0.0.1", provider.port), timeout=0.1)
 
     def test_hash_drift_symlink_protected_state_and_lease_mismatch_fail_before_process(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
