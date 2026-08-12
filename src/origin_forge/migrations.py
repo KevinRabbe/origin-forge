@@ -553,6 +553,25 @@ ON dispatch_executions(task_id)
 WHERE status = 'STARTED';
 """
 
+MIGRATION_010 = r"""
+CREATE TRIGGER dispatch_claims_started_execution_seals_legacy_terminalization
+BEFORE UPDATE OF status ON dispatch_claims
+WHEN OLD.status = 'ACTIVE'
+ AND NEW.status IN ('RELEASED', 'INTERRUPTED')
+ AND EXISTS (
+     SELECT 1
+     FROM dispatch_executions
+     WHERE claim_id = OLD.claim_id
+       AND status = 'STARTED'
+ )
+BEGIN
+    SELECT RAISE(
+        ABORT,
+        'dispatch claim with STARTED execution must use execution lifecycle terminalization'
+    );
+END;
+"""
+
 MIGRATIONS = (
     Migration(1, MIGRATION_001),
     Migration(2, MIGRATION_002),
@@ -563,6 +582,7 @@ MIGRATIONS = (
     Migration(7, MIGRATION_007),
     Migration(8, MIGRATION_008),
     Migration(9, MIGRATION_009),
+    Migration(10, MIGRATION_010),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version
