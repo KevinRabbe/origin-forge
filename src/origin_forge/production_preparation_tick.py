@@ -18,12 +18,13 @@ from .production_preparation_models import (
 )
 from .production_preparation_planner_resume import (
     PreparationPlannerResumeStatus,
-    resume_routed_preparation_planner_once,
+    _resume_same_call_routed_preparation_planner_once,
 )
 from .production_preparation_policy_store import (
     ProductionPreparationPolicyStoreError,
     read_preparation_policy,
 )
+from .production_preparation_provenance import resolve_preparation_policy_provenance
 from .production_preparation_receipts import (
     PreparationReceiptError,
     acquire_preparation_receipt,
@@ -101,8 +102,6 @@ def _preplanner_failure(
             reason,
         )
     except Exception as terminalize_exc:
-        # A lost/uncertain checkpoint must never be overwritten by optimistic
-        # failure repair. Surface the current durable state if it can be read.
         try:
             current = read_preparation_receipt(runtime, receipt.preparation_id)
         except Exception:
@@ -143,6 +142,7 @@ def _prepare_selected_candidate_once(
     preparation_policy_id = policy.preparation_policy_id
 
     try:
+        provenance = resolve_preparation_policy_provenance(runtime, policy)
         receipt = acquire_preparation_receipt(runtime, policy, candidate)
     except Exception as exc:
         return PreparationTickResult(
@@ -175,9 +175,6 @@ def _prepare_selected_candidate_once(
             route.route_decision_id,
         )
     except BaseException as exc:
-        # Before ROUTED every failure is known to have occurred before the
-        # model boundary. BaseException is safe to terminalize only while the
-        # durable receipt still proves a pre-planner stage.
         if receipt.stage in (
             PreparationStage.CLAIMED,
             PreparationStage.ACTIVATED,
@@ -202,16 +199,12 @@ def _prepare_selected_candidate_once(
                 pass
         raise
 
-    # The accepted Phase-41D2 coordinator now owns the shared ROUTED planner
-    # boundary for both normal preparation and explicit recovery. It persists
-    # PLANNER_STARTED before its sole model call and never reselects another PREP.
-    # Keep this call outside the pre-planner BaseException handler: once D2 may
-    # have committed PLANNER_STARTED, uncertainty must never be terminalized as
-    # a known pre-planner failure.
-    resumed = resume_routed_preparation_planner_once(
+    resumed = _resume_same_call_routed_preparation_planner_once(
         runtime,
-        receipt.preparation_id,
-        receipt.revision,
+        receipt,
+        policy,
+        route,
+        provenance,
     )
     if resumed.status is PreparationPlannerResumeStatus.PLANNER_RETURNED:
         if resumed.receipt is None or resumed.planner_result is None:
