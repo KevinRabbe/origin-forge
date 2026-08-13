@@ -85,6 +85,11 @@ class ProductionPreparationPinnedCandidateTests(unittest.TestCase):
             ),
             patch.object(
                 tick_module,
+                "resolve_preparation_policy_provenance",
+                return_value=object(),
+            ),
+            patch.object(
+                tick_module,
                 "acquire_preparation_receipt",
                 side_effect=PreparationReceiptError("selected candidate lost race"),
             ) as acquire,
@@ -155,7 +160,7 @@ class ProductionPreparationPinnedCandidateTests(unittest.TestCase):
                 for node in ast.walk(tree)
                 if isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
-                and node.func.id == "resume_routed_preparation_planner_once"
+                and node.func.id == "_resume_same_call_routed_preparation_planner_once"
             ),
             1,
         )
@@ -168,6 +173,10 @@ class ProductionPreparationPinnedCandidateTests(unittest.TestCase):
                 and node.func.attr == "propose"
             ),
             0,
+        )
+        self.assertLess(
+            source.index("resolve_preparation_policy_provenance("),
+            source.index("acquire_preparation_receipt("),
         )
         self.assertNotIn("checkpoint_preparation_planner_started", calls)
         self.assertNotIn("checkpoint_preparation_planner_returned", calls)
