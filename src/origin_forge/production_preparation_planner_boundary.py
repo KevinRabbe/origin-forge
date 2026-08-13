@@ -37,6 +37,7 @@ from .production_preparation_receipts import (
 )
 from .production_work_order_models import DispatchContractCatalog
 from .runtime import OriginForgeRuntime
+from .service import StaleRevision
 from .state import TaskStatus
 
 
@@ -175,6 +176,7 @@ def resolve_routed_preparation_planner_boundary(
         ProductionPreparationAssemblyError,
         ProductionPreparationProvenanceError,
         CapabilityRoutingError,
+        StaleRevision,
         KeyError,
         TypeError,
         ValueError,
