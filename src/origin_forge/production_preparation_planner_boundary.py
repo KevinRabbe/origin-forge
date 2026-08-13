@@ -35,6 +35,7 @@ from .production_preparation_receipts import (
     _require_active_checkpoint,
     read_preparation_receipt,
 )
+from .production_read_guard import ProductionReadGuardError
 from .production_work_order_models import DispatchContractCatalog
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision
@@ -175,6 +176,7 @@ def resolve_routed_preparation_planner_boundary(
         ProductionCapabilityStoreError,
         ProductionPreparationAssemblyError,
         ProductionPreparationProvenanceError,
+        ProductionReadGuardError,
         CapabilityRoutingError,
         StaleRevision,
         KeyError,
