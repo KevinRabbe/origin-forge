@@ -58,6 +58,7 @@ def _complete_admission_is_well_formed(admission: ManagerAdvanceAdmission) -> st
         admission.finalize_phase34_count,
         admission.prepare_count,
         admission.recovery_required_count,
+        admission.recover_preparation_count,
         admission.terminal_retry_suppression_count,
         admission.active_claim_exclusion_count,
     )
@@ -87,6 +88,8 @@ def _complete_admission_is_well_formed(admission: ManagerAdvanceAdmission) -> st
         or admission.prepare_count != expected_counts[ManagerAdvanceActionKind.PREPARE]
         or admission.recovery_required_count
         != expected_counts[ManagerAdvanceActionKind.RECOVERY_REQUIRED]
+        or admission.recover_preparation_count
+        != expected_counts[ManagerAdvanceActionKind.RECOVER_PREPARATION]
     ):
         return "admission action counters do not match candidate contents"
     return None
@@ -103,6 +106,7 @@ def _failed_admission_is_well_formed(admission: ManagerAdvanceAdmission) -> str 
             admission.finalize_phase34_count,
             admission.prepare_count,
             admission.recovery_required_count,
+            admission.recover_preparation_count,
             admission.terminal_retry_suppression_count,
             admission.active_claim_exclusion_count,
         )
@@ -128,7 +132,7 @@ def _failed_admission_is_well_formed(admission: ManagerAdvanceAdmission) -> str 
 def select_manager_advance_candidate(
     admission: ManagerAdvanceAdmission,
 ) -> ManagerAdvanceSelection:
-    """Validate one Phase-40 admission and select its first candidate only.
+    """Validate one Manager admission and select its first candidate only.
 
     This function intentionally never recomputes a minimum. Ordering authority
     belongs to immutable admission. A malformed COMPLETE admission fails closed.
