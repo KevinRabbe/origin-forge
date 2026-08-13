@@ -3,13 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from .production_capability_store import ProductionCapabilityStore
-from .production_preparation_models import PreparationStage, PreparationStatus, TaskPreparationReceipt
+from .production_capability_store import CapabilityRouteDecision, ProductionCapabilityStore
+from .production_preparation_models import (
+    PreparationStage,
+    PreparationStatus,
+    TaskPreparationPolicyBinding,
+    TaskPreparationReceipt,
+)
 from .production_preparation_planner_boundary import (
     PreparationPlannerBoundaryError,
     RoutedPreparationPlannerBoundary,
     resolve_routed_preparation_planner_boundary,
 )
+from .production_preparation_planner_same_call import (
+    resolve_same_call_routed_preparation_planner_boundary,
+)
+from .production_preparation_provenance import PreparationPolicyProvenance
 from .production_preparation_receipts import (
     PreparationReceiptError,
     _load_receipt_connection,
@@ -81,15 +90,13 @@ def _checkpoint_validated_planner_started(
     runtime: OriginForgeRuntime,
     boundary: RoutedPreparationPlannerBoundary,
 ) -> TaskPreparationReceipt:
-    """CAS one D1-validated ROUTED boundary to PLANNER_STARTED.
+    """CAS one already-validated ROUTED boundary to PLANNER_STARTED.
 
-    D1 has already reconstructed protected PREPPOL/provenance, route, owner,
-    dispatch-contract, and model dependency authority while SQLite was quiescent.
-    This writer intentionally performs no protected immutable reads: it reloads
-    only the exact durable PREP row under BEGIN IMMEDIATE, proves it is byte-for-
-    byte the D1 receipt, rechecks the frozen PREP/PREPPOL and plan/PREPPOL
-    identities, then commits the no-replay marker. The public coordinator is the
-    only caller.
+    Boundary resolution has already proved protected PREPPOL/provenance, route,
+    owner, dispatch-contract, and model dependency authority. This writer performs
+    no protected immutable reads: it reloads only the exact durable PREP row under
+    BEGIN IMMEDIATE, proves it is byte-for-byte the validated receipt, rechecks
+    the PREP/PREPPOL and plan/PREPPOL identities, then commits the no-replay marker.
     """
 
     if not isinstance(runtime, OriginForgeRuntime):
@@ -126,7 +133,7 @@ def _checkpoint_validated_planner_started(
         )
         if receipt != snapshot:
             raise StaleRevision(
-                "PREP changed after protected planner-boundary validation"
+                "PREP changed after planner-boundary validation"
             )
         if (
             receipt.preparation_policy_id != policy.preparation_policy_id
@@ -158,57 +165,14 @@ def _checkpoint_validated_planner_started(
         return _load_receipt_connection(conn, receipt.preparation_id)
 
 
-def resume_routed_preparation_planner_once(
+def _resume_validated_routed_preparation_planner_once(
     runtime: OriginForgeRuntime,
-    preparation_id: str,
-    expected_revision: int,
+    boundary: RoutedPreparationPlannerBoundary,
 ) -> PreparationPlannerResumeResult:
-    """Cross one exact ROUTED PREP planner boundary at most once and stop.
-
-    D1 reconstructs all current authority before mutation. The durable
-    PLANNER_STARTED compare-and-swap is committed before the only planner call.
-    Any loser, stale state, ordinary post-marker failure, or pre-existing marker
-    returns without replaying or selecting another PREP/Task.
-    """
-
-    if not isinstance(runtime, OriginForgeRuntime):
-        raise TypeError("runtime must be an OriginForgeRuntime")
-    if not isinstance(preparation_id, str):
-        raise TypeError("preparation_id must be a string")
-    if type(expected_revision) is not int or expected_revision < 0:
-        raise ValueError("expected_revision must be a non-negative integer")
-
-    try:
-        boundary = resolve_routed_preparation_planner_boundary(
-            runtime,
-            preparation_id,
-            expected_revision,
-        )
-    except PreparationPlannerBoundaryError as exc:
-        current = _current_receipt(runtime, preparation_id, None)
-        if (
-            current is not None
-            and current.status is PreparationStatus.ACTIVE
-            and current.stage is PreparationStage.PLANNER_STARTED
-        ):
-            return PreparationPlannerResumeResult(
-                PreparationPlannerResumeStatus.PLANNER_RECOVERY_REQUIRED,
-                preparation_id,
-                current.task_id,
-                current,
-                None,
-                "durable PLANNER_STARTED already exists; planner replay is forbidden",
-            )
-        return PreparationPlannerResumeResult(
-            PreparationPlannerResumeStatus.INVALID_AUTHORITY,
-            preparation_id,
-            None if current is None else current.task_id,
-            current,
-            None,
-            _detail(exc),
-        )
+    """Persist one no-replay marker, invoke one planner at most once, then stop."""
 
     receipt = boundary.receipt
+    preparation_id = receipt.preparation_id
     try:
         started = _checkpoint_validated_planner_started(runtime, boundary)
     except (PreparationReceiptError, StaleRevision, RuntimeError, TypeError, ValueError) as exc:
@@ -269,3 +233,91 @@ def resume_routed_preparation_planner_once(
         planner_result,
         None,
     )
+
+
+def _resume_same_call_routed_preparation_planner_once(
+    runtime: OriginForgeRuntime,
+    receipt: TaskPreparationReceipt,
+    policy: TaskPreparationPolicyBinding,
+    route: CapabilityRouteDecision,
+    provenance: PreparationPolicyProvenance,
+) -> PreparationPlannerResumeResult:
+    """Normal Phase39 entrypoint using WAL-safe same-call boundary validation."""
+
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    if not isinstance(receipt, TaskPreparationReceipt):
+        raise TypeError("receipt must be a TaskPreparationReceipt")
+    preparation_id = receipt.preparation_id
+    try:
+        boundary = resolve_same_call_routed_preparation_planner_boundary(
+            runtime,
+            receipt,
+            policy,
+            route,
+            provenance,
+        )
+    except PreparationPlannerBoundaryError as exc:
+        current = _current_receipt(runtime, preparation_id, receipt)
+        return PreparationPlannerResumeResult(
+            PreparationPlannerResumeStatus.INVALID_AUTHORITY,
+            preparation_id,
+            receipt.task_id,
+            current,
+            None,
+            _detail(exc),
+        )
+    return _resume_validated_routed_preparation_planner_once(runtime, boundary)
+
+
+def resume_routed_preparation_planner_once(
+    runtime: OriginForgeRuntime,
+    preparation_id: str,
+    expected_revision: int,
+) -> PreparationPlannerResumeResult:
+    """Cross one exact ROUTED recovery planner boundary at most once and stop.
+
+    D1 reconstructs all current authority before mutation. The durable
+    PLANNER_STARTED compare-and-swap is committed before the only planner call.
+    Any loser, stale state, ordinary post-marker failure, or pre-existing marker
+    returns without replaying or selecting another PREP/Task.
+    """
+
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    if not isinstance(preparation_id, str):
+        raise TypeError("preparation_id must be a string")
+    if type(expected_revision) is not int or expected_revision < 0:
+        raise ValueError("expected_revision must be a non-negative integer")
+
+    try:
+        boundary = resolve_routed_preparation_planner_boundary(
+            runtime,
+            preparation_id,
+            expected_revision,
+        )
+    except PreparationPlannerBoundaryError as exc:
+        current = _current_receipt(runtime, preparation_id, None)
+        if (
+            current is not None
+            and current.status is PreparationStatus.ACTIVE
+            and current.stage is PreparationStage.PLANNER_STARTED
+        ):
+            return PreparationPlannerResumeResult(
+                PreparationPlannerResumeStatus.PLANNER_RECOVERY_REQUIRED,
+                preparation_id,
+                current.task_id,
+                current,
+                None,
+                "durable PLANNER_STARTED already exists; planner replay is forbidden",
+            )
+        return PreparationPlannerResumeResult(
+            PreparationPlannerResumeStatus.INVALID_AUTHORITY,
+            preparation_id,
+            None if current is None else current.task_id,
+            current,
+            None,
+            _detail(exc),
+        )
+
+    return _resume_validated_routed_preparation_planner_once(runtime, boundary)
