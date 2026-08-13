@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import inspect
 import unittest
+from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -181,14 +182,16 @@ class ManagerAdvanceOnceTests(unittest.TestCase):
         )
 
     def test_no_actionable_work_performs_zero_action(self) -> None:
-        with (
-            patch.object(
-                advance_module,
-                "inspect_manager_advance_admission_readonly",
-                return_value=self._admission(),
-            ),
-            *self._assert_no_action_calls(),
-        ):
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch.object(
+                    advance_module,
+                    "inspect_manager_advance_admission_readonly",
+                    return_value=self._admission(),
+                )
+            )
+            for context_manager in self._assert_no_action_calls():
+                stack.enter_context(context_manager)
             result = advance_production_manager_once(self.runtime)
 
         self.assertEqual(result.status, ManagerAdvanceOnceStatus.NO_ACTIONABLE_WORK)
@@ -196,14 +199,16 @@ class ManagerAdvanceOnceTests(unittest.TestCase):
 
     def test_selected_recovery_required_performs_zero_action_and_stops(self) -> None:
         candidate = self._recovery(new_id(IdKind.TASK), OLD)
-        with (
-            patch.object(
-                advance_module,
-                "inspect_manager_advance_admission_readonly",
-                return_value=self._admission(candidate),
-            ),
-            *self._assert_no_action_calls(),
-        ):
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch.object(
+                    advance_module,
+                    "inspect_manager_advance_admission_readonly",
+                    return_value=self._admission(candidate),
+                )
+            )
+            for context_manager in self._assert_no_action_calls():
+                stack.enter_context(context_manager)
             result = advance_production_manager_once(self.runtime)
 
         self.assertEqual(result.status, ManagerAdvanceOnceStatus.RECOVERY_REQUIRED)
