@@ -310,6 +310,7 @@ def _activation_event_evidence(
         or row["revision"] != receipt.queued_task_revision + 1
         or row["actor_type"] != "SYSTEM"
         or row["actor_id"] is not None
+        or receipt.revision != 0
         or task_status is not TaskStatus.READY
         or task_input.task_revision != receipt.queued_task_revision + 1
     ):
