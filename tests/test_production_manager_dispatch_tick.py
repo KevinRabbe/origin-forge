@@ -31,6 +31,7 @@ from origin_forge.production_manager_dispatch_admission import (
 )
 from origin_forge.production_manager_dispatch_tick import (
     ManagerDispatchTickStatus,
+    _dispatch_selected_candidate_once,
     dispatch_manager_tick,
 )
 from origin_forge.runtime import OriginForgeRuntime
@@ -343,11 +344,14 @@ class ProductionManagerDispatchTickTests(unittest.TestCase):
         self.assertIsNone(result.execution_id)
         self.assertEqual(dispatch.call_count, 1)
 
-    def test_tick_source_has_one_claim_and_one_dispatch_call_site_and_no_loop_or_outcome_logic(self) -> None:
-        source = inspect.getsource(dispatch_manager_tick)
-        tree = ast.parse(source)
+    def test_tick_and_pinned_helper_source_have_one_claim_and_one_dispatch_call_site_and_no_loop_or_outcome_logic(self) -> None:
+        public_source = inspect.getsource(dispatch_manager_tick)
+        pinned_source = inspect.getsource(_dispatch_selected_candidate_once)
+        source = public_source + "\n" + pinned_source
+        trees = (ast.parse(public_source), ast.parse(pinned_source))
         calls = [
             node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id
+            for tree in trees
             for node in ast.walk(tree)
             if isinstance(node, ast.Call)
             and isinstance(node.func, (ast.Attribute, ast.Name))
@@ -355,10 +359,19 @@ class ProductionManagerDispatchTickTests(unittest.TestCase):
         self.assertEqual(calls.count("acquire_dispatch_claim"), 1)
         self.assertEqual(calls.count("dispatch_claim_once"), 1)
         self.assertNotIn("activate_dependency_ready_task", calls)
-        self.assertFalse(any(isinstance(node, (ast.For, ast.While)) for node in ast.walk(tree)))
+        self.assertFalse(
+            any(
+                isinstance(node, (ast.For, ast.While))
+                for tree in trees
+                for node in ast.walk(tree)
+            )
+        )
         self.assertNotIn(".outcome", source)
-        signature = inspect.signature(dispatch_manager_tick)
-        self.assertEqual(tuple(signature.parameters), ("runtime",))
+        self.assertEqual(tuple(inspect.signature(dispatch_manager_tick).parameters), ("runtime",))
+        self.assertEqual(
+            tuple(inspect.signature(_dispatch_selected_candidate_once).parameters),
+            ("runtime", "candidate"),
+        )
 
 
 if __name__ == "__main__":
