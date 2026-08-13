@@ -241,6 +241,11 @@ providers = [
         self.assertEqual(calls, 1)
 
     def test_concurrent_routed_resume_has_at_most_one_model_call(self) -> None:
+        frozen_boundary = resume_module.resolve_routed_preparation_planner_boundary(
+            self.runtime,
+            self.routed.preparation_id,
+            self.routed.revision,
+        )
         real_checkpoint = resume_module.checkpoint_preparation_planner_started
         barrier = threading.Barrier(2)
         lock = threading.Lock()
@@ -272,7 +277,16 @@ providers = [
                     results.append(value)
 
         with (
-            patch.object(resume_module, "checkpoint_preparation_planner_started", side_effect=racing_checkpoint),
+            patch.object(
+                resume_module,
+                "resolve_routed_preparation_planner_boundary",
+                return_value=frozen_boundary,
+            ),
+            patch.object(
+                resume_module,
+                "checkpoint_preparation_planner_started",
+                side_effect=racing_checkpoint,
+            ),
             patch.object(ScheduledModelAdapter, "generate", side_effect=generate),
         ):
             threads = [threading.Thread(target=worker) for _ in range(2)]
