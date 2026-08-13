@@ -775,6 +775,27 @@ See `docs/phase-38-governed-manager-dispatch-single-tick.md` for the finalized a
 
 **Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 39 — Governed Task Preparation Authority & Single Tick — DONE
+
+Implemented the missing governed bridge from exact Phase-31 materialization to the already-READY/current-Phase34 boundary consumed by Phase 38:
+
+- infrastructure-owned immutable `PREPPOL-*` policy bindings and durable `PREP-*` receipts with schema v11 and one-ACTIVE-PREP-per-Task database uniqueness;
+- exact `PLMAT → PLINPUT → CAPCAT/CAPPOL → DISPCAT` provenance recovery with code-owned preparation-owner/planner authority and no caller-selected Task/routing/model/runtime/WorkOrder/binder inputs;
+- deterministic admission of dependency-ready `QUEUED` Tasks from one bound materialization ordered solely by `(Task.created_at, Task.id)`, excluding ACTIVE PREP and already Phase38-admissible work;
+- one single preparation tick with one candidate only: durable PREP acquisition, exact Phase-35 activation, fresh READY-revision Phase-32 route, durable `PLANNER_STARTED`, and exactly one existing Phase-33 WorkOrder-planner call;
+- fail-closed planner uncertainty: durable `PLANNER_STARTED` is recovery-required and later preparation ticks never auto-replay the model call;
+- deterministic post-planner recovery, protected WorkOrder publication, independent WORKAUD, and crash-idempotent Phase-34 `INRES → DISPBIND → BINDAUD` publication before `PREP READY/BOUND`;
+- canonical full Phase-34 resolver-registry fingerprint shared with Phase 38, including the reviewed Audio Profile resolver, after cross-phase acceptance exposed and repaired an earlier core-only registry mismatch;
+- immutable preparation status for eligibility, pre-planner activity, planner recovery, post-planner resumability, Phase38 readiness, terminal failure/interruption, and stale/invalid authority without repair or execution side effects;
+- adversarial acceptance proving one concurrent PREP/model-call winner, no second-Task fallback after races, pre-activation Phase-32/33/34 staleness, fresh post-activation authority, Phase38 visibility, and zero dispatch claims/executions;
+- no automatic Phase38 invocation, dispatch claim/execution authority, Task outcome reinterpretation, background loop/daemon, Artifact adoption/signing, Project Intelligence mutation, Dream promotion, training, merge, or release authority.
+
+See `docs/phase-39-governed-task-preparation-authority.md` for the finalized architecture, accepted/superseded exact-head CI evidence, recovery semantics, and authority exclusions.
+
+**Exit condition met in implementation:** Phase-39 implementation and acceptance are green through exact code/test head `d2bc3be8d380e2387411001f3261b2630be7f79b`; normal run `31652889606` passed Python 3.12 and 3.13 after the earlier Phase39→Phase38 resolver-fingerprint mismatch was corrected and independently gated at `7a5684d5682e0a7e1cc553a62bea51f84f752d7e` / run `31652642583`.
+
+**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release

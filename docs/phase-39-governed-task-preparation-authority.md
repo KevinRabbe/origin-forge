@@ -1,6 +1,6 @@
 # Phase 39 — Governed Task Preparation Authority & Single Tick
 
-Status: **PLANNED — architecture only; no automatic preparation implementation yet**
+Status: **DONE — implementation complete; final exact-head closure gate pending**
 
 Phase 39 closes the deliberate gap between Phase-31 materialized dependency graphs and Phase-38 dispatch admission.
 
@@ -392,3 +392,30 @@ Phase 39 does **not** add:
 ## Exit condition
 
 Phase 39 is complete when Origin Forge can take one explicit immutable preparation policy over an exact Phase-31 materialization, deterministically choose at most one dependency-ready QUEUED Task, durably own preparation, activate it exactly once, route the new READY revision using the exact planning-bound Phase-32 authority, cross one code-owned WorkOrder-planner model boundary at most once with fail-closed crash semantics, independently construct/audit/persist the Phase-33/34 chain, leave the Task READY with current `BINDAUD PASS` authority for a later Phase-38 Manager tick, and stop without dispatching production work.
+
+---
+
+## Implementation and CI closure evidence
+
+Implementation PR #60 is based on the merged Phase-39 planning head `ae944742bcdf315a2ddf26d5f214b1c4b6c9e102` and was advanced only after exact-head normal CI gates.
+
+Accepted implementation boundaries:
+
+- **39A — contracts/schema:** `9ee9dbe1535eac05315f865c940fad867b3f60f6`; normal run `31642616970` passed Python 3.12 and 3.13.
+- **39B — exact provenance/admission:** `2427e9bdfe8080e66a44064f5de785e18f1e28c1`; run `31645722070` passed Python 3.12 and 3.13.
+- **39C — code-owned planner owner/dependencies/PREPPOL store:** `2a5d419d86a0b6761cdb653775a0eeb4be07eb71`; run `31646431337` passed Python 3.12 and 3.13.
+- **39D — one preparation tick through trustworthy planner return:** `133372ca569f6e536e023b55f949ff779c7ebabb`; run `31647276851` passed Python 3.12 and 3.13.
+- **39E1 — planner-evidence reconstruction/recovery:** `1a71c2812e1799982b27df5a32fafe60dadd0303`; run `31647921089` passed Python 3.12 and 3.13.
+- **39E2 — exact Phase-33 WorkOrder publication/audit:** `f023ea035692b848456850ff612631936df4875a`; run `31648866727` passed Python 3.12 and 3.13.
+- **39E3 + 39F integrated authority/status boundary:** `7a5684d5682e0a7e1cc553a62bea51f84f752d7e`; run `31652642583` passed Python 3.12 and 3.13. This is the authoritative Phase-34 resolver-fingerprint boundary used by Phase 38.
+- **39G — adversarial cross-phase acceptance:** `d2bc3be8d380e2387411001f3261b2630be7f79b`; run `31652889606` passed Python 3.12 and 3.13. The delta from the prior accepted implementation head is tests-only.
+
+Superseded/rejected evidence retained for auditability:
+
+- `dea41e8855bb893fa59ebb2003e46035ddcd4ef4` failed both normal interpreters because an E2 test fixture attempted the illegal canonical transition `READY → READY`. The repair changed only the fixture to legal `READY → BLOCKED` drift; E2 production code was unchanged.
+- `d40a152ec44e1e607f6b08f83d860e2b88d242f0` / run `31649282874` initially passed both interpreters for E3, but later cross-phase status acceptance proved that E3 had frozen the core-only resolver-registry fingerprint while Phase 38 correctly trusts the full reviewed Phase-34 resolver registry including `AudioProfileInputResolver`.
+- `007cf79000588cb286bc8da6e691505ace0ee4fe` / run `31651941634` failed both interpreters on that real Phase39→Phase38 integration mismatch. The accepted repair aligned the E3 producer, E3 test harness, and 39F inspector to the canonical `build_dispatch_input_resolver_registry()` authority, producing accepted head `7a5684d5682e0a7e1cc553a62bea51f84f752d7e` without changing lifecycle, selection, persistence, or model-call semantics.
+
+The accepted Phase-39 implementation proves that one explicit `PREPPOL-*` can deterministically prepare at most one dependency-ready materialized Task, commit planner ownership before one model call, recover fail-closed without automatic replay, publish current audited Phase-33/34 authority, and stop with the canonical Task still `READY`. The final acceptance suite additionally proves one-winner concurrent PREP acquisition, no second-Task fallback after a race, pre-activation Phase-32/33/34 staleness, fresh post-activation authority visible to Phase 38, and zero `DISPCLAIM-*` / `DISPEXEC-*` creation.
+
+The documentation/roadmap closure head created after these proofs must itself pass the final normal Python 3.12/3.13 matrix before ready-for-review transition and SHA-guarded merge.

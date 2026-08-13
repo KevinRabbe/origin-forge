@@ -572,6 +572,160 @@ BEGIN
 END;
 """
 
+MIGRATION_011 = r"""
+CREATE TABLE task_preparations (
+    preparation_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    preparation_policy_id TEXT NOT NULL,
+    preparation_policy_hash TEXT NOT NULL,
+    materialization_id TEXT NOT NULL REFERENCES plan_materializations(materialization_id) ON DELETE RESTRICT,
+    materialization_hash TEXT NOT NULL,
+    planning_input_id TEXT NOT NULL REFERENCES planning_inputs(planning_input_id) ON DELETE RESTRICT,
+    planning_input_hash TEXT NOT NULL,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    queued_task_revision INTEGER NOT NULL CHECK (queued_task_revision >= 0),
+    queued_task_hash TEXT NOT NULL,
+    ready_task_revision INTEGER CHECK (ready_task_revision >= 0),
+    ready_task_hash TEXT,
+    route_decision_id TEXT,
+    route_decision_hash TEXT,
+    planner_dependency_plan_hash TEXT,
+    planner_run_id TEXT REFERENCES runs(id) ON DELETE RESTRICT,
+    work_order_id TEXT,
+    work_order_hash TEXT,
+    work_order_audit_id TEXT,
+    work_order_audit_hash TEXT,
+    input_resolution_id TEXT,
+    input_resolution_hash TEXT,
+    dispatch_binding_id TEXT,
+    dispatch_binding_hash TEXT,
+    binding_audit_id TEXT,
+    binding_audit_hash TEXT,
+    stage TEXT NOT NULL CHECK (
+        stage IN (
+            'CLAIMED', 'ACTIVATED', 'ROUTED', 'PLANNER_STARTED',
+            'PLANNER_RETURNED', 'WORK_ORDER_AUDITED', 'BOUND'
+        )
+    ),
+    status TEXT NOT NULL CHECK (
+        status IN ('ACTIVE', 'READY', 'INTERRUPTED', 'FAILED_PRE_PLANNER')
+    ),
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    terminal_reason TEXT,
+    CHECK ((ready_task_revision IS NULL) = (ready_task_hash IS NULL)),
+    CHECK ((route_decision_id IS NULL) = (route_decision_hash IS NULL)),
+    CHECK ((work_order_id IS NULL) = (work_order_hash IS NULL)),
+    CHECK ((work_order_audit_id IS NULL) = (work_order_audit_hash IS NULL)),
+    CHECK ((input_resolution_id IS NULL) = (input_resolution_hash IS NULL)),
+    CHECK ((dispatch_binding_id IS NULL) = (dispatch_binding_hash IS NULL)),
+    CHECK ((binding_audit_id IS NULL) = (binding_audit_hash IS NULL)),
+    CHECK (
+        (status IN ('ACTIVE', 'READY') AND terminal_reason IS NULL)
+        OR
+        (status IN ('INTERRUPTED', 'FAILED_PRE_PLANNER')
+         AND terminal_reason IS NOT NULL AND length(terminal_reason) > 0)
+    ),
+    CHECK (status != 'READY' OR stage = 'BOUND'),
+    CHECK (
+        status != 'FAILED_PRE_PLANNER'
+        OR stage IN ('CLAIMED', 'ACTIVATED', 'ROUTED')
+    ),
+    CHECK (
+        (stage = 'CLAIMED'
+         AND ready_task_revision IS NULL
+         AND route_decision_id IS NULL
+         AND planner_dependency_plan_hash IS NULL
+         AND planner_run_id IS NULL
+         AND work_order_id IS NULL
+         AND work_order_audit_id IS NULL
+         AND input_resolution_id IS NULL
+         AND dispatch_binding_id IS NULL
+         AND binding_audit_id IS NULL)
+        OR
+        (stage = 'ACTIVATED'
+         AND ready_task_revision IS NOT NULL
+         AND route_decision_id IS NULL
+         AND planner_dependency_plan_hash IS NULL
+         AND planner_run_id IS NULL
+         AND work_order_id IS NULL
+         AND work_order_audit_id IS NULL
+         AND input_resolution_id IS NULL
+         AND dispatch_binding_id IS NULL
+         AND binding_audit_id IS NULL)
+        OR
+        (stage = 'ROUTED'
+         AND ready_task_revision IS NOT NULL
+         AND route_decision_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NULL
+         AND planner_run_id IS NULL
+         AND work_order_id IS NULL
+         AND work_order_audit_id IS NULL
+         AND input_resolution_id IS NULL
+         AND dispatch_binding_id IS NULL
+         AND binding_audit_id IS NULL)
+        OR
+        (stage = 'PLANNER_STARTED'
+         AND ready_task_revision IS NOT NULL
+         AND route_decision_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NOT NULL
+         AND planner_run_id IS NULL
+         AND work_order_id IS NULL
+         AND work_order_audit_id IS NULL
+         AND input_resolution_id IS NULL
+         AND dispatch_binding_id IS NULL
+         AND binding_audit_id IS NULL)
+        OR
+        (stage = 'PLANNER_RETURNED'
+         AND ready_task_revision IS NOT NULL
+         AND route_decision_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NOT NULL
+         AND planner_run_id IS NOT NULL
+         AND work_order_id IS NOT NULL
+         AND work_order_audit_id IS NULL
+         AND input_resolution_id IS NULL
+         AND dispatch_binding_id IS NULL
+         AND binding_audit_id IS NULL)
+        OR
+        (stage = 'WORK_ORDER_AUDITED'
+         AND ready_task_revision IS NOT NULL
+         AND route_decision_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NOT NULL
+         AND planner_run_id IS NOT NULL
+         AND work_order_id IS NOT NULL
+         AND work_order_audit_id IS NOT NULL
+         AND input_resolution_id IS NULL
+         AND dispatch_binding_id IS NULL
+         AND binding_audit_id IS NULL)
+        OR
+        (stage = 'BOUND'
+         AND ready_task_revision IS NOT NULL
+         AND route_decision_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NOT NULL
+         AND planner_run_id IS NOT NULL
+         AND work_order_id IS NOT NULL
+         AND work_order_audit_id IS NOT NULL
+         AND input_resolution_id IS NOT NULL
+         AND dispatch_binding_id IS NOT NULL
+         AND binding_audit_id IS NOT NULL)
+    )
+);
+
+CREATE INDEX idx_task_preparations_task_history
+ON task_preparations(project_id, task_id, created_at, preparation_id);
+
+CREATE INDEX idx_task_preparations_policy_status
+ON task_preparations(project_id, preparation_policy_id, status, created_at, preparation_id);
+
+CREATE INDEX idx_task_preparations_status
+ON task_preparations(project_id, status, stage, created_at, preparation_id);
+
+CREATE UNIQUE INDEX idx_task_preparations_one_active_per_task
+ON task_preparations(task_id)
+WHERE status = 'ACTIVE';
+"""
+
 MIGRATIONS = (
     Migration(1, MIGRATION_001),
     Migration(2, MIGRATION_002),
@@ -583,6 +737,7 @@ MIGRATIONS = (
     Migration(8, MIGRATION_008),
     Migration(9, MIGRATION_009),
     Migration(10, MIGRATION_010),
+    Migration(11, MIGRATION_011),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version
