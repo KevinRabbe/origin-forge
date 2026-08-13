@@ -19,6 +19,7 @@ from .production_preparation_owner import (
     require_current_preparation_owner,
 )
 from .production_preparation_provenance import (
+    PreparationPolicyProvenance,
     ProductionPreparationProvenanceError,
     resolve_preparation_policy_provenance,
 )
@@ -158,25 +159,25 @@ def _role_policies(
     return tuple(result)
 
 
-def assemble_preparation_planner_dependencies(
+def _assemble_preparation_planner_dependencies_from_provenance(
     runtime: OriginForgeRuntime,
     policy: TaskPreparationPolicyBinding,
+    provenance: PreparationPolicyProvenance,
 ) -> PreparationPlannerDependencies:
-    """Assemble exact WorkOrder-planner dependencies without crossing model authority.
-
-    Construction validates protected model policy/runtime-provider relations and
-    creates only lazy loader/scheduler objects. Resource leases, model loads,
-    subprocesses, Runs, WorkOrders, sandboxes, and Workspaces remain absent until
-    a later explicit planner invocation.
-    """
+    """Assemble lazy planner dependencies from one already-validated PREPPOL proof."""
 
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
     if not isinstance(policy, TaskPreparationPolicyBinding):
         raise TypeError("policy must be a TaskPreparationPolicyBinding")
+    if not isinstance(provenance, PreparationPolicyProvenance):
+        raise TypeError("provenance must be a PreparationPolicyProvenance")
+    if provenance.policy != policy:
+        raise ProductionPreparationAssemblyError(
+            "prevalidated provenance does not match exact PREPPOL authority"
+        )
 
     try:
-        provenance = resolve_preparation_policy_provenance(runtime, policy)
         owner_registry = build_builtin_preparation_owner_registry()
         owner = require_current_preparation_owner(
             policy,
@@ -184,7 +185,6 @@ def assemble_preparation_planner_dependencies(
             registry=owner_registry,
         )
     except (
-        ProductionPreparationProvenanceError,
         ProductionPreparationOwnerError,
         TypeError,
         ValueError,
@@ -294,4 +294,38 @@ def assemble_preparation_planner_dependencies(
         runtime_dispatch_loader=dispatch_loader,
         managed_loaders=managed_loaders,
         model=model,
+    )
+
+
+def assemble_preparation_planner_dependencies(
+    runtime: OriginForgeRuntime,
+    policy: TaskPreparationPolicyBinding,
+) -> PreparationPlannerDependencies:
+    """Assemble exact WorkOrder-planner dependencies without crossing model authority.
+
+    Construction validates protected model policy/runtime-provider relations and
+    creates only lazy loader/scheduler objects. Resource leases, model loads,
+    subprocesses, Runs, WorkOrders, sandboxes, and Workspaces remain absent until
+    a later explicit planner invocation.
+    """
+
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    if not isinstance(policy, TaskPreparationPolicyBinding):
+        raise TypeError("policy must be a TaskPreparationPolicyBinding")
+
+    try:
+        provenance = resolve_preparation_policy_provenance(runtime, policy)
+    except (
+        ProductionPreparationProvenanceError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise ProductionPreparationAssemblyError(
+            "PREPPOL is not current code-owned preparation authority"
+        ) from exc
+    return _assemble_preparation_planner_dependencies_from_provenance(
+        runtime,
+        policy,
+        provenance,
     )
