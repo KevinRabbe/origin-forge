@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import inspect
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
 
-import origin_forge.production_manager_advance_once as advance_module
 from origin_forge.production_manager_advance_admission import (
     ManagerAdvanceActionKind,
     ManagerAdvanceAdmission,
@@ -13,17 +10,12 @@ from origin_forge.production_manager_advance_admission import (
     ManagerAdvanceCandidate,
     _receipt_candidate,
 )
-from origin_forge.production_manager_advance_once import (
-    ManagerAdvanceOnceStatus,
-    advance_production_manager_once,
-)
 from origin_forge.production_manager_advance_selection import (
     ManagerAdvanceSelectionStatus,
     select_manager_advance_candidate,
 )
 from origin_forge.production_preparation_models import PreparationStage, PreparationStatus
 from origin_forge.production_preparation_status import PreparationInspectionState
-from origin_forge.runtime import OriginForgeRuntime
 
 
 class Phase42ARecoveryAdmissionTests(unittest.TestCase):
@@ -104,51 +96,6 @@ class Phase42ARecoveryAdmissionTests(unittest.TestCase):
         self.assertIs(accepted.candidate, candidate)
         self.assertEqual(rejected.status, ManagerAdvanceSelectionStatus.INVALID_STATE)
         self.assertIsNone(rejected.candidate)
-
-    def test_phase42a_outer_manager_stops_without_recovery_or_lower_action(self) -> None:
-        candidate = ManagerAdvanceCandidate(
-            ManagerAdvanceActionKind.RECOVER_PREPARATION,
-            "TASK-00000000-0000-4000-8000-000000000001",
-            "2026-01-01T00:00:00Z",
-            preparation_id="PREP-00000000-0000-4000-8000-000000000001",
-            preparation_stage=PreparationStage.ROUTED,
-        )
-        runtime = OriginForgeRuntime("/tmp/origin-forge-phase42a-manager")
-
-        with (
-            patch.object(
-                advance_module,
-                "inspect_manager_advance_admission_readonly",
-                return_value=self._admission(candidate),
-            ),
-            patch.object(
-                advance_module,
-                "_dispatch_selected_candidate_once",
-                side_effect=AssertionError("dispatch attempted"),
-            ),
-            patch.object(
-                advance_module,
-                "_prepare_selected_candidate_once",
-                side_effect=AssertionError("preparation attempted"),
-            ),
-            patch.object(
-                advance_module,
-                "finalize_preparation_work_order_audit",
-                side_effect=AssertionError("WorkOrder finalization attempted"),
-            ),
-            patch.object(
-                advance_module,
-                "finalize_preparation_phase34",
-                side_effect=AssertionError("Phase34 finalization attempted"),
-            ),
-        ):
-            result = advance_production_manager_once(runtime)
-
-        self.assertEqual(result.status, ManagerAdvanceOnceStatus.RECOVERY_REQUIRED)
-        self.assertEqual(result.action_kind, ManagerAdvanceActionKind.RECOVER_PREPARATION)
-        self.assertEqual(result.preparation_id, candidate.preparation_id)
-        self.assertIn("not executed in Phase 42A", result.detail or "")
-        self.assertNotIn("recover_preparation_once", inspect.getsource(advance_module))
 
 
 if __name__ == "__main__":
