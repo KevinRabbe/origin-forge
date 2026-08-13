@@ -796,6 +796,27 @@ See `docs/phase-39-governed-task-preparation-authority.md` for the finalized arc
 
 **Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 40 — Governed Manager Production Advancement & Single Action — DONE
+
+Implemented the one-shot global production advancement boundary over accepted Phase-38 dispatch and Phase-39 preparation authority:
+
+- bounded non-creating protected PREPPOL inventory and immutable typed PREP lifecycle inventory;
+- immutable one-candidate-per-Task global admission with exact same-Task authority conflict checks, semantic-equivalence collapse only for truly equivalent PREPPOL authority, and fail-closed terminal/recovery handling;
+- deterministic cross-state ordering solely by `(Task.created_at, Task.id)`, with action kind, legacy priority, resource pressure, model availability, cost, retry history, and objective text excluded from scheduling authority;
+- a pure selector that validates the admission and returns exactly the first canonical candidate rather than recomputing or substituting another Task;
+- pinned Phase-38 dispatch and Phase-39 preparation execution helpers preserving the existing public lower-phase APIs while preventing re-admission/reselection after the global Manager has selected one exact Task;
+- one public `advance_production_manager_once(runtime)` operation with exactly one global admission, one selection, at most one governed lower action, and STOP;
+- mechanical Manager result projection only, with no reinterpretation of `PolicyResult.outcome`, Task Verification, or production success/failure;
+- immutable non-creating Manager advancement status exposing admission counts and exact selected Task/action/PREPPOL/PREP/Phase-34 authority without mutation;
+- cross-phase acceptance proving one winner under real concurrent PREP acquisition and dispatch-claim races, no second-Task fallback, planner uncertainty without replay, and separate PREPARE → WorkOrder audit → Phase-34 READY → DISPATCH calls using fresh post-activation authority;
+- no background Manager loop/daemon, timer, multi-action call, hidden retry queue, automatic PREPPOL creation, planner replay after durable `PLANNER_STARTED`, action-type/legacy priority scheduling, generic authority expansion, Artifact adoption/signing, Project Intelligence mutation, Dream promotion, training, merge, or release authority.
+
+See `docs/phase-40-governed-manager-production-advance.md` for the frozen architecture, exact accepted slice evidence, pinned lower-phase composition rules, concurrency/recovery semantics, and authority exclusions.
+
+**Exit condition met in implementation:** exact code/test acceptance head `2184aaa9998fd8c6030047eae0639dc1091bbc82` passed normal run `31660742401` on Python 3.12 and Python 3.13 after all authority-expanding slices were independently gated.
+
+**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release
