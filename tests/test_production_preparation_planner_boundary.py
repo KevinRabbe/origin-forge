@@ -4,6 +4,7 @@ import inspect
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import origin_forge.production_preparation_planner_boundary as boundary_module
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
@@ -30,6 +31,7 @@ from origin_forge.production_preparation_receipts import acquire_preparation_rec
 from origin_forge.production_preparation_route_recovery import (
     recover_and_checkpoint_preparation_route,
 )
+from origin_forge.production_read_guard import ProductionReadGuardError
 from origin_forge.production_work_order_builtin import (
     build_builtin_dispatch_catalog,
     build_builtin_dispatch_validator_registry,
@@ -247,6 +249,29 @@ providers = [
                 routed.revision + 1,
             )
         self.assertEqual(self._effect_counts(), before)
+
+    def test_read_guard_failure_is_normalized_without_crossing_planner_boundary(self) -> None:
+        routed = self._routed_receipt()
+        before = self._effect_counts()
+        with patch.object(
+            boundary_module,
+            "read_preparation_policy",
+            side_effect=ProductionReadGuardError("active journal state"),
+        ):
+            with self.assertRaises(PreparationPlannerBoundaryError) as raised:
+                resolve_routed_preparation_planner_boundary(
+                    self.runtime,
+                    routed.preparation_id,
+                    routed.revision,
+                )
+        self.assertIsInstance(raised.exception.__cause__, ProductionReadGuardError)
+        self.assertEqual(self._effect_counts(), before)
+        with self.runtime.store.session() as conn:
+            stage = conn.execute(
+                "SELECT stage FROM task_preparations WHERE preparation_id = ?",
+                (routed.preparation_id,),
+            ).fetchone()[0]
+        self.assertEqual(stage, PreparationStage.ROUTED.value)
 
     def test_task_drift_invalidates_routed_boundary(self) -> None:
         routed = self._routed_receipt()
