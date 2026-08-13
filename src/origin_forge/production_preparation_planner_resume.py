@@ -7,12 +7,14 @@ from .production_capability_store import ProductionCapabilityStore
 from .production_preparation_models import PreparationStage, PreparationStatus, TaskPreparationReceipt
 from .production_preparation_planner_boundary import (
     PreparationPlannerBoundaryError,
+    RoutedPreparationPlannerBoundary,
     resolve_routed_preparation_planner_boundary,
 )
 from .production_preparation_receipts import (
     PreparationReceiptError,
+    _load_receipt_connection,
+    _require_active_checkpoint,
     checkpoint_preparation_planner_returned,
-    checkpoint_preparation_planner_started,
     read_preparation_receipt,
 )
 from .production_work_order_builtin import build_builtin_dispatch_validator_registry
@@ -21,7 +23,7 @@ from .production_work_order_planner import (
     WorkOrderPlannerResult,
 )
 from .runtime import OriginForgeRuntime
-from .service import StaleRevision
+from .service import StaleRevision, utc_now
 
 
 class PreparationPlannerResumeStatus(StrEnum):
@@ -73,6 +75,91 @@ def _current_receipt(
         return read_preparation_receipt(runtime, preparation_id)
     except Exception:
         return fallback
+
+
+def _checkpoint_validated_planner_started(
+    runtime: OriginForgeRuntime,
+    boundary: RoutedPreparationPlannerBoundary,
+) -> TaskPreparationReceipt:
+    """CAS one D1-validated ROUTED boundary to PLANNER_STARTED.
+
+    D1 has already reconstructed protected PREPPOL/provenance, route, owner,
+    dispatch-contract, and model dependency authority while SQLite was quiescent.
+    This writer intentionally performs no protected immutable reads: it reloads
+    only the exact durable PREP row under BEGIN IMMEDIATE, proves it is byte-for-
+    byte the D1 receipt, rechecks the frozen policy/plan relation, then commits
+    the no-replay marker. The public coordinator is the only caller.
+    """
+
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    if not isinstance(boundary, RoutedPreparationPlannerBoundary):
+        raise TypeError("boundary must be a RoutedPreparationPlannerBoundary")
+
+    snapshot = boundary.receipt
+    policy = boundary.policy
+    plan = boundary.dependencies.plan
+    _require_active_checkpoint(
+        snapshot,
+        expected_stage=PreparationStage.ROUTED,
+        expected_revision=snapshot.revision,
+    )
+    if (
+        snapshot.preparation_policy_id != policy.preparation_policy_id
+        or snapshot.preparation_policy_hash != policy.content_hash
+        or plan.preparation_policy_id != policy.preparation_policy_id
+        or plan.preparation_policy_hash != policy.content_hash
+        or plan.preparation_owner_id != policy.preparation_owner_id
+        or plan.preparation_owner_fingerprint != policy.preparation_owner_fingerprint
+        or plan.planner_request_version != policy.planner_request_version
+        or plan.planner_contract_id != policy.planner_contract_id
+        or plan.model_strategy_roles != policy.model_strategy_roles
+    ):
+        raise PreparationReceiptError(
+            "validated planner boundary no longer has an exact PREPPOL dependency relation"
+        )
+
+    now = utc_now()
+    with runtime.store.session() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        receipt = _load_receipt_connection(conn, snapshot.preparation_id)
+        _require_active_checkpoint(
+            receipt,
+            expected_stage=PreparationStage.ROUTED,
+            expected_revision=snapshot.revision,
+        )
+        if receipt != snapshot:
+            raise StaleRevision(
+                "PREP changed after protected planner-boundary validation"
+            )
+        if (
+            receipt.preparation_policy_id != policy.preparation_policy_id
+            or receipt.preparation_policy_hash != policy.content_hash
+        ):
+            raise PreparationReceiptError(
+                "durable PREP no longer binds the validated PREPPOL"
+            )
+        new_revision = receipt.revision + 1
+        cursor = conn.execute(
+            """UPDATE task_preparations
+               SET planner_dependency_plan_hash = ?,
+                   stage = 'PLANNER_STARTED', revision = ?, updated_at = ?
+               WHERE preparation_id = ? AND status = 'ACTIVE'
+                 AND stage = 'ROUTED' AND revision = ?
+                 AND preparation_policy_id = ? AND preparation_policy_hash = ?""",
+            (
+                plan.plan_hash,
+                new_revision,
+                now,
+                receipt.preparation_id,
+                receipt.revision,
+                policy.preparation_policy_id,
+                policy.content_hash,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise StaleRevision("PREP changed during planner-start checkpoint")
+        return _load_receipt_connection(conn, receipt.preparation_id)
 
 
 def resume_routed_preparation_planner_once(
@@ -127,12 +214,7 @@ def resume_routed_preparation_planner_once(
 
     receipt = boundary.receipt
     try:
-        started = checkpoint_preparation_planner_started(
-            runtime,
-            preparation_id,
-            receipt.revision,
-            boundary.dependencies.plan,
-        )
+        started = _checkpoint_validated_planner_started(runtime, boundary)
     except (PreparationReceiptError, StaleRevision, RuntimeError, TypeError, ValueError) as exc:
         current = _current_receipt(runtime, preparation_id, receipt)
         if (
