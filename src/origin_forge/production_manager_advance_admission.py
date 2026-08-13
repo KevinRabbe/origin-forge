@@ -26,6 +26,12 @@ from .production_preparation_models import (
     TaskPreparationPolicyBinding,
 )
 from .production_preparation_policy_store import ProductionPreparationPolicyStoreError
+from .production_preparation_recovery import (
+    PreparationRecoveryProjection,
+    PreparationRecoveryReadError,
+    PreparationRecoveryState,
+    inspect_preparation_recovery_readonly,
+)
 from .production_preparation_status import (
     PreparationInspectionState,
     PreparationReceiptStatusProjection,
@@ -305,6 +311,52 @@ def _status_matches_inventory(
     )
 
 
+def _recovery_matches_inventory(
+    entry: PreparationReceiptInventoryEntry,
+    projection: PreparationRecoveryProjection,
+) -> bool:
+    receipt = entry.receipt
+    return (
+        projection.preparation_id == receipt.preparation_id
+        and projection.preparation_policy_id == receipt.preparation_policy_id
+        and projection.preparation_policy_hash == receipt.preparation_policy_hash
+        and projection.task_id == receipt.task_id
+        and projection.receipt_status is receipt.status
+        and projection.stage is receipt.stage
+        and projection.receipt_revision == receipt.revision
+    )
+
+
+def _legacy_claimed_recovery_is_adoptable(
+    runtime: OriginForgeRuntime,
+    entry: PreparationReceiptInventoryEntry,
+) -> bool:
+    receipt = entry.receipt
+    if (
+        receipt.status is not PreparationStatus.ACTIVE
+        or receipt.stage is not PreparationStage.CLAIMED
+    ):
+        return False
+    try:
+        recovery = inspect_preparation_recovery_readonly(
+            runtime,
+            receipt.preparation_id,
+        )
+    except (
+        PreparationRecoveryReadError,
+        ProductionPreparationPolicyStoreError,
+        ProductionReadGuardError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ):
+        return False
+    return (
+        _recovery_matches_inventory(entry, recovery)
+        and recovery.state is PreparationRecoveryState.ADOPTABLE_ACTIVATION_CHECKPOINT
+    )
+
+
 def _active_claim_exists_readonly(runtime: OriginForgeRuntime, task_id: str) -> bool:
     with production_read_connection(runtime) as conn:
         rows = conn.execute(
@@ -325,6 +377,7 @@ def _active_claim_exists_readonly(runtime: OriginForgeRuntime, task_id: str) -> 
 
 
 def _receipt_candidate(
+    runtime: OriginForgeRuntime,
     entry: PreparationReceiptInventoryEntry,
     projection: PreparationReceiptStatusProjection,
 ) -> ManagerAdvanceCandidate:
@@ -333,6 +386,14 @@ def _receipt_candidate(
         raise ValueError("receipt continuation requires ACTIVE PREP")
 
     if not projection.current or projection.state is PreparationInspectionState.STALE_OR_INVALID:
+        if _legacy_claimed_recovery_is_adoptable(runtime, entry):
+            return ManagerAdvanceCandidate(
+                ManagerAdvanceActionKind.RECOVER_PREPARATION,
+                receipt.task_id,
+                entry.task_created_at,
+                preparation_id=receipt.preparation_id,
+                preparation_stage=receipt.stage,
+            )
         return ManagerAdvanceCandidate(
             ManagerAdvanceActionKind.RECOVERY_REQUIRED,
             receipt.task_id,
@@ -471,7 +532,7 @@ def inspect_manager_advance_admission_readonly(
                 if task_id in dispatch_by_task:
                     raise ValueError("Task has simultaneous ACTIVE PREP and Phase-38 dispatch authority")
                 entry, projection = active[0]
-                chosen[task_id] = _receipt_candidate(entry, projection)
+                chosen[task_id] = _receipt_candidate(runtime, entry, projection)
                 continue
 
             if ready:
