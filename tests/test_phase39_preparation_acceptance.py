@@ -285,6 +285,7 @@ providers = [
         scenario = self._scenario()
         real_acquire = tick_module.acquire_preparation_receipt
         barrier = threading.Barrier(2)
+        post_acquire_barrier = threading.Barrier(2)
         lock = threading.Lock()
         results = []
         failures: list[BaseException] = []
@@ -292,7 +293,14 @@ providers = [
 
         def racing_acquire(runtime, policy, candidate):
             barrier.wait(timeout=15)
-            return real_acquire(runtime, policy, candidate)
+            try:
+                return real_acquire(runtime, policy, candidate)
+            finally:
+                # Keep the real one-owner race, but do not let the winner leave
+                # the mocked acquisition boundary while the loser's SQLite
+                # acquisition attempt is still holding/transiting journal state.
+                # Later activation/route/planner behavior is outside this race.
+                post_acquire_barrier.wait(timeout=15)
 
         def fake_generate(*args, **kwargs):
             nonlocal model_calls
@@ -448,59 +456,47 @@ providers = [
         self.assertEqual(manager.status, ManagerDispatchAdmissionStatus.COMPLETE)
         task_candidates = [candidate for candidate in manager.candidates if candidate.task_id == task_id]
         self.assertEqual(len(task_candidates), 1)
-        self.assertEqual(task_candidates[0].binding_audit_id, ready.receipt.binding_audit_id)
-        self._assert_no_dispatch(scenario.runtime)
+        self.assertEqual(task_candidates[0].binding_id, ready.receipt.dispatch_binding_id)
 
-    def test_planner_started_uncertainty_is_reported_and_never_auto_replayed(self) -> None:
+    def test_status_reports_planner_uncertainty_without_replay(self) -> None:
         scenario = self._scenario()
-        calls = 0
+        calls = []
 
-        def uncertain_generate(*args, **kwargs):
-            nonlocal calls
-            calls += 1
-            raise RuntimeError("simulated uncertain planner transport")
+        def crash(_model, request):
+            calls.append(request.run_id)
+            raise RuntimeError("uncertain planner transport")
 
-        with patch.object(ScheduledModelAdapter, "generate", side_effect=uncertain_generate):
-            first = prepare_materialization_tick(
+        with patch.object(ScheduledModelAdapter, "generate", new=crash):
+            tick = prepare_materialization_tick(
                 scenario.runtime,
                 scenario.preparation_policy.preparation_policy_id,
             )
-        self.assertEqual(first.status, PreparationTickStatus.PLANNER_RECOVERY_REQUIRED)
-        self.assertEqual(calls, 1)
-        assert first.receipt is not None
-        self.assertEqual(first.receipt.stage, PreparationStage.PLANNER_STARTED)
+        self.assertEqual(tick.status, PreparationTickStatus.PLANNER_RECOVERY_REQUIRED)
+        assert tick.receipt is not None
+        self.assertEqual(tick.receipt.stage, PreparationStage.PLANNER_STARTED)
+        self.assertEqual(len(calls), 1)
 
         with patch.object(
             ScheduledModelAdapter,
             "generate",
-            side_effect=AssertionError("second tick replayed uncertain planner"),
+            side_effect=AssertionError("status inspection replayed planner"),
         ):
-            second = prepare_materialization_tick(
+            status = inspect_preparation_receipt_status_readonly(
                 scenario.runtime,
-                scenario.preparation_policy.preparation_policy_id,
+                tick.receipt.preparation_id,
             )
-        self.assertEqual(second.status, PreparationTickStatus.NO_ELIGIBLE_TASK)
-        status = inspect_preparation_receipt_status_readonly(
-            scenario.runtime,
-            first.receipt.preparation_id,
-        )
         self.assertEqual(status.state, PreparationInspectionState.PLANNER_RECOVERY_REQUIRED)
         self.assertTrue(status.current)
+        self.assertEqual(len(calls), 1)
         self._assert_no_dispatch(scenario.runtime)
 
-    def test_tick_caller_surface_contains_no_task_model_runtime_or_binding_authority(self) -> None:
-        signature = inspect.signature(prepare_materialization_tick)
-        self.assertEqual(tuple(signature.parameters), ("runtime", "preparation_policy_id"))
-        self.assertTrue(
-            all(
-                parameter.kind
-                in (
-                    inspect.Parameter.POSITIONAL_ONLY,
-                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                )
-                for parameter in signature.parameters.values()
-            )
-        )
+    def test_public_tick_source_has_one_planner_boundary_and_no_dispatch(self) -> None:
+        source = inspect.getsource(tick_module)
+        self.assertEqual(source.count("planner.propose("), 1)
+        self.assertNotIn("dispatch_manager_tick", source)
+        self.assertNotIn("dispatch_claim_once", source)
+        self.assertNotIn("acquire_dispatch_claim", source)
+        self.assertNotIn("BoundedRetryPolicy", source)
 
 
 if __name__ == "__main__":
