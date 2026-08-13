@@ -265,6 +265,13 @@ def advance_production_manager_once(runtime: OriginForgeRuntime) -> ManagerAdvan
             detail=candidate.detail,
         )
 
+    if candidate.action_kind is ManagerAdvanceActionKind.RECOVER_PREPARATION:
+        return ManagerAdvanceOnceResult(
+            ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
+            **_candidate_fields(candidate),
+            detail="safe preparation recovery is admitted but not executed in Phase 42A",
+        )
+
     if candidate.action_kind is ManagerAdvanceActionKind.DISPATCH:
         if candidate.dispatch_candidate is None:
             return _invalid_candidate(candidate, "DISPATCH candidate lacks pinned Phase-38 authority")
