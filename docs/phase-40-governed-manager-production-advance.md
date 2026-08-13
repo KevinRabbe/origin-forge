@@ -1,6 +1,6 @@
 # Phase 40 — Governed Manager Production Advancement & Single Action
 
-Status: **PLANNED — architecture frozen before implementation**
+Status: **IMPLEMENTED — code/test acceptance complete; documentation closure gate pending**
 
 Verified prerequisite `main`:
 
@@ -430,19 +430,41 @@ Final acceptance must prove:
 
 ---
 
-## Proposed implementation slices
+## Implemented slice evidence
+
+The frozen architecture proposed coarser slices. Implementation deliberately split the lower pinned-helper refactor into two independently gated authority boundaries before introducing the global mutating coordinator.
 
 ```text
-40A  protected bounded PREPPOL enumeration + global PREP lifecycle read model
-40B  immutable cross-state Manager advancement admission + ambiguity/currentness rules
-40C  pure selector + pinned Phase-38/39 candidate-execution refactors with regression tests
-40D  one Manager advancement action coordinator
-40E  immutable Manager advancement status
-40F  adversarial cross-phase concurrency/race/recovery acceptance
-40G  documentation / roadmap closure
+40A   PREPPOL/PREP read-only inventory
+      1d780a0e420d4a44fd60e9aa283254adf349aa6a / run 31655089585
+
+40B   immutable global admission and authority conflict rules
+      23722aa0c9221f1c510e1827a88110f67515f4b3 / run 31655537190
+
+40C   pure validated first-candidate selector
+      0405f57a47704e667a2b618644778fd4bac2d1e6 / run 31655763096
+
+40D1  pinned Phase-38 selected-candidate dispatch execution
+      26817b931615b3ada9e2135b1b7c0677b3e78886 / run 31656366116
+
+40D2  pinned Phase-39 selected-candidate preparation execution
+      3a531051344cae369ffba1f69d19580e6fbea3f0 / run 31656659790
+
+40E   one-shot global Manager advancement coordinator
+      f7f00e261518deebc0942b1b423437b49b8dbed1 / run 31657338590
+
+40F   immutable Manager advancement status
+      b13e75f2aa72b9fb9c16643cdedaa2d656b867e6 / run 31657543827
+
+40G   adversarial cross-phase concurrency/race/recovery acceptance
+      2184aaa9998fd8c6030047eae0639dc1091bbc82 / run 31660742401
 ```
 
-Every authority-expanding slice freezes one exact SHA and must pass the normal Ubuntu Python 3.12/3.13 matrix before the next slice begins.
+Every listed accepted run completed successfully on both Ubuntu Python 3.12 and Python 3.13. The few superseded red heads were test-harness/structural-test issues and were corrected without weakening the governing invariants; only the exact accepted heads above carry slice authority.
+
+40G additionally proves the composed boundary itself: concurrent PREPARE calls yield one PREP owner and one planner call; concurrent DISPATCH calls yield one claim/invocation winner; planner uncertainty is not replayed; and separate external calls progress PREPARE → WorkOrder audit → Phase-34 READY → DISPATCH using fresh post-activation authority rather than stale pre-activation evidence.
+
+40H is documentation/roadmap closure only. Its exact head must pass the same normal Python 3.12/3.13 matrix before ready-for-review transition or merge.
 
 ---
 

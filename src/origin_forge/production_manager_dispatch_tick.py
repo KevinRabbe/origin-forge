@@ -216,22 +216,16 @@ def _project_dispatch_error(
     )
 
 
-def dispatch_manager_tick(runtime: OriginForgeRuntime) -> ManagerDispatchTickResult:
-    """Perform one bounded Manager admission/claim/dispatch attempt and stop."""
+def _dispatch_selected_candidate_once(
+    runtime: OriginForgeRuntime,
+    candidate: ManagerDispatchCandidate,
+) -> ManagerDispatchTickResult:
+    """Execute one exact already-admitted Phase-38 candidate and never reselect."""
 
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
-
-    admission = inspect_manager_dispatch_admission_readonly(runtime)
-    selection = select_manager_dispatch_candidate(admission)
-    if selection.status is not ManagerDispatchSelectionStatus.ONE_SELECTED:
-        return _selection_result(selection.status)
-    candidate = selection.candidate
     if not isinstance(candidate, ManagerDispatchCandidate):
-        return ManagerDispatchTickResult(
-            ManagerDispatchTickStatus.INVALID_STATE,
-            ManagerDispatchTickDetail.ADMISSION_INVALID,
-        )
+        raise TypeError("candidate must be a ManagerDispatchCandidate")
 
     fields = _candidate_fields(candidate)
     try:
@@ -293,3 +287,22 @@ def dispatch_manager_tick(runtime: OriginForgeRuntime) -> ManagerDispatchTickRes
         execution_id=completed.execution.execution_id,
         **fields,
     )
+
+
+def dispatch_manager_tick(runtime: OriginForgeRuntime) -> ManagerDispatchTickResult:
+    """Perform one bounded Manager admission/claim/dispatch attempt and stop."""
+
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+
+    admission = inspect_manager_dispatch_admission_readonly(runtime)
+    selection = select_manager_dispatch_candidate(admission)
+    if selection.status is not ManagerDispatchSelectionStatus.ONE_SELECTED:
+        return _selection_result(selection.status)
+    candidate = selection.candidate
+    if not isinstance(candidate, ManagerDispatchCandidate):
+        return ManagerDispatchTickResult(
+            ManagerDispatchTickStatus.INVALID_STATE,
+            ManagerDispatchTickDetail.ADMISSION_INVALID,
+        )
+    return _dispatch_selected_candidate_once(runtime, candidate)

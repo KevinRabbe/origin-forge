@@ -7,10 +7,15 @@ from .production_capability_routing import CapabilityRouteOutcome
 from .production_capability_store import ProductionCapabilityStore
 from .production_preparation_admission import (
     PreparationAdmissionStatus,
+    PreparationCandidate,
     inspect_materialization_preparation_eligibility_readonly,
 )
 from .production_preparation_assembly import assemble_preparation_planner_dependencies
-from .production_preparation_models import PreparationStage, TaskPreparationReceipt
+from .production_preparation_models import (
+    PreparationStage,
+    TaskPreparationPolicyBinding,
+    TaskPreparationReceipt,
+)
 from .production_preparation_policy_store import (
     ProductionPreparationPolicyStoreError,
     read_preparation_policy,
@@ -130,71 +135,20 @@ def _preplanner_failure(
     )
 
 
-def prepare_materialization_tick(
+def _prepare_selected_candidate_once(
     runtime: OriginForgeRuntime,
-    preparation_policy_id: str,
+    policy: TaskPreparationPolicyBinding,
+    candidate: PreparationCandidate,
 ) -> PreparationTickResult:
-    """Perform at most one governed Phase-39 preparation attempt and stop.
-
-    Caller authority is limited to one persisted PREPPOL ID. This function never
-    accepts a Task, route/catalog/policy, adapter, dispatch contract, model role,
-    profile/provider, WorkOrder payload, binder, sandbox, endpoint, or fallback
-    Task. Once one candidate is selected, every race/failure stops this call.
-
-    Successful 39D completion stops at durable PLANNER_RETURNED. It does not
-    publish/audit the WorkOrder, construct Phase-34 authority, acquire a dispatch
-    claim, or execute production work; those remain later independently gated
-    slices.
-    """
+    """Execute one exact already-admitted Phase-39 candidate and never reselect."""
 
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
-    if not isinstance(preparation_policy_id, str):
-        raise TypeError("preparation_policy_id must be a string")
-
-    try:
-        policy = read_preparation_policy(runtime, preparation_policy_id)
-    except (ProductionPreparationPolicyStoreError, TypeError, ValueError) as exc:
-        return PreparationTickResult(
-            PreparationTickStatus.INVALID_POLICY,
-            preparation_policy_id,
-            None,
-            None,
-            None,
-            None,
-            _detail(exc),
-        )
-
-    admission = inspect_materialization_preparation_eligibility_readonly(
-        runtime,
-        policy,
-    )
-    selection = select_preparation_candidate(admission)
-    if selection.status is PreparationSelectionStatus.NO_ELIGIBLE_TASK:
-        return PreparationTickResult(
-            PreparationTickStatus.NO_ELIGIBLE_TASK,
-            preparation_policy_id,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-    if (
-        admission.status is not PreparationAdmissionStatus.COMPLETE
-        or selection.status is not PreparationSelectionStatus.ONE_SELECTED
-        or selection.candidate is None
-    ):
-        return PreparationTickResult(
-            PreparationTickStatus.INVALID_ADMISSION,
-            preparation_policy_id,
-            None,
-            None,
-            None,
-            None,
-            admission.detail or selection.status.value,
-        )
-    candidate = selection.candidate
+    if not isinstance(policy, TaskPreparationPolicyBinding):
+        raise TypeError("policy must be a TaskPreparationPolicyBinding")
+    if not isinstance(candidate, PreparationCandidate):
+        raise TypeError("candidate must be a PreparationCandidate")
+    preparation_policy_id = policy.preparation_policy_id
 
     try:
         receipt = acquire_preparation_receipt(runtime, policy, candidate)
@@ -349,3 +303,81 @@ def prepare_materialization_tick(
         planner_result,
         None,
     )
+
+
+def prepare_materialization_tick(
+    runtime: OriginForgeRuntime,
+    preparation_policy_id: str,
+) -> PreparationTickResult:
+    """Perform at most one governed Phase-39 preparation attempt and stop.
+
+    Caller authority is limited to one persisted PREPPOL ID. This function never
+    accepts a Task, route/catalog/policy, adapter, dispatch contract, model role,
+    profile/provider, WorkOrder payload, binder, sandbox, endpoint, or fallback
+    Task. Once one candidate is selected, every race/failure stops this call.
+
+    Successful 39D completion stops at durable PLANNER_RETURNED. It does not
+    publish/audit the WorkOrder, construct Phase-34 authority, acquire a dispatch
+    claim, or execute production work; those remain later independently gated
+    slices.
+    """
+
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    if not isinstance(preparation_policy_id, str):
+        raise TypeError("preparation_policy_id must be a string")
+
+    try:
+        policy = read_preparation_policy(runtime, preparation_policy_id)
+    except (ProductionPreparationPolicyStoreError, TypeError, ValueError) as exc:
+        return PreparationTickResult(
+            PreparationTickStatus.INVALID_POLICY,
+            preparation_policy_id,
+            None,
+            None,
+            None,
+            None,
+            _detail(exc),
+        )
+
+    admission = inspect_materialization_preparation_eligibility_readonly(
+        runtime,
+        policy,
+    )
+    selection = select_preparation_candidate(admission)
+    if selection.status is PreparationSelectionStatus.NO_ELIGIBLE_TASK:
+        return PreparationTickResult(
+            PreparationTickStatus.NO_ELIGIBLE_TASK,
+            preparation_policy_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    if (
+        admission.status is not PreparationAdmissionStatus.COMPLETE
+        or selection.status is not PreparationSelectionStatus.ONE_SELECTED
+        or selection.candidate is None
+    ):
+        return PreparationTickResult(
+            PreparationTickStatus.INVALID_ADMISSION,
+            preparation_policy_id,
+            None,
+            None,
+            None,
+            None,
+            admission.detail or selection.status.value,
+        )
+    candidate = selection.candidate
+    if not isinstance(candidate, PreparationCandidate):
+        return PreparationTickResult(
+            PreparationTickStatus.INVALID_ADMISSION,
+            preparation_policy_id,
+            None,
+            None,
+            None,
+            None,
+            "selection did not return a typed PreparationCandidate",
+        )
+    return _prepare_selected_candidate_once(runtime, policy, candidate)
