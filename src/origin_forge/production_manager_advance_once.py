@@ -180,10 +180,11 @@ def _project_preparation(
             candidate,
             f"pinned Phase-39 helper returned impossible status {result.status.value}",
         )
+    fields = _candidate_fields(candidate)
+    fields["preparation_id"] = result.preparation_id
     return ManagerAdvanceOnceResult(
         status,
-        **_candidate_fields(candidate),
-        preparation_id=result.preparation_id,
+        **fields,
         lower_status=result.status.value,
         detail=result.detail,
     )
