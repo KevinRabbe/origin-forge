@@ -246,7 +246,7 @@ providers = [
             self.routed.preparation_id,
             self.routed.revision,
         )
-        real_checkpoint = resume_module.checkpoint_preparation_planner_started
+        real_checkpoint = resume_module._checkpoint_validated_planner_started
         barrier = threading.Barrier(2)
         lock = threading.Lock()
         model_calls = 0
@@ -284,7 +284,7 @@ providers = [
             ),
             patch.object(
                 resume_module,
-                "checkpoint_preparation_planner_started",
+                "_checkpoint_validated_planner_started",
                 side_effect=racing_checkpoint,
             ),
             patch.object(ScheduledModelAdapter, "generate", side_effect=generate),
@@ -319,9 +319,10 @@ providers = [
         source = inspect.getsource(resume_module)
         self.assertEqual(source.count("planner.propose("), 1)
         self.assertLess(
-            source.index("checkpoint_preparation_planner_started("),
+            source.index("_checkpoint_validated_planner_started("),
             source.index("planner.propose("),
         )
+        self.assertNotIn("read_preparation_policy", source)
         for forbidden in (
             "dispatch_claim_once",
             "acquire_dispatch_claim",
