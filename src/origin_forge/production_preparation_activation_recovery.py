@@ -9,13 +9,11 @@ from .production_preparation_policy_store import (
     ProductionPreparationPolicyStoreError,
     read_preparation_policy,
 )
-from .production_preparation_provenance import (
-    ProductionPreparationProvenanceError,
-    resolve_preparation_policy_provenance,
-)
 from .production_preparation_receipts import (
+    PreparationReceiptError,
     _load_receipt_connection,
     _require_active_checkpoint,
+    read_preparation_receipt,
 )
 from .production_preparation_recovery import (
     PreparationRecoveryReadError,
@@ -38,6 +36,20 @@ class PreparationActivationRecoveryError(RuntimeError):
     pass
 
 
+def _require_policy_matches_receipt(policy, receipt: TaskPreparationReceipt) -> None:
+    if (
+        policy.content_hash != receipt.preparation_policy_hash
+        or policy.project_id != receipt.project_id
+        or policy.materialization_id != receipt.materialization_id
+        or policy.materialization_hash != receipt.materialization_hash
+        or policy.planning_input_id != receipt.planning_input_id
+        or policy.planning_input_hash != receipt.planning_input_hash
+    ):
+        raise PreparationActivationRecoveryError(
+            "PREP no longer binds exact durable PREPPOL authority"
+        )
+
+
 def adopt_legacy_preparation_activation(
     runtime: OriginForgeRuntime,
     preparation_id: str,
@@ -45,11 +57,12 @@ def adopt_legacy_preparation_activation(
 ) -> TaskPreparationReceipt:
     """Adopt one proven legacy Phase-35 activation into a missing PREP checkpoint.
 
-    The immutable 41A classifier is not trusted as mutation authority. This
-    function independently replays the exact PREPPOL/provenance and acquisition /
-    activation-event proof under one BEGIN IMMEDIATE SQLite transaction and then
-    uses the 41B connection-scoped checkpoint helper. It never changes Task state
-    and never synthesizes a new activation event.
+    Full protected PREPPOL/provenance validation is performed while SQLite is
+    quiescent. The subsequent BEGIN IMMEDIATE transaction independently reloads
+    the exact PREP, Task/readiness, and acquisition/activation events before the
+    41B connection-scoped checkpoint CAS. No immutable read connection is opened
+    while the write journal is active. Task state is never changed and no new
+    activation event is synthesized.
     """
 
     if not isinstance(runtime, OriginForgeRuntime):
@@ -58,6 +71,36 @@ def adopt_legacy_preparation_activation(
         raise PreparationActivationRecoveryError(
             "expected_revision must be a non-negative integer"
         )
+
+    # Protected PREPPOL readers intentionally use the Phase-30 immutable SQLite
+    # guard while reconstructing provenance. They therefore must run before the
+    # authoritative write transaction creates a journal. This snapshot is only
+    # prevalidation; every SQLite relation is reloaded under BEGIN IMMEDIATE.
+    try:
+        snapshot = read_preparation_receipt(runtime, preparation_id)
+        _require_active_checkpoint(
+            snapshot,
+            expected_stage=PreparationStage.CLAIMED,
+            expected_revision=expected_revision,
+        )
+        if snapshot.revision != 0:
+            raise PreparationActivationRecoveryError(
+                "legacy activation adoption requires original PREP revision zero"
+            )
+        policy = read_preparation_policy(runtime, snapshot.preparation_policy_id)
+        _require_policy_matches_receipt(policy, snapshot)
+    except PreparationActivationRecoveryError:
+        raise
+    except (
+        PreparationReceiptError,
+        ProductionPreparationPolicyStoreError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise PreparationActivationRecoveryError(
+            "PREPPOL provenance is unavailable, stale, or invalid"
+        ) from exc
 
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -82,33 +125,11 @@ def adopt_legacy_preparation_activation(
             raise PreparationActivationRecoveryError(
                 "legacy activation adoption requires original PREP revision zero"
             )
-
-        try:
-            policy = read_preparation_policy(runtime, receipt.preparation_policy_id)
-            if (
-                policy.content_hash != receipt.preparation_policy_hash
-                or policy.project_id != receipt.project_id
-                or policy.materialization_id != receipt.materialization_id
-                or policy.materialization_hash != receipt.materialization_hash
-                or policy.planning_input_id != receipt.planning_input_id
-                or policy.planning_input_hash != receipt.planning_input_hash
-            ):
-                raise PreparationActivationRecoveryError(
-                    "PREP no longer binds exact durable PREPPOL authority"
-                )
-            resolve_preparation_policy_provenance(runtime, policy)
-        except PreparationActivationRecoveryError:
-            raise
-        except (
-            ProductionPreparationPolicyStoreError,
-            ProductionPreparationProvenanceError,
-            KeyError,
-            TypeError,
-            ValueError,
-        ) as exc:
+        if receipt != snapshot:
             raise PreparationActivationRecoveryError(
-                "PREPPOL provenance is unavailable, stale, or invalid"
-            ) from exc
+                "PREP changed after protected provenance prevalidation"
+            )
+        _require_policy_matches_receipt(policy, receipt)
 
         task = conn.execute(
             """SELECT t.*, g.project_id
