@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from .production_capability_routing import CapabilityRouteOutcome
 from .production_capability_store import ProductionCapabilityStore
 from .production_preparation_activation import activate_and_checkpoint_preparation
 from .production_preparation_admission import (
@@ -11,25 +10,23 @@ from .production_preparation_admission import (
     PreparationCandidate,
     inspect_materialization_preparation_eligibility_readonly,
 )
-from .production_preparation_assembly import assemble_preparation_planner_dependencies
 from .production_preparation_models import (
     PreparationStage,
+    PreparationStatus,
     TaskPreparationPolicyBinding,
     TaskPreparationReceipt,
+)
+from .production_preparation_planner_resume import (
+    PreparationPlannerResumeStatus,
+    resume_routed_preparation_planner_once,
 )
 from .production_preparation_policy_store import (
     ProductionPreparationPolicyStoreError,
     read_preparation_policy,
 )
-from .production_preparation_provenance import (
-    ProductionPreparationProvenanceError,
-    resolve_preparation_policy_provenance,
-)
 from .production_preparation_receipts import (
     PreparationReceiptError,
     acquire_preparation_receipt,
-    checkpoint_preparation_planner_returned,
-    checkpoint_preparation_planner_started,
     checkpoint_preparation_routed,
     fail_preparation_before_planner,
     read_preparation_receipt,
@@ -38,11 +35,7 @@ from .production_preparation_selection import (
     PreparationSelectionStatus,
     select_preparation_candidate,
 )
-from .production_work_order_builtin import build_builtin_dispatch_validator_registry
-from .production_work_order_planner import (
-    BoundedProductionWorkOrderPlanner,
-    WorkOrderPlannerResult,
-)
+from .production_work_order_planner import WorkOrderPlannerResult
 from .runtime import OriginForgeRuntime
 
 
@@ -181,53 +174,10 @@ def _prepare_selected_candidate_once(
             receipt.revision,
             route.route_decision_id,
         )
-
-        dependencies = assemble_preparation_planner_dependencies(runtime, policy)
-        owner = dependencies.owner
-        resolution = route.resolution
-        if (
-            resolution.outcome is not CapabilityRouteOutcome.ROUTABLE
-            or resolution.selected_adapter_id != owner.supported_adapter_id
-            or resolution.selected_adapter_fingerprint
-            != owner.supported_adapter_fingerprint
-        ):
-            raise PreparationReceiptError(
-                "current Phase-32 route is unsupported by code-owned preparation owner"
-            )
-        try:
-            provenance = resolve_preparation_policy_provenance(runtime, policy)
-            contract = provenance.dispatch_contract_catalog.contract_for_adapter(
-                resolution.selected_adapter_id
-            )
-        except (
-            ProductionPreparationProvenanceError,
-            KeyError,
-            TypeError,
-            ValueError,
-        ) as exc:
-            raise PreparationReceiptError(
-                "current dispatch contract is unavailable for selected route"
-            ) from exc
-        if (
-            contract.contract_id != owner.supported_dispatch_contract_id
-            or contract.content_hash != owner.supported_dispatch_contract_hash
-            or contract.adapter_fingerprint != owner.supported_adapter_fingerprint
-            or contract.max_input_refs != 0
-        ):
-            raise PreparationReceiptError(
-                "current dispatch contract exceeds v1 preparation owner authority"
-            )
-
-        receipt = checkpoint_preparation_planner_started(
-            runtime,
-            receipt.preparation_id,
-            receipt.revision,
-            dependencies.plan,
-        )
     except BaseException as exc:
-        # Before PLANNER_STARTED every failure is known to have occurred before
-        # the model boundary. BaseException is safe to terminalize only while
-        # the durable receipt still proves a pre-planner stage.
+        # Before ROUTED every failure is known to have occurred before the
+        # model boundary. BaseException is safe to terminalize only while the
+        # durable receipt still proves a pre-planner stage.
         if receipt.stage in (
             PreparationStage.CLAIMED,
             PreparationStage.ACTIVATED,
@@ -252,49 +202,76 @@ def _prepare_selected_candidate_once(
                 pass
         raise
 
-    # Durable PLANNER_STARTED now exists. From this point forward this function
-    # intentionally has no automatic failure/retry/replay transition.
-    try:
-        planner = BoundedProductionWorkOrderPlanner(
-            runtime,
-            ProductionCapabilityStore(runtime),
-            provenance.dispatch_contract_catalog,
-            build_builtin_dispatch_validator_registry(),
-            dependencies.model,
+    # The accepted Phase-41D2 coordinator now owns the shared ROUTED planner
+    # boundary for both normal preparation and explicit recovery. It persists
+    # PLANNER_STARTED before its sole model call and never reselects another PREP.
+    # Keep this call outside the pre-planner BaseException handler: once D2 may
+    # have committed PLANNER_STARTED, uncertainty must never be terminalized as
+    # a known pre-planner failure.
+    resumed = resume_routed_preparation_planner_once(
+        runtime,
+        receipt.preparation_id,
+        receipt.revision,
+    )
+    if resumed.status is PreparationPlannerResumeStatus.PLANNER_RETURNED:
+        if resumed.receipt is None or resumed.planner_result is None:
+            return PreparationTickResult(
+                PreparationTickStatus.PLANNER_RECOVERY_REQUIRED,
+                preparation_policy_id,
+                receipt.preparation_id,
+                receipt.task_id,
+                resumed.receipt or receipt,
+                None,
+                "planner resume reported PLANNER_RETURNED without exact result evidence",
+            )
+        return PreparationTickResult(
+            PreparationTickStatus.PLANNER_RETURNED,
+            preparation_policy_id,
+            resumed.receipt.preparation_id,
+            resumed.receipt.task_id,
+            resumed.receipt,
+            resumed.planner_result,
+            resumed.detail,
         )
-        planner_result = planner.propose(
-            receipt.route_decision_id,
-            allowed_input_refs=(),
-        )
-        returned = checkpoint_preparation_planner_returned(
-            runtime,
-            receipt.preparation_id,
-            receipt.revision,
-            planner_result,
-        )
-    except Exception as exc:
-        try:
-            current = read_preparation_receipt(runtime, receipt.preparation_id)
-        except Exception:
-            current = receipt
+
+    if resumed.status is PreparationPlannerResumeStatus.PLANNER_RECOVERY_REQUIRED:
         return PreparationTickResult(
             PreparationTickStatus.PLANNER_RECOVERY_REQUIRED,
             preparation_policy_id,
             receipt.preparation_id,
             receipt.task_id,
-            current,
+            resumed.receipt or receipt,
             None,
-            _detail(exc),
+            resumed.detail,
+        )
+
+    current = resumed.receipt or receipt
+    if (
+        resumed.status is PreparationPlannerResumeStatus.INVALID_AUTHORITY
+        and current.status is PreparationStatus.ACTIVE
+        and current.stage in (
+            PreparationStage.CLAIMED,
+            PreparationStage.ACTIVATED,
+            PreparationStage.ROUTED,
+        )
+    ):
+        return _preplanner_failure(
+            runtime,
+            preparation_policy_id,
+            current,
+            PreparationReceiptError(
+                resumed.detail or "shared planner boundary rejected current authority"
+            ),
         )
 
     return PreparationTickResult(
-        PreparationTickStatus.PLANNER_RETURNED,
+        PreparationTickStatus.PLANNER_RECOVERY_REQUIRED,
         preparation_policy_id,
-        returned.preparation_id,
-        returned.task_id,
-        returned,
-        planner_result,
+        receipt.preparation_id,
+        receipt.task_id,
+        current,
         None,
+        resumed.detail or "shared planner boundary returned invalid state",
     )
 
 
