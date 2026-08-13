@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import origin_forge.production_preparation_tick as tick_module
+import origin_forge.production_preparation_planner_resume as planner_resume_module
 from origin_forge.model import ModelResponse
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
 from origin_forge.production_capability_models import CapabilityRoutingPolicy
@@ -201,7 +201,7 @@ providers = [
                 return_value=self._response(),
             ),
             patch.object(
-                tick_module,
+                planner_resume_module,
                 "checkpoint_preparation_planner_returned",
                 side_effect=PreparationReceiptError("simulated lost PREP return checkpoint"),
             ),

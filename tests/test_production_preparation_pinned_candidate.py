@@ -85,6 +85,11 @@ class ProductionPreparationPinnedCandidateTests(unittest.TestCase):
             ),
             patch.object(
                 tick_module,
+                "resolve_preparation_policy_provenance",
+                return_value=object(),
+            ),
+            patch.object(
+                tick_module,
                 "acquire_preparation_receipt",
                 side_effect=PreparationReceiptError("selected candidate lost race"),
             ) as acquire,
@@ -135,7 +140,7 @@ class ProductionPreparationPinnedCandidateTests(unittest.TestCase):
         self.assertIs(result, projected)
         pinned.assert_called_once_with(self.runtime, self.policy, self.candidate)
 
-    def test_pinned_helper_source_has_one_planner_call_and_no_admission_or_selection(self) -> None:
+    def test_pinned_helper_source_delegates_shared_planner_once_and_never_plans_directly(self) -> None:
         source = inspect.getsource(_prepare_selected_candidate_once)
         tree = ast.parse(source)
         calls = {
@@ -154,11 +159,27 @@ class ProductionPreparationPinnedCandidateTests(unittest.TestCase):
                 1
                 for node in ast.walk(tree)
                 if isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "propose"
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "_resume_same_call_routed_preparation_planner_once"
             ),
             1,
         )
+        self.assertEqual(
+            sum(
+                1
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "propose"
+            ),
+            0,
+        )
+        self.assertLess(
+            source.index("resolve_preparation_policy_provenance("),
+            source.index("acquire_preparation_receipt("),
+        )
+        self.assertNotIn("checkpoint_preparation_planner_started", calls)
+        self.assertNotIn("checkpoint_preparation_planner_returned", calls)
         self.assertFalse(any(isinstance(node, (ast.For, ast.While)) for node in ast.walk(tree)))
         self.assertEqual(
             tuple(inspect.signature(_prepare_selected_candidate_once).parameters),
