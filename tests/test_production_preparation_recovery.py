@@ -292,6 +292,30 @@ class PreparationRecoveryReadTests(unittest.TestCase):
         self.assertEqual(result.state, PreparationRecoveryState.STALE_OR_INVALID)
         self.assertIn("canonical", result.detail or "")
 
+
+    def test_legacy_claimed_ready_requires_receipt_revision_zero(self) -> None:
+        receipt = self._acquire()
+        activate_dependency_ready_task(
+            self.runtime,
+            receipt.task_id,
+            receipt.queued_task_revision,
+        )
+        with self.runtime.store.session() as conn:
+            conn.execute(
+                """UPDATE task_preparations
+                   SET revision = 7
+                   WHERE preparation_id = ?""",
+                (receipt.preparation_id,),
+            )
+
+        result = inspect_preparation_recovery_readonly(
+            self.runtime,
+            receipt.preparation_id,
+        )
+
+        self.assertEqual(result.state, PreparationRecoveryState.STALE_OR_INVALID)
+        self.assertIn("Phase-35", result.detail or "")
+
     def test_durable_activated_checkpoint_maps_to_resumable_activated(self) -> None:
         receipt = self._acquire()
         activation = activate_dependency_ready_task(
