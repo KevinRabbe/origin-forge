@@ -189,6 +189,30 @@ class PreparationActivationRecoveryTests(unittest.TestCase):
         self.assertEqual(durable.stage, PreparationStage.CLAIMED)
         self.assertEqual(durable.revision, receipt.revision)
 
+    def test_stale_bound_cappol_provenance_cannot_be_adopted(self) -> None:
+        receipt, _ = self._legacy_claimed_ready()
+        policy_path = (
+            self.runtime.state_dir
+            / "production-capabilities"
+            / "policies"
+            / f"{self.policy.capability_routing_policy_id}.json"
+        )
+        policy_path.write_text("{}", encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            PreparationActivationRecoveryError,
+            "PREPPOL provenance",
+        ):
+            adopt_legacy_preparation_activation(
+                self.runtime,
+                receipt.preparation_id,
+                receipt.revision,
+            )
+
+        durable = read_preparation_receipt(self.runtime, receipt.preparation_id)
+        self.assertEqual(durable.stage, PreparationStage.CLAIMED)
+        self.assertEqual(durable.revision, receipt.revision)
+
     def test_duplicate_activation_revision_evidence_is_rejected(self) -> None:
         receipt, _ = self._legacy_claimed_ready()
         with self.runtime.store.session() as conn:
