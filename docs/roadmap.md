@@ -817,6 +817,27 @@ See `docs/phase-40-governed-manager-production-advance.md` for the frozen archit
 
 **Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 41 — Governed Preparation Recovery & Pre-Planner Resumption — DONE
+
+Implemented one explicit one-PREP crash-recovery boundary over existing Phase-39 preparation authority:
+
+- immutable exact recovery classification for one existing `PREP-*`, with no selection, fallback, loop, or repair side effects;
+- exact dependency-ready `CLAIMED` recovery using atomic Phase-35 Task activation plus PREP `ACTIVATED` checkpointing in one SQLite transaction;
+- bounded legacy lost-activation-checkpoint adoption only from exact post-acquisition Phase-35 state-event evidence;
+- deterministic `ACTIVATED` recovery through current Phase-32 route reconstruction/reuse and exact PREP `ROUTED` checkpointing;
+- `ROUTED` recovery through a durable `PLANNER_STARTED` compare-and-swap fence and at most one existing Phase-33 WorkOrder-planner call;
+- one shared planner-call owner for explicit recovery and normal Phase39 preparation, while preserving the strict quiescent Phase-30 immutable-read guard for recovery and a WAL-safe same-call current-state boundary for the live normal write path;
+- `PLANNER_STARTED` evidence-only reconciliation of one trustworthy successful planner result, with model replay forbidden;
+- one public `recover_preparation_once(runtime, preparation_id)` composition that advances at most one classified recovery edge and then stops;
+- adversarial cross-phase acceptance covering acquisition-crash recovery and lost-return-checkpoint recovery with zero dispatch claims/executions;
+- no Manager admission/selection, second-Task/PREP fallback, daemon/timer/background polling, Phase-38 claim acquisition, Phase-37 execution invocation, Task outcome reinterpretation, Artifact adoption/signing, Project Intelligence mutation, Dream promotion, training, merge, or release authority.
+
+See `docs/phase-41-governed-preparation-recovery.md` for the frozen architecture and `docs/phase-41-implementation-closure.md` for the accepted implementation, shared planner-ownership repair, adversarial acceptance, and exact CI evidence.
+
+**Exit condition met in implementation:** Phase-41 acceptance is green through exact adversarial code/test head `3d651f2193538b68a11371722961c6b8e5c31692` / run `31724154244` on Python 3.12 and Python 3.13; the implementation-closure companion head `8721bc2e923e0df59bd6b6ad77c6794a3a934885` / run `31724934199` also passed both interpreters.
+
+**Merge gate:** this canonical roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded squash merge.
+
 ---
 
 # v0.1 — First Useful Release
