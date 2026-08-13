@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from .production_capability_routing import CapabilityRouteOutcome
 from .production_capability_store import ProductionCapabilityStore
+from .production_preparation_activation import activate_and_checkpoint_preparation
 from .production_preparation_admission import (
     PreparationAdmissionStatus,
     PreparationCandidate,
@@ -27,7 +28,6 @@ from .production_preparation_provenance import (
 from .production_preparation_receipts import (
     PreparationReceiptError,
     acquire_preparation_receipt,
-    checkpoint_preparation_activated,
     checkpoint_preparation_planner_returned,
     checkpoint_preparation_planner_started,
     checkpoint_preparation_routed,
@@ -38,7 +38,6 @@ from .production_preparation_selection import (
     PreparationSelectionStatus,
     select_preparation_candidate,
 )
-from .production_task_activation import activate_dependency_ready_task
 from .production_work_order_builtin import build_builtin_dispatch_validator_registry
 from .production_work_order_planner import (
     BoundedProductionWorkOrderPlanner,
@@ -164,16 +163,10 @@ def _prepare_selected_candidate_once(
         )
 
     try:
-        activation = activate_dependency_ready_task(
-            runtime,
-            candidate.task_id,
-            candidate.task_revision,
-        )
-        receipt = checkpoint_preparation_activated(
+        receipt = activate_and_checkpoint_preparation(
             runtime,
             receipt.preparation_id,
             receipt.revision,
-            activation,
         )
 
         capability_store = ProductionCapabilityStore(runtime)
