@@ -149,7 +149,6 @@ class ProductionPreparationPinnedCandidateTests(unittest.TestCase):
         }
         self.assertNotIn("inspect_materialization_preparation_eligibility_readonly", calls)
         self.assertNotIn("select_preparation_candidate", calls)
-        self.assertEqual(calls.count("resume_routed_preparation_planner_once") if hasattr(calls, "count") else int("resume_routed_preparation_planner_once" in calls), 1)
         self.assertEqual(
             sum(
                 1
