@@ -7,14 +7,21 @@ from .production_capability_read import (
     inspect_task_route,
     read_capability_route,
 )
-from .production_capability_routing import CapabilityRouteResolution
+from .production_capability_routing import (
+    CapabilityRouteResolution,
+    CapabilityRoutingError,
+)
 from .production_capability_store import (
     _MAX_OBJECTS_PER_CATEGORY,
     CapabilityRouteDecision,
     ProductionCapabilityStore,
     ProductionCapabilityStoreError,
 )
-from .production_preparation_models import PreparationStage, PreparationStatus
+from .production_preparation_models import (
+    PreparationStage,
+    PreparationStatus,
+    TaskPreparationReceipt,
+)
 from .production_preparation_policy_store import (
     ProductionPreparationPolicyStoreError,
     read_preparation_policy,
@@ -108,7 +115,7 @@ def recover_and_checkpoint_preparation_route(
     runtime: OriginForgeRuntime,
     preparation_id: str,
     expected_revision: int,
-):
+) -> TaskPreparationReceipt:
     """Recover or publish one exact Phase-32 route for an ACTIVATED PREP.
 
     Existing protected route evidence is enumerated under a hard object bound and
@@ -133,7 +140,7 @@ def recover_and_checkpoint_preparation_route(
 
     try:
         receipt = read_preparation_receipt(runtime, preparation_id)
-    except PreparationReceiptError as exc:
+    except (PreparationReceiptError, KeyError, TypeError, ValueError) as exc:
         raise PreparationRouteRecoveryError("PREP receipt is unavailable") from exc
     if (
         receipt.status is not PreparationStatus.ACTIVE
@@ -148,7 +155,7 @@ def recover_and_checkpoint_preparation_route(
 
     try:
         policy = read_preparation_policy(runtime, receipt.preparation_policy_id)
-    except ProductionPreparationPolicyStoreError as exc:
+    except (ProductionPreparationPolicyStoreError, KeyError, TypeError, ValueError) as exc:
         raise PreparationRouteRecoveryError("PREPPOL authority is unavailable") from exc
     if (
         policy.content_hash != receipt.preparation_policy_hash
@@ -167,7 +174,13 @@ def recover_and_checkpoint_preparation_route(
             policy.capability_catalog_id,
             policy.capability_routing_policy_id,
         )
-    except (ProductionCapabilityReadError, KeyError, TypeError, ValueError) as exc:
+    except (
+        ProductionCapabilityReadError,
+        CapabilityRoutingError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
         raise PreparationRouteRecoveryError(
             "current Phase-32 route resolution cannot be reconstructed"
         ) from exc
