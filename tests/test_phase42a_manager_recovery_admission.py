@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
+import origin_forge.production_manager_advance_admission as admission_module
 from origin_forge.production_manager_advance_admission import (
     ManagerAdvanceActionKind,
     ManagerAdvanceAdmission,
@@ -57,29 +59,38 @@ class Phase42ARecoveryAdmissionTests(unittest.TestCase):
         )
 
     def test_exact_current_preplanner_stages_admit_safe_recovery(self) -> None:
+        runtime = object()
         for stage in (
             PreparationStage.CLAIMED,
             PreparationStage.ACTIVATED,
             PreparationStage.ROUTED,
         ):
             with self.subTest(stage=stage):
-                candidate = _receipt_candidate(self._entry(stage), self._projection())
+                candidate = _receipt_candidate(runtime, self._entry(stage), self._projection())
                 self.assertEqual(candidate.action_kind, ManagerAdvanceActionKind.RECOVER_PREPARATION)
                 self.assertEqual(candidate.preparation_stage, stage)
                 self.assertIsNone(candidate.detail)
 
     def test_noncurrent_or_stale_preplanner_authority_remains_fail_closed(self) -> None:
-        for projection in (
-            self._projection(current=False),
-            self._projection(stale=True),
-        ):
-            with self.subTest(projection=projection):
-                candidate = _receipt_candidate(
-                    self._entry(PreparationStage.CLAIMED),
-                    projection,
-                )
-                self.assertEqual(candidate.action_kind, ManagerAdvanceActionKind.RECOVERY_REQUIRED)
-                self.assertTrue(candidate.detail)
+        runtime = object()
+        with patch.object(
+            admission_module,
+            "_legacy_claimed_recovery_is_adoptable",
+            return_value=False,
+        ) as legacy_adoptable:
+            for projection in (
+                self._projection(current=False),
+                self._projection(stale=True),
+            ):
+                with self.subTest(projection=projection):
+                    candidate = _receipt_candidate(
+                        runtime,
+                        self._entry(PreparationStage.CLAIMED),
+                        projection,
+                    )
+                    self.assertEqual(candidate.action_kind, ManagerAdvanceActionKind.RECOVERY_REQUIRED)
+                    self.assertTrue(candidate.detail)
+        self.assertEqual(legacy_adoptable.call_count, 2)
 
     def test_selector_validates_recover_preparation_counter(self) -> None:
         candidate = ManagerAdvanceCandidate(
