@@ -152,6 +152,7 @@ profiles = [
 ]
 policies = [
   { role = "coder_strong", primary_profile_id = "strong", fallback_profile_ids = [] }
+]
 
 [model_runtimes]
 providers = [
