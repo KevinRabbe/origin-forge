@@ -348,8 +348,10 @@ class ManagerAdvanceAdmissionTests(unittest.TestCase):
         self.assertEqual(result.status, ManagerAdvanceAdmissionStatus.COMPLETE)
         self.assertEqual(
             tuple(candidate.action_kind for candidate in result.candidates),
-            (ManagerAdvanceActionKind.RECOVERY_REQUIRED, ManagerAdvanceActionKind.DISPATCH),
+            (ManagerAdvanceActionKind.RECOVER_PREPARATION, ManagerAdvanceActionKind.DISPATCH),
         )
+        self.assertEqual(result.recover_preparation_count, 1)
+        self.assertEqual(result.recovery_required_count, 0)
         self.assertEqual(result.candidates[0].task_id, older_task)
 
     def test_active_preparation_and_dispatch_same_task_fail_closed(self) -> None:
