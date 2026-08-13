@@ -225,6 +225,7 @@ class ManagerAdvanceInventoryTests(unittest.TestCase):
     def test_invalid_receipt_lifecycle_fails_closed_without_partial_inventory(self) -> None:
         _, _, receipt = self._acquire_receipt()
         with self.runtime.store.session() as conn:
+            conn.execute("PRAGMA ignore_check_constraints = ON")
             conn.execute(
                 "UPDATE task_preparations SET stage = 'BOUND' WHERE preparation_id = ?",
                 (receipt.preparation_id,),
