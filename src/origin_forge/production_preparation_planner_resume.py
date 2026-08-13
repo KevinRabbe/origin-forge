@@ -87,8 +87,9 @@ def _checkpoint_validated_planner_started(
     dispatch-contract, and model dependency authority while SQLite was quiescent.
     This writer intentionally performs no protected immutable reads: it reloads
     only the exact durable PREP row under BEGIN IMMEDIATE, proves it is byte-for-
-    byte the D1 receipt, rechecks the frozen policy/plan relation, then commits
-    the no-replay marker. The public coordinator is the only caller.
+    byte the D1 receipt, rechecks the frozen PREP/PREPPOL and plan/PREPPOL
+    identities, then commits the no-replay marker. The public coordinator is the
+    only caller.
     """
 
     if not isinstance(runtime, OriginForgeRuntime):
@@ -109,14 +110,9 @@ def _checkpoint_validated_planner_started(
         or snapshot.preparation_policy_hash != policy.content_hash
         or plan.preparation_policy_id != policy.preparation_policy_id
         or plan.preparation_policy_hash != policy.content_hash
-        or plan.preparation_owner_id != policy.preparation_owner_id
-        or plan.preparation_owner_fingerprint != policy.preparation_owner_fingerprint
-        or plan.planner_request_version != policy.planner_request_version
-        or plan.planner_contract_id != policy.planner_contract_id
-        or plan.model_strategy_roles != policy.model_strategy_roles
     ):
         raise PreparationReceiptError(
-            "validated planner boundary no longer has an exact PREPPOL dependency relation"
+            "validated planner boundary no longer has an exact PREPPOL identity relation"
         )
 
     now = utc_now()
