@@ -64,9 +64,16 @@ def _claim_oldest(testcase: unittest.TestCase, scenario):
         scenario.preparation_policy,
         candidate,
     )
-    testcase.assertEqual(receipt.task_id, scenario.task_ids[0])
+    testcase.assertEqual(receipt.task_id, candidate.task_id)
     testcase.assertEqual(receipt.stage, PreparationStage.CLAIMED)
     return receipt
+
+
+def _other_task_id(testcase: unittest.TestCase, scenario, claimed_task_id: str) -> str:
+    testcase.assertEqual(len(scenario.task_ids), 2)
+    others = tuple(task_id for task_id in scenario.task_ids if task_id != claimed_task_id)
+    testcase.assertEqual(len(others), 1)
+    return others[0]
 
 
 def _recover_to_routed(testcase: unittest.TestCase, scenario, claimed):
@@ -119,7 +126,7 @@ class Phase42CManagerRecoveryAcceptanceTests(unittest.TestCase):
     def test_oldest_recovery_advances_one_edge_per_call_and_never_falls_through(self) -> None:
         scenario = _scenario(self, steps=2)
         claimed = _claim_oldest(self, scenario)
-        newer_task_id = scenario.task_ids[1]
+        newer_task_id = _other_task_id(self, scenario, claimed.task_id)
 
         initial = inspect_manager_advance_admission_readonly(scenario.runtime)
         self.assertEqual(initial.status, ManagerAdvanceAdmissionStatus.COMPLETE)
@@ -145,7 +152,7 @@ class Phase42CManagerRecoveryAcceptanceTests(unittest.TestCase):
     def test_routed_recovery_persists_planner_fence_and_stops_before_finalization(self) -> None:
         scenario = _scenario(self, steps=2)
         claimed = _claim_oldest(self, scenario)
-        newer_task_id = scenario.task_ids[1]
+        newer_task_id = _other_task_id(self, scenario, claimed.task_id)
         routed = _recover_to_routed(self, scenario, claimed)
         observed_stages: list[PreparationStage] = []
 
@@ -201,8 +208,8 @@ class Phase42CManagerRecoveryAcceptanceTests(unittest.TestCase):
     def test_concurrent_recovery_uses_one_planner_fence_and_never_dispatches_newer_task(self) -> None:
         scenario = _scenario(self, steps=2)
         claimed = _claim_oldest(self, scenario)
+        newer_task_id = _other_task_id(self, scenario, claimed.task_id)
         _recover_to_routed(self, scenario, claimed)
-        newer_task_id = scenario.task_ids[1]
 
         activate_dependency_ready_task(scenario.runtime, newer_task_id, 0)
         phase40.Phase40ManagerAdvanceAcceptanceTests._publish_pre_activation_chain(
