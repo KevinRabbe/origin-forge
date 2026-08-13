@@ -5,6 +5,14 @@ from .production_preparation_activation import (
     _checkpoint_preparation_activated_connection,
 )
 from .production_preparation_models import PreparationStage, TaskPreparationReceipt
+from .production_preparation_policy_store import (
+    ProductionPreparationPolicyStoreError,
+    read_preparation_policy,
+)
+from .production_preparation_provenance import (
+    ProductionPreparationProvenanceError,
+    resolve_preparation_policy_provenance,
+)
 from .production_preparation_receipts import (
     _load_receipt_connection,
     _require_active_checkpoint,
@@ -38,10 +46,10 @@ def adopt_legacy_preparation_activation(
     """Adopt one proven legacy Phase-35 activation into a missing PREP checkpoint.
 
     The immutable 41A classifier is not trusted as mutation authority. This
-    function independently replays the exact acquisition/event proof under one
-    BEGIN IMMEDIATE SQLite transaction and then uses the 41B connection-scoped
-    checkpoint helper. It never changes Task state and never synthesizes a new
-    activation event.
+    function independently replays the exact PREPPOL/provenance and acquisition /
+    activation-event proof under one BEGIN IMMEDIATE SQLite transaction and then
+    uses the 41B connection-scoped checkpoint helper. It never changes Task state
+    and never synthesizes a new activation event.
     """
 
     if not isinstance(runtime, OriginForgeRuntime):
@@ -74,6 +82,33 @@ def adopt_legacy_preparation_activation(
             raise PreparationActivationRecoveryError(
                 "legacy activation adoption requires original PREP revision zero"
             )
+
+        try:
+            policy = read_preparation_policy(runtime, receipt.preparation_policy_id)
+            if (
+                policy.content_hash != receipt.preparation_policy_hash
+                or policy.project_id != receipt.project_id
+                or policy.materialization_id != receipt.materialization_id
+                or policy.materialization_hash != receipt.materialization_hash
+                or policy.planning_input_id != receipt.planning_input_id
+                or policy.planning_input_hash != receipt.planning_input_hash
+            ):
+                raise PreparationActivationRecoveryError(
+                    "PREP no longer binds exact durable PREPPOL authority"
+                )
+            resolve_preparation_policy_provenance(runtime, policy)
+        except PreparationActivationRecoveryError:
+            raise
+        except (
+            ProductionPreparationPolicyStoreError,
+            ProductionPreparationProvenanceError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            raise PreparationActivationRecoveryError(
+                "PREPPOL provenance is unavailable, stale, or invalid"
+            ) from exc
 
         task = conn.execute(
             """SELECT t.*, g.project_id
