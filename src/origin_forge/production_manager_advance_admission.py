@@ -44,6 +44,7 @@ class ManagerAdvanceActionKind(StrEnum):
     FINALIZE_WORK_ORDER = "FINALIZE_WORK_ORDER"
     FINALIZE_PHASE34 = "FINALIZE_PHASE34"
     PREPARE = "PREPARE"
+    RECOVER_PREPARATION = "RECOVER_PREPARATION"
     RECOVERY_REQUIRED = "RECOVERY_REQUIRED"
 
 
@@ -107,6 +108,7 @@ class ManagerAdvanceCandidate:
         if self.action_kind in {
             ManagerAdvanceActionKind.FINALIZE_WORK_ORDER,
             ManagerAdvanceActionKind.FINALIZE_PHASE34,
+            ManagerAdvanceActionKind.RECOVER_PREPARATION,
             ManagerAdvanceActionKind.RECOVERY_REQUIRED,
         }:
             if (
@@ -129,6 +131,12 @@ class ManagerAdvanceCandidate:
                 and self.preparation_stage is not PreparationStage.WORK_ORDER_AUDITED
             ):
                 raise ValueError("FINALIZE_PHASE34 has wrong PREP stage")
+            if (
+                self.action_kind is ManagerAdvanceActionKind.RECOVER_PREPARATION
+                and self.preparation_stage
+                not in {PreparationStage.CLAIMED, PreparationStage.ACTIVATED, PreparationStage.ROUTED}
+            ):
+                raise ValueError("RECOVER_PREPARATION has wrong PREP stage")
             if (
                 self.action_kind is ManagerAdvanceActionKind.RECOVERY_REQUIRED
                 and not self.detail
@@ -189,6 +197,7 @@ class ManagerAdvanceAdmission:
     active_claim_exclusion_count: int
     ambiguous_task_ids: tuple[str, ...] = ()
     detail: str | None = None
+    recover_preparation_count: int = 0
 
     @property
     def candidate_count(self) -> int:
@@ -203,6 +212,7 @@ class ManagerAdvanceAdmission:
             "finalize_work_order_count": self.finalize_work_order_count,
             "finalize_phase34_count": self.finalize_phase34_count,
             "prepare_count": self.prepare_count,
+            "recover_preparation_count": self.recover_preparation_count,
             "recovery_required_count": self.recovery_required_count,
             "terminal_retry_suppression_count": self.terminal_retry_suppression_count,
             "active_claim_exclusion_count": self.active_claim_exclusion_count,
@@ -230,6 +240,7 @@ def _empty(
         active_claim_exclusion_count=0,
         ambiguous_task_ids=ambiguous_task_ids,
         detail=detail,
+        recover_preparation_count=0,
     )
 
 
@@ -336,12 +347,11 @@ def _receipt_candidate(
         PreparationStage.ROUTED,
     }:
         return ManagerAdvanceCandidate(
-            ManagerAdvanceActionKind.RECOVERY_REQUIRED,
+            ManagerAdvanceActionKind.RECOVER_PREPARATION,
             receipt.task_id,
             entry.task_created_at,
             preparation_id=receipt.preparation_id,
             preparation_stage=receipt.stage,
-            detail="ACTIVE pre-planner PREP requires explicit recovery; Phase 40 does not replay it",
         )
     if receipt.stage in {PreparationStage.PLANNER_STARTED, PreparationStage.PLANNER_RETURNED}:
         return ManagerAdvanceCandidate(
@@ -359,7 +369,7 @@ def _receipt_candidate(
             preparation_id=receipt.preparation_id,
             preparation_stage=receipt.stage,
         )
-    raise ValueError("ACTIVE PREP stage is outside Phase-40 continuation contract")
+    raise ValueError("ACTIVE PREP stage is outside Manager continuation contract")
 
 
 def _counts(candidates: tuple[ManagerAdvanceCandidate, ...]) -> dict[ManagerAdvanceActionKind, int]:
@@ -589,4 +599,5 @@ def inspect_manager_advance_admission_readonly(
         active_claim_exclusion_count=active_claim_exclusion_count,
         ambiguous_task_ids=(),
         detail=None,
+        recover_preparation_count=count[ManagerAdvanceActionKind.RECOVER_PREPARATION],
     )
