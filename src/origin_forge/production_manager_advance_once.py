@@ -17,9 +17,15 @@ from .production_manager_dispatch_tick import (
     ManagerDispatchTickStatus,
     _dispatch_selected_candidate_once,
 )
+from .production_preparation_models import PreparationStage
 from .production_preparation_phase34_finalize import (
     PreparationPhase34FinalizeStatus,
     finalize_preparation_phase34,
+)
+from .production_preparation_recovery_once import (
+    PreparationRecoveryOnceResult,
+    PreparationRecoveryOnceStatus,
+    recover_preparation_once,
 )
 from .production_preparation_tick import (
     PreparationTickResult,
@@ -39,6 +45,7 @@ class ManagerAdvanceOnceStatus(StrEnum):
     LIMIT_EXCEEDED = "LIMIT_EXCEEDED"
     INVALID_STATE = "INVALID_STATE"
     RECOVERY_REQUIRED = "RECOVERY_REQUIRED"
+    PREPARATION_RECOVERY_ADVANCED = "PREPARATION_RECOVERY_ADVANCED"
     PREPARATION_NOT_ACQUIRED = "PREPARATION_NOT_ACQUIRED"
     PREPARATION_FAILED_PRE_PLANNER = "PREPARATION_FAILED_PRE_PLANNER"
     PREPARATION_PLANNER_RETURNED = "PREPARATION_PLANNER_RETURNED"
@@ -190,6 +197,94 @@ def _project_preparation(
     )
 
 
+def _recovery_candidate_shape_error(candidate: ManagerAdvanceCandidate) -> str | None:
+    if not isinstance(candidate.preparation_id, str) or not candidate.preparation_id:
+        return "RECOVER_PREPARATION candidate lacks PREP ID"
+    if candidate.preparation_stage not in {
+        PreparationStage.CLAIMED,
+        PreparationStage.ACTIVATED,
+        PreparationStage.ROUTED,
+    }:
+        return "RECOVER_PREPARATION candidate has invalid PREP stage"
+    if (
+        candidate.dispatch_candidate is not None
+        or candidate.preparation_policy is not None
+        or candidate.preparation_candidate is not None
+    ):
+        return "RECOVER_PREPARATION candidate carries unrelated authority"
+    return None
+
+
+def _invalid_recovery_result(
+    candidate: ManagerAdvanceCandidate,
+    result: PreparationRecoveryOnceResult,
+    detail: str,
+) -> ManagerAdvanceOnceResult:
+    if result.detail:
+        detail = f"{detail}; lower detail: {result.detail}"
+    return ManagerAdvanceOnceResult(
+        ManagerAdvanceOnceStatus.INVALID_STATE,
+        **_candidate_fields(candidate),
+        lower_status=result.status.value,
+        detail=detail,
+    )
+
+
+def _project_preparation_recovery(
+    candidate: ManagerAdvanceCandidate,
+    result: object,
+) -> ManagerAdvanceOnceResult:
+    if not isinstance(result, PreparationRecoveryOnceResult):
+        return _invalid_candidate(candidate, "Phase-41 recovery helper returned invalid result type")
+    if result.preparation_id != candidate.preparation_id:
+        return _invalid_recovery_result(
+            candidate,
+            result,
+            "Phase-41 recovery helper returned mismatched PREP ID",
+        )
+    if result.task_id is not None and result.task_id != candidate.task_id:
+        return _invalid_recovery_result(
+            candidate,
+            result,
+            "Phase-41 recovery helper returned mismatched Task ID",
+        )
+
+    mapping = {
+        PreparationRecoveryOnceStatus.RECOVERED_ACTIVATED: ManagerAdvanceOnceStatus.PREPARATION_RECOVERY_ADVANCED,
+        PreparationRecoveryOnceStatus.ADOPTED_ACTIVATION_CHECKPOINT: (
+            ManagerAdvanceOnceStatus.PREPARATION_RECOVERY_ADVANCED
+        ),
+        PreparationRecoveryOnceStatus.RECOVERED_ROUTED: ManagerAdvanceOnceStatus.PREPARATION_RECOVERY_ADVANCED,
+        PreparationRecoveryOnceStatus.RESUMED_PLANNER_RETURNED: ManagerAdvanceOnceStatus.PREPARATION_RECOVERY_ADVANCED,
+        PreparationRecoveryOnceStatus.RECOVERED_PLANNER_RETURNED: (
+            ManagerAdvanceOnceStatus.PREPARATION_RECOVERY_ADVANCED
+        ),
+        PreparationRecoveryOnceStatus.AMBIGUOUS_EVIDENCE: ManagerAdvanceOnceStatus.AMBIGUOUS_AUTHORITY,
+        PreparationRecoveryOnceStatus.LIMIT_EXCEEDED: ManagerAdvanceOnceStatus.LIMIT_EXCEEDED,
+        PreparationRecoveryOnceStatus.INVALID_STATE: ManagerAdvanceOnceStatus.INVALID_STATE,
+        PreparationRecoveryOnceStatus.PLANNER_RECOVERY_REQUIRED: ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
+        PreparationRecoveryOnceStatus.ACTIVATION_RECOVERY_REJECTED: ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
+        PreparationRecoveryOnceStatus.ROUTE_RECOVERY_REJECTED: ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
+        PreparationRecoveryOnceStatus.INVALID_AUTHORITY: ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
+        PreparationRecoveryOnceStatus.POST_PLANNER_NOT_REQUIRED: ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
+        PreparationRecoveryOnceStatus.READY_NOT_REQUIRED: ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
+        PreparationRecoveryOnceStatus.TERMINAL_NOT_REQUIRED: ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
+    }
+    status = mapping.get(result.status)
+    if status is None:
+        return _invalid_recovery_result(
+            candidate,
+            result,
+            f"Phase-41 recovery helper returned impossible status {result.status.value}",
+        )
+    return ManagerAdvanceOnceResult(
+        status,
+        **_candidate_fields(candidate),
+        lower_status=result.status.value,
+        detail=result.detail,
+    )
+
+
 def _project_work_order_finalize(
     candidate: ManagerAdvanceCandidate,
     result: object,
@@ -266,10 +361,12 @@ def advance_production_manager_once(runtime: OriginForgeRuntime) -> ManagerAdvan
         )
 
     if candidate.action_kind is ManagerAdvanceActionKind.RECOVER_PREPARATION:
-        return ManagerAdvanceOnceResult(
-            ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
-            **_candidate_fields(candidate),
-            detail="safe preparation recovery is admitted but not executed in Phase 42A",
+        shape_error = _recovery_candidate_shape_error(candidate)
+        if shape_error is not None:
+            return _invalid_candidate(candidate, shape_error)
+        return _project_preparation_recovery(
+            candidate,
+            recover_preparation_once(runtime, candidate.preparation_id),
         )
 
     if candidate.action_kind is ManagerAdvanceActionKind.DISPATCH:
