@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import sys
+import os
 
 from test_production_preparation_planner_resume import PreparationPlannerResumeTests
-from origin_forge.production_preparation_planner_resume import (
-    PreparationPlannerResumeStatus,
-    resume_routed_preparation_planner_once,
-)
+from origin_forge.production_preparation_planner_resume import resume_routed_preparation_planner_once
 
 case = PreparationPlannerResumeTests("test_routed_resume_commits_marker_then_calls_planner_once")
 case.setUp()
@@ -23,4 +20,4 @@ try:
     )
 finally:
     case.tearDown()
-raise SystemExit(97)
+os._exit(97)
