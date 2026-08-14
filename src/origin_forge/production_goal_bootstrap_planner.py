@@ -1204,6 +1204,13 @@ def advance_goal_bootstrap_planner(
             initial.status is GoalBootstrapStatus.ACTIVE
             and initial.stage is GoalBootstrapStage.PLANNER_STARTED
         ):
+            marker_rows = _dispatch_marker_rows(runtime, initial.bootstrap_id)
+            if marker_rows:
+                _interrupt_run_if_running(
+                    runtime,
+                    str(marker_rows[0]["target_id"]),
+                    f"Planner recovery authority drifted: {exc}",
+                )
             interrupted = _interrupt_started(
                 runtime,
                 initial,
@@ -1226,7 +1233,26 @@ def advance_goal_bootstrap_planner(
     ):
         return _load_returned(runtime, receipt)
 
-    environment = assemble_goal_bootstrap_planner_environment(runtime, receipt, planning_input)
+    try:
+        environment = assemble_goal_bootstrap_planner_environment(runtime, receipt, planning_input)
+    except Exception as exc:
+        if receipt.stage is GoalBootstrapStage.PLANNER_STARTED:
+            marker_rows = _dispatch_marker_rows(runtime, receipt.bootstrap_id)
+            if marker_rows:
+                _interrupt_run_if_running(
+                    runtime,
+                    str(marker_rows[0]["target_id"]),
+                    f"Planner recovery authority drifted: {exc}",
+                )
+            interrupted = _interrupt_started(
+                runtime,
+                receipt,
+                f"Planner recovery authority drifted: {exc}",
+            )
+            raise GoalBootstrapPlannerInterrupted(
+                interrupted.terminal_reason or "Planner recovery authority drifted"
+            ) from exc
+        raise
     if receipt.stage is GoalBootstrapStage.PLANNER_STARTED:
         return _recover_started(runtime, receipt, planning_input, environment)
     if receipt.stage is not GoalBootstrapStage.PLANNING_INPUT_PUBLISHED:
