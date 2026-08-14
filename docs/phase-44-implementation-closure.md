@@ -89,7 +89,7 @@ Existing Phase-40/41/42/43 scheduling, recovery, planner-fence, claim, execution
 
 ## Operator guide update
 
-The v0.1 operator guide now documents the explicit Manager commands and their limits:
+The living current-main operator guide, `docs/operator-guide.md`, documents the explicit Manager commands and their limits:
 
 ```text
 origin-forge --project-root /path/to/project manager status
@@ -98,7 +98,7 @@ origin-forge --project-root /path/to/project manager advance
 
 It states that `status` is the non-creating Manager admission/selection projection, `advance` performs one invocation of the fixed Phase-43 bounded driver, a typed Manager result is not Task outcome truth, and neither command provides initialization, repetition, queue draining, background scheduling, or caller-selected authority/budget arguments.
 
-The cockpit remains the stricter read-only inspection surface and receives no Manager mutation command.
+The historical `docs/v0.1-operator-guide.md` deliberately excludes these post-v0.1 commands. The cockpit remains the stricter read-only inspection surface and receives no Manager mutation command.
 
 ## Accepted exact-head evidence
 
