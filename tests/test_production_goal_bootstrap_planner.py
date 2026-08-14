@@ -104,6 +104,17 @@ class FakeDispatchLoader:
             raise AssertionError("unexpected model instance")
 
 
+class FakeManagedLoader:
+    def __init__(self, project_root, provider):
+        self.provider = provider
+
+    def load(self, profile, lease):
+        raise AssertionError("managed runtime load must be replaced by FakeDispatchLoader")
+
+    def unload(self, instance) -> None:
+        raise AssertionError("managed runtime unload must be replaced by FakeDispatchLoader")
+
+
 class GoalBootstrapPlannerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
@@ -130,11 +141,15 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def _environment(self, runtime, receipt, planning_input):
-        real = assemble_goal_bootstrap_planner_environment(
-            runtime,
-            receipt,
-            planning_input,
-        )
+        with patch(
+            "origin_forge.production_goal_bootstrap_planner.ManagedLlamaCppCpuLoader",
+            FakeManagedLoader,
+        ):
+            real = assemble_goal_bootstrap_planner_environment(
+                runtime,
+                receipt,
+                planning_input,
+            )
         return replace(
             real,
             runtime_dispatch_loader=FakeDispatchLoader(self.adapter),
