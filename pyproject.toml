@@ -12,7 +12,7 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
-origin-forge = "origin_forge.cli:main"
+origin-forge = "origin_forge.cli_entry:main"
 origin-forge-attempt = "origin_forge.orchestration_cli:main"
 origin-forge-cockpit = "origin_forge.production_interface_cli:main"
 
