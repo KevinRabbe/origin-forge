@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import time
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
@@ -44,12 +45,15 @@ from .production_preparation_policy_store import (
     create_preparation_policy_binding,
     read_preparation_policy,
 )
+from .production_read_guard import ProductionReadGuardError
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision, utc_now
 
 
 _MAX_PLAN_AUDITS = 10_000
 _MAX_PREPARATION_POLICIES = 10_000
+_MAX_FINALIZE_ATTEMPTS = 32
+_TRANSIENT_CONCURRENCY_DELAY_SECONDS = 0.01
 _FINALIZE_STAGES = (
     GoalBootstrapStage.PLANNER_RETURNED,
     GoalBootstrapStage.PLAN_AUDITED,
@@ -109,6 +113,26 @@ def _required(value: str | None, label: str) -> str:
     if value is None:
         raise GoalBootstrapFinalizeError(f"GOALBOOT lacks {label}")
     return value
+
+
+def _is_transient_concurrency_error(exc: BaseException) -> bool:
+    """Recognize only bounded writer-contention signals, including wrappers."""
+
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        message = str(current).lower()
+        if isinstance(current, ProductionReadGuardError) and "active journal state" in message:
+            return True
+        if isinstance(current, sqlite3.OperationalError) and (
+            "database is locked" in message
+            or "database table is locked" in message
+            or "database is busy" in message
+        ):
+            return True
+        current = current.__cause__ if current.__cause__ is not None else current.__context__
+    return False
 
 
 def _checkpoint_locked(
@@ -717,7 +741,7 @@ def finalize_goal_bootstrap(
     reused_materialization = False
     reused_policy = False
 
-    for _ in range(8):
+    for _ in range(_MAX_FINALIZE_ATTEMPTS):
         receipt = read_goal_bootstrap_receipt(runtime, bootstrap_id)
         if receipt.status is GoalBootstrapStatus.READY:
             return _result(
@@ -779,6 +803,9 @@ def finalize_goal_bootstrap(
         except GoalBootstrapFinalizeInterrupted:
             raise
         except Exception as exc:
+            if _is_transient_concurrency_error(exc):
+                time.sleep(_TRANSIENT_CONCURRENCY_DELAY_SECONDS)
+                continue
             interrupted = _interrupt_if_unchanged(runtime, receipt, exc)
             if interrupted is None:
                 continue
