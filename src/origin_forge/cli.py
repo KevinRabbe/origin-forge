@@ -10,6 +10,13 @@ from pathlib import Path
 from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
 from .config import load_config
 from .patches import PatchValidationError
+from .production_goal_bootstrap_operator import (
+    GoalBootstrapOperatorBlocked,
+    GoalBootstrapOperatorError,
+    bootstrap_goal_once,
+    inspect_goal_bootstrap_status_readonly,
+    recover_goal_once,
+)
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .repository import RepositoryAccessError
@@ -98,6 +105,21 @@ def build_parser() -> argparse.ArgumentParser:
     goal_transition.add_argument("goal_id")
     goal_transition.add_argument("status", type=_goal_status)
     goal_transition.add_argument("--revision", required=True, type=int)
+    goal_bootstrap = goal.add_parser(
+        "bootstrap", help="inspect, start, or recover one governed Goal bootstrap"
+    ).add_subparsers(dest="goal_bootstrap_command", required=True)
+    goal_bootstrap_status = goal_bootstrap.add_parser(
+        "status", help="show read-only bootstrap status for one explicit Goal"
+    )
+    goal_bootstrap_status.add_argument("goal_id")
+    goal_bootstrap_start = goal_bootstrap.add_parser(
+        "start", help="perform exactly one fresh governed bootstrap invocation"
+    )
+    goal_bootstrap_start.add_argument("goal_id")
+    goal_bootstrap_recover = goal_bootstrap.add_parser(
+        "recover", help="perform exactly one explicit governed recovery invocation"
+    )
+    goal_bootstrap_recover.add_argument("goal_id")
 
     flow = sub.add_parser("flow", help="manage flows").add_subparsers(
         dest="flow_command", required=True
@@ -215,6 +237,16 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
 
     if args.command == "goal":
+        if args.goal_command == "bootstrap":
+            if args.goal_bootstrap_command == "status":
+                _print(inspect_goal_bootstrap_status_readonly(runtime, args.goal_id).to_dict())
+                return 0
+            if args.goal_bootstrap_command == "start":
+                _print(bootstrap_goal_once(runtime, args.goal_id).to_dict())
+                return 0
+            if args.goal_bootstrap_command == "recover":
+                _print(recover_goal_once(runtime, args.goal_id).to_dict())
+                return 0
         if args.goal_command == "create":
             goal_id = runtime.create_goal(
                 args.objective,
@@ -388,9 +420,22 @@ def main(argv: list[str] | None = None) -> int:
     except KeyError as exc:
         _print({"error": "NOT_FOUND", "message": str(exc)}, stream=sys.stderr)
         return 3
+    except GoalBootstrapOperatorBlocked as exc:
+        _print(
+            {
+                "error": "GOAL_BOOTSTRAP_BLOCKED",
+                "decision": exc.decision.value,
+                "message": exc.detail,
+            },
+            stream=sys.stderr,
+        )
+        return 4
     except (InvalidTransition, StaleRevision) as exc:
         _print({"error": "INVALID_STATE", "message": str(exc)}, stream=sys.stderr)
         return 4
+    except GoalBootstrapOperatorError as exc:
+        _print({"error": "GOAL_BOOTSTRAP_ERROR", "message": str(exc)}, stream=sys.stderr)
+        return 5
     except RuntimeInvariantError as exc:
         _print({"error": "INVARIANT_VIOLATION", "message": str(exc)}, stream=sys.stderr)
         return 5
