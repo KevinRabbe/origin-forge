@@ -41,11 +41,11 @@ Human review / eventual merge
 
 ## Current status
 
-Origin Forge is at its **v0.1.0 First Useful Release candidate**. Phases 0–30 are merged, including the first bounded local production cockpit from Phase 30, and the release-readiness packaging/entrypoint matrix passed on Python 3.12 and 3.13 before merge.
+Origin Forge **v0.1.0 was released on 2026-08-11**. Its immutable annotated tag points to release commit `fbc6764b3b5e71cb5f5a223f09c82189e7326c1d`, after exact-head Python 3.12/3.13 CI on the final release candidate.
 
-The final release candidate sets package version `0.1.0` and adopts the Apache License 2.0. The `v0.1.0` tag remains downstream of exact-head Python 3.12/3.13 CI, clean review/thread state, and SHA-guarded merge of the final release candidate.
+Current `main` is **post-v0.1 development** with package version `0.2.0.dev0`. Phases 0–44 are merged on the development line; Phases 31–44 were added after the v0.1.0 release and therefore are not part of the historical v0.1.0 payload.
 
-### What exists now
+### What exists now on current main
 
 - durable SQLite Goal / Flow / Task / Run / Verification state;
 - isolated Git workspaces and deterministic patch application/audit;
@@ -54,9 +54,12 @@ The final release candidate sets package version `0.1.0` and adopts the Apache L
 - cryptographic provenance plus cross-media fingerprints;
 - governed Pixelorama, Blender, image/vision, audio, runtime-observation, playtesting, and simulation evidence layers;
 - Dream/memory consolidation, Skill/harness workshop experiments, programmatic-context experiments, and training/fine-tuning research substrate;
-- a bounded loopback-only read-only production cockpit over runtime, causal history, Project Intelligence, model/resource configuration, provenance, and Dream/memory state.
+- a bounded loopback-only read-only production cockpit over runtime, causal history, Project Intelligence, model/resource configuration, provenance, and Dream/memory state;
+- governed production planning/routing/WorkOrder/binding/claim/execution authority through Phases 31–37;
+- one-shot, recovery-aware, bounded Manager advancement through Phases 38–43;
+- explicit local `origin-forge manager status` and `origin-forge manager advance` operator commands from Phase 44.
 
-The system still deliberately excludes automatic merge/release authority, unrestricted shell/filesystem/model execution, UI-driven production mutation, implicit Artifact adoption/signing, and model self-verification.
+The system still deliberately excludes automatic merge/release authority, unrestricted shell/filesystem/model execution, UI-driven production mutation, implicit Artifact adoption/signing, background Manager queue draining, and model self-verification.
 
 ## Quick start
 
@@ -68,7 +71,7 @@ origin-forge init --name my-project
 origin-forge status
 ```
 
-Initialization is the explicit project-state creation boundary. Packaged attempt/cockpit commands do not silently initialize a missing project.
+Initialization is the explicit project-state creation boundary. Packaged attempt/cockpit/Manager inspection and advancement commands do not silently initialize a missing project.
 
 The main CLI exposes the durable control-plane and governed worker/sandbox operations:
 
@@ -80,6 +83,15 @@ origin-forge run --help
 origin-forge verify --help
 origin-forge sandbox --help
 ```
+
+Current post-v0.1 main also exposes the explicit bounded Manager surface:
+
+```bash
+origin-forge manager status
+origin-forge manager advance
+```
+
+`manager status` is a non-creating projection. `manager advance` invokes the fixed bounded Manager driver once; it does not repeat until idle or drain the queue.
 
 The first complete coding path is exposed as **one bounded attempt**, not an unbounded autonomous retry loop:
 
@@ -97,7 +109,7 @@ origin-forge-attempt TASK-... \
 
 The command uses the existing snapshot-first orchestrator: isolated Workspace → model proposal → deterministic apply → independent audit → governed sandbox verification. It does not merge, push, release, recursively retry itself, or create missing Origin Forge project state.
 
-After Phase-30 state is initialized and quiescent, the installed read-only cockpit entrypoint is:
+The installed read-only cockpit entrypoint is:
 
 ```bash
 origin-forge-cockpit snapshot
@@ -108,18 +120,15 @@ The cockpit binds only to `127.0.0.1`, exposes fixed GET routes, and does not cr
 
 `origin-forge status` remains an authoritative control-plane status path using the normal runtime/store lifecycle. Use `origin-forge-cockpit snapshot` when the requirement is specifically bounded non-creating inspection.
 
-See the [v0.1 operator guide](docs/v0.1-operator-guide.md) for the installed command boundary and end-to-end local workflow.
+See the [current operator guide](docs/operator-guide.md) for the current-main command boundary and end-to-end local workflow. The [v0.1 operator guide](docs/v0.1-operator-guide.md) documents the immutable released v0.1.0 surface and intentionally excludes later Manager commands.
 
-## v0.1 release gate
+## Release and development identity
 
-The Phase-30 and release-readiness implementation/packaging gates are complete. The final `v0.1.0` release requires:
+The historical v0.1.0 release proof is complete: final candidate head `98eeab1b5519c5018d003300126f2da247d3f911` passed run `31478577762` on Python 3.12 and 3.13, was SHA-guarded squash-merged as `fbc6764b3b5e71cb5f5a223f09c82189e7326c1d`, and annotated tag `v0.1.0` points to that exact commit.
 
-- exact-head Python 3.12 and Python 3.13 green CI on the final version/license candidate;
-- no unresolved review or CI failures on that exact head;
-- SHA-guarded merge of the final candidate;
-- a `v0.1.0` tag bound to the exact reviewed/tested merge commit.
+Current main uses `0.2.0.dev0` only to distinguish post-release development from the immutable v0.1.0 package identity. It is not a v0.2.0 release declaration and creates no release or tag authority.
 
-See the [v0.1 release-readiness contract](docs/v0.1-release-readiness.md), [v0.1 acceptance matrix](docs/v0.1-acceptance-matrix.md), and [changelog](CHANGELOG.md) for the explicit release boundary.
+See the [v0.1 release-readiness record](docs/v0.1-release-readiness.md), [v0.1 acceptance matrix](docs/v0.1-acceptance-matrix.md), and [changelog](CHANGELOG.md) for the release boundary and post-release history.
 
 ## Documentation
 
@@ -130,7 +139,7 @@ Start with:
 - [Principles](docs/principles.md)
 - [Security and Authority](docs/security.md)
 - [Roadmap](docs/roadmap.md)
-- [Phase 30 — Full Production Interface](docs/phase-30-full-production-interface.md)
+- [Current Operator Guide](docs/operator-guide.md)
 - [v0.1 Operator Guide](docs/v0.1-operator-guide.md)
 - [v0.1 Release Readiness](docs/v0.1-release-readiness.md)
 - [v0.1 Acceptance Matrix](docs/v0.1-acceptance-matrix.md)

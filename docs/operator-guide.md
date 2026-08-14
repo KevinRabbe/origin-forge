@@ -1,28 +1,26 @@
-# v0.1 Operator Guide
+# Origin Forge Operator Guide
 
-Status: **v0.1.0 RELEASED — 2026-08-11**
+Status: **POST-v0.1 DEVELOPMENT MAINLINE**
 
-This guide describes the operator surface released as Origin Forge v0.1.0. It is deliberately narrower than the complete library/API surface and intentionally does not include post-release Phase-31–44 capabilities. For current `main`, see `docs/operator-guide.md`.
-
-## Release identity
-
-The immutable v0.1.0 release uses package version `0.1.0` under the Apache License 2.0. Final candidate head `98eeab1b5519c5018d003300126f2da247d3f911` passed normal run `31478577762` on Python 3.12 and Python 3.13, was SHA-guarded squash-merged as `fbc6764b3b5e71cb5f5a223f09c82189e7326c1d`, and annotated tag `v0.1.0` points to that exact merge commit.
+This guide describes the current `main` operator surface. Origin Forge v0.1.0 was released on 2026-08-11 and remains immutably identified by tag `v0.1.0`; the current development line is `0.2.0.dev0` and contains post-release capabilities through Phase 44. For the exact released v0.1.0 surface, see `docs/v0.1-operator-guide.md`.
 
 ## Install
 
-Origin Forge v0.1.0 requires Python 3.12 or newer.
+Origin Forge requires Python 3.12 or newer.
 
 ```bash
 python -m pip install .
 ```
 
-The release installs three intentionally distinct commands:
+The package installs three intentionally distinct commands:
 
 ```text
 origin-forge          durable control-plane/operator commands
 origin-forge-attempt  exactly one bounded coding attempt
 origin-forge-cockpit  read-only local inspection
 ```
+
+Current development metadata uses package version `0.2.0.dev0` under the Apache License 2.0. This development version is not a promise or tag for a future v0.2 release.
 
 ## Initialize a project
 
@@ -64,6 +62,23 @@ origin-forge sandbox --help
 ```
 
 A fresh bounded coding attempt requires the target Task and parent Flow to satisfy the orchestration preconditions. The attempt command does not invent Tasks or silently repair lifecycle state.
+
+## Inspect or explicitly advance governed Manager work
+
+The main control-plane CLI exposes one local Manager group over the already bounded production Manager primitives:
+
+```bash
+origin-forge --project-root /path/to/project manager status
+origin-forge --project-root /path/to/project manager advance
+```
+
+`manager status` performs the non-creating Manager admission/selection projection once and prints its typed JSON result. `manager advance` invokes the fixed bounded Manager driver once and prints its exact typed trace. The bounded driver owns a hard code-defined maximum of six one-shot Manager steps and stops on the first non-continuable result, including the first dispatch result; the CLI provides no budget override.
+
+A typed Manager result with process exit code `0` means the operator command ran and returned Manager mechanics. It is not Task success/failure, verification truth, merge authority, or release authority.
+
+These commands do not initialize or migrate project state, do not repeat/watch/poll until idle, do not drain a queue, do not run in the background, and expose no Task/PREP/claim/action/model/resource selector. Missing, stale, partial, or actively written durable state remains fail closed through the existing Manager boundary.
+
+The cockpit remains a separate read-only inspection surface. It does not receive a Manager mutation command.
 
 ## Run exactly one bounded coding attempt
 
@@ -137,11 +152,13 @@ Use `origin-forge-cockpit snapshot` when the requirement is specifically bounded
 
 Origin Forge persists work state rather than relying on one process or chat session. Use the existing recovery/status surfaces to inspect interrupted state.
 
-Autonomous continuation is intentionally bounded. Failed attempts, blocked infrastructure, verification failures, exact-repeat loops, retry budgets, and quarantine remain explicit control-policy concerns rather than reasons to run an endless agent loop.
+Autonomous continuation is intentionally bounded. Failed attempts, blocked infrastructure, verification failures, exact-repeat loops, retry budgets, recovery-required states, and quarantine remain explicit control-policy concerns rather than reasons to run an endless agent loop.
 
-## Release boundary
+The Phase-44 Manager command is similarly bounded: one explicit `manager advance` invocation may traverse only the fixed Phase-43 continuation whitelist and stops at the first non-continuable result or hard six-step limit.
 
-v0.1.0 does not grant:
+## Current-development boundary
+
+Current `main` does not grant:
 
 - automatic merge or release authority;
 - unrestricted shell/filesystem/process access;
@@ -149,8 +166,7 @@ v0.1.0 does not grant:
 - automatic Artifact adoption/signing;
 - automatic Dream promotion;
 - production checkpoint/model activation;
+- background Manager scheduling or queue draining;
 - remote/multi-user cockpit hosting.
 
-The Phase-44 `origin-forge manager status|advance` commands are post-v0.1 development and are not part of this historical release surface.
-
-Origin Forge v0.1.0 is licensed under the Apache License 2.0; see the repository `LICENSE` file. See `docs/v0.1-release-readiness.md` and `docs/v0.1-acceptance-matrix.md` for the release evidence and roadmap traceability.
+Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.1.0 release remains documented separately in `docs/v0.1-release-readiness.md`, `docs/v0.1-acceptance-matrix.md`, and `docs/v0.1-operator-guide.md`.
