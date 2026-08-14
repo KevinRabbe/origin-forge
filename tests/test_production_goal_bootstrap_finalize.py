@@ -222,16 +222,21 @@ class GoalBootstrapFinalizeTests(unittest.TestCase):
         self.assertEqual(self._count("plan_materializations"), 1)
 
     def test_crash_after_preppol_publish_before_checkpoint_reuses_exact_policy(self) -> None:
-        real_checkpoint = _checkpoint_locked
+        from origin_forge import production_goal_bootstrap_finalize as module
 
-        def crash_on_preppol(conn, **kwargs):
-            if kwargs["target_stage"] is GoalBootstrapStage.PREPPOL_PUBLISHED:
+        real_checkpoint = module.checkpoint_goal_bootstrap_preppol_published
+        seen = {"calls": 0}
+
+        def crash_once(*args, **kwargs):
+            seen["calls"] += 1
+            if seen["calls"] == 1:
                 raise SimulatedCrash("after PREPPOL publish before READY checkpoint")
-            return real_checkpoint(conn, **kwargs)
+            return real_checkpoint(*args, **kwargs)
 
-        with patch(
-            "origin_forge.production_goal_bootstrap_finalize._checkpoint_locked",
-            side_effect=crash_on_preppol,
+        with patch.object(
+            module,
+            "checkpoint_goal_bootstrap_preppol_published",
+            side_effect=crash_once,
         ):
             with self.assertRaises(SimulatedCrash):
                 finalize_goal_bootstrap(self.runtime, self.bootstrap_id)
