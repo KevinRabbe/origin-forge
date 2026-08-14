@@ -29,7 +29,7 @@ class Phase44AManagerCliTests(unittest.TestCase):
     def _status_projection() -> ManagerAdvanceStatusProjection:
         return ManagerAdvanceStatusProjection(
             admission_status=ManagerAdvanceAdmissionStatus.COMPLETE,
-            selection_status=ManagerAdvanceSelectionStatus.NONE_AVAILABLE,
+            selection_status=ManagerAdvanceSelectionStatus.NO_ACTIONABLE_WORK,
             candidate_count=0,
             dispatch_count=0,
             finalize_work_order_count=0,
