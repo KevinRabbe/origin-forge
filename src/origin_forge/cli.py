@@ -10,6 +10,8 @@ from pathlib import Path
 from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
 from .config import load_config
 from .patches import PatchValidationError
+from .production_manager_advance_bounded import advance_production_manager_bounded
+from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .repository import RepositoryAccessError
 from .sandbox import SandboxPolicyError, SandboxUnavailable
 from .sandbox_factory import create_sandbox_backend
@@ -72,6 +74,14 @@ def build_parser() -> argparse.ArgumentParser:
         "recover", help="inspect or reconcile interrupted RUNNING records"
     )
     recover_parser.add_argument("--apply", action="store_true")
+
+    manager = sub.add_parser(
+        "manager", help="inspect or explicitly advance governed production"
+    ).add_subparsers(dest="manager_command", required=True)
+    manager.add_parser("status", help="show read-only governed Manager status")
+    manager.add_parser(
+        "advance", help="perform exactly one fixed bounded Manager invocation"
+    )
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -196,6 +206,13 @@ def _main(argv: list[str] | None = None) -> int:
         raw = runtime.recover() if args.apply else runtime.recovery_findings()
         _print({"applied": bool(args.apply), "findings": [item.__dict__ for item in raw]})
         return 0 if args.apply or not raw else 1
+    if args.command == "manager":
+        if args.manager_command == "status":
+            _print(inspect_manager_advance_status_readonly(runtime).to_dict())
+            return 0
+        if args.manager_command == "advance":
+            _print(advance_production_manager_bounded(runtime).to_dict())
+            return 0
 
     if args.command == "goal":
         if args.goal_command == "create":
