@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -408,6 +409,48 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         self.assertEqual(durable.status, GoalBootstrapStatus.INTERRUPTED)
         self.assertEqual(durable.stage, GoalBootstrapStage.PLANNER_STARTED)
         self.assertEqual(self.adapter.call_count, 0)
+
+    def test_concurrent_workers_create_one_marker_and_at_most_one_model_call(self) -> None:
+        barrier = threading.Barrier(3)
+        outcomes: list[tuple[str, str]] = []
+        outcome_lock = threading.Lock()
+
+        def worker() -> None:
+            runtime = OriginForgeRuntime(self.root)
+            barrier.wait()
+            try:
+                result = advance_goal_bootstrap_planner(runtime, self.bootstrap_id)
+                outcome = ("result", result.receipt.stage.value)
+            except BaseException as exc:
+                outcome = ("error", type(exc).__name__)
+            with outcome_lock:
+                outcomes.append(outcome)
+
+        with patch(
+            "origin_forge.production_goal_bootstrap_planner."
+            "assemble_goal_bootstrap_planner_environment",
+            side_effect=self._environment,
+        ):
+            threads = [threading.Thread(target=worker), threading.Thread(target=worker)]
+            for thread in threads:
+                thread.start()
+            barrier.wait()
+            for thread in threads:
+                thread.join(timeout=10)
+
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(len(outcomes), 2)
+        self.assertEqual(self._count("runs"), 1)
+        self._marker_run_id()
+        self.assertLessEqual(self.adapter.call_count, 1)
+        with self.runtime.store.session() as conn:
+            marker_count = int(
+                conn.execute(
+                    """SELECT COUNT(*) FROM verifications
+                       WHERE verification_type = 'goal-bootstrap-planner-dispatch'"""
+                ).fetchone()[0]
+            )
+        self.assertEqual(marker_count, 1)
 
     def test_planner_returned_is_idempotent_and_never_calls_model_again(self) -> None:
         first = self._advance()
