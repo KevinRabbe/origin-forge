@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from dataclasses import replace
@@ -168,7 +169,27 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         with self.runtime.store.session() as conn:
             return int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
 
-    def test_normal_path_commits_run_before_model_and_stops_at_planner_returned(self) -> None:
+    def _marker_run_id(self, runtime=None) -> str:
+        runtime = runtime or self.runtime
+        with runtime.store.session() as conn:
+            rows = conn.execute(
+                """SELECT target_id, target_type, evidence_json, run_id
+                   FROM verifications
+                   WHERE verification_type = 'goal-bootstrap-planner-dispatch'
+                   ORDER BY created_at, id"""
+            ).fetchall()
+        matches = []
+        for row in rows:
+            evidence = json.loads(row["evidence_json"])
+            if evidence.get("goal_bootstrap_id") == self.bootstrap_id:
+                matches.append(row)
+        self.assertEqual(len(matches), 1)
+        row = matches[0]
+        self.assertEqual(row["target_type"], "RUN")
+        self.assertEqual(row["run_id"], row["target_id"])
+        return str(row["target_id"])
+
+    def test_normal_path_commits_marker_before_model_and_stops_at_planner_returned(self) -> None:
         result = self._advance()
 
         self.assertFalse(result.recovered)
@@ -182,6 +203,7 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         )
         self.assertEqual(result.receipt.plan_proposal_id, result.proposal.proposal_id)
         self.assertEqual(result.receipt.plan_proposal_hash, result.proposal.content_hash)
+        self.assertEqual(self._marker_run_id(), result.planner_run_id)
         self.assertEqual(self._count("plan_proposals"), 1)
         self.assertEqual(self._count("plan_audits"), 0)
         self.assertEqual(self._count("plan_materializations"), 0)
@@ -195,21 +217,34 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         verifications = self.runtime.list_verifications("RUN", result.planner_run_id)
         self.assertEqual(
             [row["verification_type"] for row in verifications],
-            ["model-resource-selection", "planner-generation"],
+            [
+                "goal-bootstrap-planner-dispatch",
+                "model-resource-selection",
+                "planner-generation",
+            ],
         )
 
-    def test_planner_started_contains_exact_run_before_any_model_request(self) -> None:
+    def test_planner_started_keeps_run_null_but_marker_exists_before_model_request(self) -> None:
         observed = {}
 
-        def crash_before_invoke(runtime, receipt, planning_input, environment, scheduled, plan):
+        def crash_before_invoke(
+            runtime,
+            receipt,
+            planning_input,
+            environment,
+            scheduled,
+            plan,
+            run_id,
+        ):
             durable = read_goal_bootstrap_receipt(runtime, receipt.bootstrap_id)
             observed["stage"] = durable.stage
-            observed["run_id"] = durable.planner_run_id
+            observed["receipt_run_id"] = durable.planner_run_id
+            observed["marker_run_id"] = self._marker_run_id(runtime)
             observed["plan_hash"] = durable.planner_dependency_plan_hash
-            observed["expected_run"] = receipt.planner_run_id
+            observed["expected_run"] = run_id
             observed["expected_hash"] = plan.plan_hash
             observed["model_calls"] = self.adapter.call_count
-            raise SimulatedCrash("after PLANNER_STARTED before model request")
+            raise SimulatedCrash("after dispatch marker before model request")
 
         with patch(
             "origin_forge.production_goal_bootstrap_planner."
@@ -223,7 +258,8 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
                 advance_goal_bootstrap_planner(self.runtime, self.bootstrap_id)
 
         self.assertEqual(observed["stage"], GoalBootstrapStage.PLANNER_STARTED)
-        self.assertEqual(observed["run_id"], observed["expected_run"])
+        self.assertIsNone(observed["receipt_run_id"])
+        self.assertEqual(observed["marker_run_id"], observed["expected_run"])
         self.assertEqual(observed["plan_hash"], observed["expected_hash"])
         self.assertEqual(observed["model_calls"], 0)
 
@@ -244,10 +280,37 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         self.assertIsNone(durable.planner_run_id)
         self.assertIsNone(durable.planner_dependency_plan_hash)
         self.assertEqual(self.adapter.call_count, 0)
+        self.assertEqual(self._count("runs"), 0)
 
         result = self._advance()
         self.assertEqual(result.receipt.stage, GoalBootstrapStage.PLANNER_RETURNED)
         self.assertEqual(self.adapter.call_count, 1)
+
+    def test_started_without_dispatch_marker_is_safe_to_resume_once(self) -> None:
+        with patch(
+            "origin_forge.production_goal_bootstrap_planner."
+            "assemble_goal_bootstrap_planner_environment",
+            side_effect=self._environment,
+        ), patch(
+            "origin_forge.production_goal_bootstrap_planner._claim_or_load_dispatch_marker",
+            side_effect=SimulatedCrash("after PLANNER_STARTED before dispatch marker"),
+        ):
+            with self.assertRaises(SimulatedCrash):
+                advance_goal_bootstrap_planner(self.runtime, self.bootstrap_id)
+
+        durable = read_goal_bootstrap_receipt(self.runtime, self.bootstrap_id)
+        self.assertEqual(durable.stage, GoalBootstrapStage.PLANNER_STARTED)
+        self.assertIsNone(durable.planner_run_id)
+        self.assertIsNotNone(durable.planner_dependency_plan_hash)
+        self.assertEqual(self._count("runs"), 0)
+        self.assertEqual(self.adapter.call_count, 0)
+
+        restarted = OriginForgeRuntime(self.root)
+        result = self._advance(restarted)
+        self.assertTrue(result.recovered)
+        self.assertEqual(result.receipt.stage, GoalBootstrapStage.PLANNER_RETURNED)
+        self.assertEqual(self.adapter.call_count, 1)
+        self.assertEqual(self._count("runs"), 1)
 
     def test_uncertain_post_call_crash_without_durable_result_interrupts_without_retry(self) -> None:
         with patch(
@@ -265,8 +328,10 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         durable = read_goal_bootstrap_receipt(self.runtime, self.bootstrap_id)
         self.assertEqual(durable.stage, GoalBootstrapStage.PLANNER_STARTED)
         self.assertEqual(durable.status, GoalBootstrapStatus.ACTIVE)
+        self.assertIsNone(durable.planner_run_id)
         self.assertEqual(self.adapter.call_count, 1)
         self.assertEqual(self._count("plan_proposals"), 0)
+        run_id = self._marker_run_id()
 
         restarted = OriginForgeRuntime(self.root)
         with self.assertRaises(GoalBootstrapPlannerInterrupted):
@@ -275,6 +340,7 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         self.assertEqual(after.stage, GoalBootstrapStage.PLANNER_STARTED)
         self.assertEqual(after.status, GoalBootstrapStatus.INTERRUPTED)
         self.assertEqual(self.adapter.call_count, 1)
+        self.assertEqual(restarted.get_run(run_id)["status"], "INTERRUPTED")
 
     def test_crash_after_atomic_result_before_return_checkpoint_recovers_without_model_call(self) -> None:
         with patch(
@@ -292,9 +358,11 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         durable = read_goal_bootstrap_receipt(self.runtime, self.bootstrap_id)
         self.assertEqual(durable.stage, GoalBootstrapStage.PLANNER_STARTED)
         self.assertEqual(durable.status, GoalBootstrapStatus.ACTIVE)
+        self.assertIsNone(durable.planner_run_id)
         self.assertEqual(self.adapter.call_count, 1)
         self.assertEqual(self._count("plan_proposals"), 1)
-        verifications = self.runtime.list_verifications("RUN", durable.planner_run_id)
+        run_id = self._marker_run_id()
+        verifications = self.runtime.list_verifications("RUN", run_id)
         self.assertEqual(
             len(
                 [
@@ -310,6 +378,7 @@ class GoalBootstrapPlannerTests(unittest.TestCase):
         result = self._advance(restarted)
         self.assertTrue(result.recovered)
         self.assertEqual(result.receipt.stage, GoalBootstrapStage.PLANNER_RETURNED)
+        self.assertEqual(result.receipt.planner_run_id, run_id)
         self.assertEqual(result.receipt.plan_proposal_id, result.proposal.proposal_id)
         self.assertEqual(self.adapter.call_count, 1)
         self.assertEqual(self._count("plan_proposals"), 1)

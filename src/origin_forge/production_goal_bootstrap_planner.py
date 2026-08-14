@@ -17,7 +17,6 @@ from .model_scheduler import (
 )
 from .model_scheduler_factory import ConfiguredModelScheduling, create_model_scheduling
 from .production_goal_bootstrap_authority import (
-    GoalBootstrapAuthorityError,
     GoalBootstrapOwnerDescriptor,
     build_builtin_goal_bootstrap_owner,
     goal_planner_policy_hashes,
@@ -29,22 +28,20 @@ from .production_goal_bootstrap_models import (
     GoalBootstrapStatus,
 )
 from .production_goal_bootstrap_store import (
-    GoalBootstrapStoreError,
-    _checkpoint,
     checkpoint_goal_bootstrap_planner_returned,
+    checkpoint_goal_bootstrap_planner_started,
     interrupt_goal_bootstrap,
     read_goal_bootstrap_receipt,
 )
 from .production_planner import PLAN_PROPOSAL_SCHEMA, PLANNER_INSTRUCTIONS
 from .production_planning_evidence import (
-    ProductionPlanningEvidenceError,
     ProductionPlanningEvidenceStore,
     goal_planning_hash,
 )
 from .production_planning_models import PlanProposal, PlanningInput, ProductionPlanningModelError
 from .production_planning_proposal import parse_plan_proposal
 from .production_read_guard import existing_config_path
-from .runs import create_run, finish_run
+from .runs import finish_run
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision, utc_now
 from .state import RunStatus
@@ -52,6 +49,7 @@ from .state import RunStatus
 
 _PLANNER_ROLE = "PLANNER"
 _PLANNER_GENERATION_VERIFIER = "OriginForge.GoalBootstrapPlanner"
+_PLANNER_DISPATCH_MARKER = "goal-bootstrap-planner-dispatch"
 _DEPENDENCY_PLAN_VERSION = "phase45.goal-bootstrap-planner-dependencies@1"
 
 
@@ -91,6 +89,18 @@ def _digest(value: object) -> bool:
         and len(value) == 64
         and all(character in "0123456789abcdef" for character in value)
     )
+
+
+def _decode_json_object(raw: object, *, label: str) -> dict[str, object]:
+    if not isinstance(raw, str):
+        raise GoalBootstrapPlannerError(f"{label} is not stored JSON")
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise GoalBootstrapPlannerError(f"{label} is invalid JSON") from exc
+    if not isinstance(value, dict):
+        raise GoalBootstrapPlannerError(f"{label} is not an object")
+    return value
 
 
 @dataclass(frozen=True)
@@ -466,19 +476,232 @@ def _checkpoint_planner_started(
     receipt: GoalBootstrapReceipt,
     *,
     planner_dependency_plan_hash: str,
-    planner_run_id: str,
 ) -> GoalBootstrapReceipt:
-    return _checkpoint(
+    return checkpoint_goal_bootstrap_planner_started(
         runtime,
         receipt.bootstrap_id,
         receipt.revision,
-        expected_stage=GoalBootstrapStage.PLANNING_INPUT_PUBLISHED,
-        target_stage=GoalBootstrapStage.PLANNER_STARTED,
-        updates={
-            "planner_dependency_plan_hash": planner_dependency_plan_hash,
-            "planner_run_id": planner_run_id,
-        },
+        planner_dependency_plan_hash=planner_dependency_plan_hash,
     )
+
+
+def _dispatch_marker_evidence(
+    receipt: GoalBootstrapReceipt,
+    planning_input: PlanningInput,
+    plan: GoalBootstrapPlannerDependencyPlan,
+) -> dict[str, object]:
+    return {
+        "goal_bootstrap_id": receipt.bootstrap_id,
+        "goal_bootstrap_revision": receipt.revision,
+        "planner_dependency_plan_hash": plan.plan_hash,
+        "planning_input_id": planning_input.planning_input_id,
+        "planning_input_hash": planning_input.content_hash,
+        "dependency_plan": plan.to_dict(),
+        **plan.selection.to_dict(),
+    }
+
+
+def _selection_from_evidence(evidence: dict[str, object]) -> GoalBootstrapPlannerSelection:
+    attempted = evidence.get("attempted_profile_ids")
+    if not isinstance(attempted, list) or not all(isinstance(value, str) for value in attempted):
+        raise GoalBootstrapPlannerError("planner selection attempted profile chain is invalid")
+    values = {
+        "requested_profile_id": evidence.get("requested_profile_id"),
+        "selected_profile_id": evidence.get("selected_profile_id"),
+        "model_id": evidence.get("model_id"),
+        "runtime_id": evidence.get("runtime_id"),
+        "selected_profile_fingerprint": evidence.get("selected_profile_fingerprint"),
+        "runtime_provider_fingerprint": evidence.get("runtime_provider_fingerprint"),
+    }
+    if not all(isinstance(value, str) and value for value in values.values()):
+        raise GoalBootstrapPlannerError("planner selection identity evidence is incomplete")
+    model_hash = evidence.get("model_hash")
+    if model_hash is not None and not isinstance(model_hash, str):
+        raise GoalBootstrapPlannerError("planner selection model hash is invalid")
+    return GoalBootstrapPlannerSelection(
+        requested_profile_id=str(values["requested_profile_id"]),
+        selected_profile_id=str(values["selected_profile_id"]),
+        attempted_profile_ids=tuple(attempted),
+        model_id=str(values["model_id"]),
+        model_hash=model_hash,
+        runtime_id=str(values["runtime_id"]),
+        selected_profile_fingerprint=str(values["selected_profile_fingerprint"]),
+        runtime_provider_fingerprint=str(values["runtime_provider_fingerprint"]),
+    )
+
+
+def _validate_dispatch_marker(
+    evidence: dict[str, object],
+    receipt: GoalBootstrapReceipt,
+    planning_input: PlanningInput,
+    plan: GoalBootstrapPlannerDependencyPlan,
+) -> None:
+    if evidence != _dispatch_marker_evidence(receipt, planning_input, plan):
+        raise GoalBootstrapPlannerError("planner dispatch marker drifted from frozen GOALBOOT attempt")
+
+
+def _dispatch_marker_rows(
+    runtime: OriginForgeRuntime,
+    bootstrap_id: str,
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    with runtime.store.session() as conn:
+        stored = conn.execute(
+            """SELECT * FROM verifications
+               WHERE verification_type = ? AND verifier = ? AND status = 'PASS'
+               ORDER BY created_at, id""",
+            (_PLANNER_DISPATCH_MARKER, _PLANNER_GENERATION_VERIFIER),
+        ).fetchall()
+        for row in stored:
+            evidence = _decode_json_object(row["evidence_json"], label="planner dispatch marker")
+            if evidence.get("goal_bootstrap_id") == bootstrap_id:
+                rows.append(dict(row))
+    if len(rows) > 1:
+        raise GoalBootstrapPlannerError("multiple planner dispatch markers exist for one GOALBOOT")
+    return rows
+
+
+def _validate_marker_run(
+    runtime: OriginForgeRuntime,
+    run_id: str,
+    plan: GoalBootstrapPlannerDependencyPlan,
+) -> dict[str, object]:
+    run = runtime.get_run(run_id)
+    if (
+        run["task_id"] is not None
+        or run["role"] != _PLANNER_ROLE
+        or run["model_profile"] != plan.selection.model_id
+        or run["model_hash"] != plan.selection.model_hash
+    ):
+        raise GoalBootstrapPlannerError("durable planner Run identity drifted")
+    return run
+
+
+def _claim_or_load_dispatch_marker(
+    runtime: OriginForgeRuntime,
+    receipt: GoalBootstrapReceipt,
+    planning_input: PlanningInput,
+    plan: GoalBootstrapPlannerDependencyPlan,
+    requested_run_id: str,
+) -> tuple[str, bool]:
+    if (
+        receipt.stage is not GoalBootstrapStage.PLANNER_STARTED
+        or receipt.status is not GoalBootstrapStatus.ACTIVE
+        or receipt.planner_dependency_plan_hash != plan.plan_hash
+        or receipt.planner_run_id is not None
+    ):
+        raise GoalBootstrapPlannerError("planner dispatch marker requires exact PLANNER_STARTED authority")
+    expected_evidence = _dispatch_marker_evidence(receipt, planning_input, plan)
+    now = utc_now()
+    with runtime.store.session() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        current = conn.execute(
+            """SELECT revision, status, stage, planner_dependency_plan_hash, planner_run_id
+               FROM goal_bootstraps WHERE bootstrap_id = ?""",
+            (receipt.bootstrap_id,),
+        ).fetchone()
+        if current is None:
+            raise GoalBootstrapPlannerError("GOALBOOT disappeared before planner dispatch marker")
+        if (
+            int(current["revision"]) != receipt.revision
+            or current["status"] != GoalBootstrapStatus.ACTIVE.value
+            or current["stage"] != GoalBootstrapStage.PLANNER_STARTED.value
+            or current["planner_dependency_plan_hash"] != plan.plan_hash
+            or current["planner_run_id"] is not None
+        ):
+            raise StaleRevision(receipt.bootstrap_id)
+
+        matches: list[tuple[object, dict[str, object]]] = []
+        marker_rows = conn.execute(
+            """SELECT * FROM verifications
+               WHERE verification_type = ? AND verifier = ? AND status = 'PASS'
+               ORDER BY created_at, id""",
+            (_PLANNER_DISPATCH_MARKER, _PLANNER_GENERATION_VERIFIER),
+        ).fetchall()
+        for row in marker_rows:
+            evidence = _decode_json_object(row["evidence_json"], label="planner dispatch marker")
+            if evidence.get("goal_bootstrap_id") == receipt.bootstrap_id:
+                matches.append((row, evidence))
+        if len(matches) > 1:
+            raise GoalBootstrapPlannerError("multiple planner dispatch markers exist for one GOALBOOT")
+        if matches:
+            row, evidence = matches[0]
+            if row["target_type"] != "RUN" or row["run_id"] != row["target_id"]:
+                raise GoalBootstrapPlannerError("planner dispatch marker target binding is invalid")
+            _validate_dispatch_marker(evidence, receipt, planning_input, plan)
+            run_id = str(row["target_id"])
+            run = conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if run is None:
+                raise GoalBootstrapPlannerError("planner dispatch marker targets a missing Run")
+            if (
+                run["task_id"] is not None
+                or run["role"] != _PLANNER_ROLE
+                or run["model_profile"] != plan.selection.model_id
+                or run["model_hash"] != plan.selection.model_hash
+            ):
+                raise GoalBootstrapPlannerError("planner dispatch marker Run identity drifted")
+            return run_id, False
+
+        verification_id = new_id(IdKind.VERIFICATION)
+        conn.execute(
+            """INSERT INTO runs(
+                   id, task_id, role, model_profile, model_hash, skills_json,
+                   allowed_tools_json, started_at, status
+               ) VALUES (?, NULL, ?, ?, ?, '[]', '[]', ?, ?)""",
+            (
+                requested_run_id,
+                _PLANNER_ROLE,
+                plan.selection.model_id,
+                plan.selection.model_hash,
+                now,
+                RunStatus.RUNNING.value,
+            ),
+        )
+        runtime.store._append_event(
+            conn,
+            "RUN",
+            requested_run_id,
+            "RUN_STARTED",
+            None,
+            RunStatus.RUNNING.value,
+            None,
+            "SYSTEM",
+            None,
+            {"task_id": None, "role": _PLANNER_ROLE},
+            now,
+        )
+        conn.execute(
+            """INSERT INTO verifications(
+                   id, target_type, target_id, verification_type, verifier,
+                   status, evidence_json, metrics_json, run_id, created_at
+               ) VALUES (?, 'RUN', ?, ?, ?, 'PASS', ?, '{}', ?, ?)""",
+            (
+                verification_id,
+                requested_run_id,
+                _PLANNER_DISPATCH_MARKER,
+                _PLANNER_GENERATION_VERIFIER,
+                _json(expected_evidence),
+                requested_run_id,
+                now,
+            ),
+        )
+        runtime.store._append_event(
+            conn,
+            "RUN",
+            requested_run_id,
+            "VERIFICATION_RECORDED",
+            None,
+            "PASS",
+            None,
+            "SYSTEM",
+            None,
+            {
+                "verification_id": verification_id,
+                "verification_type": _PLANNER_DISPATCH_MARKER,
+            },
+            now,
+        )
+    return requested_run_id, True
 
 
 def _record_selection(
@@ -608,10 +831,9 @@ def _invoke_reserved_planner(
     environment: GoalBootstrapPlannerEnvironment,
     scheduled: ScheduledModel,
     plan: GoalBootstrapPlannerDependencyPlan,
+    run_id: str,
 ) -> PlanProposal:
-    run_id = receipt.planner_run_id
-    if run_id is None:
-        raise GoalBootstrapPlannerError("PLANNER_STARTED lacks durable planner Run")
+    _validate_marker_run(runtime, run_id, plan)
     _record_selection(runtime, run_id, receipt, plan, scheduled)
     instance: object | None = None
     try:
@@ -672,46 +894,11 @@ def _invoke_reserved_planner(
 
 
 def _verification_evidence(row: dict[str, object]) -> dict[str, object]:
-    raw = row.get("evidence_json")
-    if not isinstance(raw, str):
-        raise GoalBootstrapPlannerError("planner verification evidence is not stored JSON")
-    try:
-        value = json.loads(raw)
-    except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        raise GoalBootstrapPlannerError("planner verification evidence is invalid JSON") from exc
-    if not isinstance(value, dict):
-        raise GoalBootstrapPlannerError("planner verification evidence is not an object")
-    return value
+    return _decode_json_object(row.get("evidence_json"), label="planner verification evidence")
 
 
 def _selection_from_verification(row: dict[str, object]) -> GoalBootstrapPlannerSelection:
-    evidence = _verification_evidence(row)
-    attempted = evidence.get("attempted_profile_ids")
-    if not isinstance(attempted, list) or not all(isinstance(value, str) for value in attempted):
-        raise GoalBootstrapPlannerError("planner selection attempted profile chain is invalid")
-    values = {
-        "requested_profile_id": evidence.get("requested_profile_id"),
-        "selected_profile_id": evidence.get("selected_profile_id"),
-        "model_id": evidence.get("model_id"),
-        "runtime_id": evidence.get("runtime_id"),
-        "selected_profile_fingerprint": evidence.get("selected_profile_fingerprint"),
-        "runtime_provider_fingerprint": evidence.get("runtime_provider_fingerprint"),
-    }
-    if not all(isinstance(value, str) and value for value in values.values()):
-        raise GoalBootstrapPlannerError("planner selection identity evidence is incomplete")
-    model_hash = evidence.get("model_hash")
-    if model_hash is not None and not isinstance(model_hash, str):
-        raise GoalBootstrapPlannerError("planner selection model hash is invalid")
-    return GoalBootstrapPlannerSelection(
-        requested_profile_id=str(values["requested_profile_id"]),
-        selected_profile_id=str(values["selected_profile_id"]),
-        attempted_profile_ids=tuple(attempted),
-        model_id=str(values["model_id"]),
-        model_hash=model_hash,
-        runtime_id=str(values["runtime_id"]),
-        selected_profile_fingerprint=str(values["selected_profile_fingerprint"]),
-        runtime_provider_fingerprint=str(values["runtime_provider_fingerprint"]),
-    )
+    return _selection_from_evidence(_verification_evidence(row))
 
 
 def _matching_verifications(
@@ -747,6 +934,20 @@ def _interrupt_started(
         return read_goal_bootstrap_receipt(runtime, receipt.bootstrap_id)
 
 
+def _interrupt_run_if_running(runtime: OriginForgeRuntime, run_id: str, reason: str) -> None:
+    try:
+        run = runtime.get_run(run_id)
+        if run["status"] == RunStatus.RUNNING.value:
+            finish_run(
+                runtime.store,
+                run_id,
+                RunStatus.INTERRUPTED,
+                failure_reason=reason[:1000],
+            )
+    except Exception:
+        pass
+
+
 def _load_returned(
     runtime: OriginForgeRuntime,
     receipt: GoalBootstrapReceipt,
@@ -770,107 +971,208 @@ def _load_returned(
     )
 
 
+def _recover_from_marker(
+    runtime: OriginForgeRuntime,
+    receipt: GoalBootstrapReceipt,
+    planning_input: PlanningInput,
+    environment: GoalBootstrapPlannerEnvironment,
+    marker: dict[str, object],
+) -> GoalBootstrapPlannerResult:
+    run_id = marker.get("target_id")
+    if not isinstance(run_id, str) or marker.get("target_type") != "RUN" or marker.get("run_id") != run_id:
+        raise GoalBootstrapPlannerError("planner dispatch marker target binding is invalid")
+    marker_evidence = _verification_evidence(marker)
+    selection = _selection_from_evidence(marker_evidence)
+    environment.validate_selection(selection)
+    plan = environment.dependency_plan(receipt, planning_input, selection)
+    dependency_hash = receipt.planner_dependency_plan_hash
+    if dependency_hash is None or plan.plan_hash != dependency_hash:
+        raise GoalBootstrapPlannerError("reconstructed planner dependency plan drifted")
+    _validate_dispatch_marker(marker_evidence, receipt, planning_input, plan)
+    run = _validate_marker_run(runtime, run_id, plan)
+
+    selection_rows = _matching_verifications(runtime, run_id, "model-resource-selection")
+    generation_rows = _matching_verifications(runtime, run_id, "planner-generation")
+    if len(generation_rows) != 1:
+        raise GoalBootstrapPlannerError(
+            "exact original Planner result cannot be proven without one generation verification"
+        )
+    if len(selection_rows) != 1:
+        raise GoalBootstrapPlannerError(
+            "exact original Planner selection cannot be proven without one selection verification"
+        )
+    selection_evidence = _verification_evidence(selection_rows[0])
+    if (
+        selection_evidence.get("goal_bootstrap_id") != receipt.bootstrap_id
+        or selection_evidence.get("planner_dependency_plan_hash") != dependency_hash
+    ):
+        raise GoalBootstrapPlannerError("planner selection verification escaped GOALBOOT binding")
+    proven_selection = _selection_from_verification(selection_rows[0])
+    if proven_selection != selection:
+        raise GoalBootstrapPlannerError("planner selection verification drifted from dispatch marker")
+
+    generation = _verification_evidence(generation_rows[0])
+    request, request_hash = _planner_request(runtime, planning_input, run_id)
+    del request
+    if (
+        generation.get("goal_bootstrap_id") != receipt.bootstrap_id
+        or generation.get("planner_dependency_plan_hash") != dependency_hash
+        or generation.get("planning_input_id") != planning_input.planning_input_id
+        or generation.get("planning_input_hash") != planning_input.content_hash
+        or generation.get("request_hash") != request_hash
+        or generation.get("selected_profile_id") != selection.selected_profile_id
+        or generation.get("model_id") != selection.model_id
+    ):
+        raise GoalBootstrapPlannerError("planner generation verification drifted from frozen attempt")
+    if generation.get("model_hash") not in (None, selection.model_hash):
+        raise GoalBootstrapPlannerError("planner generation model hash drifted")
+    proposal_id = generation.get("proposal_id")
+    proposal_hash = generation.get("proposal_hash")
+    if not isinstance(proposal_id, str) or not _digest(proposal_hash):
+        raise GoalBootstrapPlannerError("planner generation proposal binding is invalid")
+    proposal = ProductionPlanningEvidenceStore(runtime).load_proposal(proposal_id)
+    if (
+        proposal.content_hash != proposal_hash
+        or proposal.planning_input_id != planning_input.planning_input_id
+    ):
+        raise GoalBootstrapPlannerError("persisted PlanProposal escaped frozen Planner input")
+
+    if run["status"] == RunStatus.RUNNING.value:
+        metrics_raw = generation_rows[0].get("metrics_json")
+        metrics = _decode_json_object(metrics_raw, label="planner generation metrics")
+        input_tokens = metrics.get("input_tokens")
+        output_tokens = metrics.get("output_tokens")
+        finish_run(
+            runtime.store,
+            run_id,
+            RunStatus.SUCCEEDED,
+            input_token_count=input_tokens if isinstance(input_tokens, int) else None,
+            output_token_count=output_tokens if isinstance(output_tokens, int) else None,
+        )
+    elif run["status"] != RunStatus.SUCCEEDED.value:
+        raise GoalBootstrapPlannerError("planner Run terminal state conflicts with durable result proof")
+
+    try:
+        returned = checkpoint_goal_bootstrap_planner_returned(
+            runtime,
+            receipt.bootstrap_id,
+            receipt.revision,
+            planner_run_id=run_id,
+            plan_proposal_id=proposal.proposal_id,
+            plan_proposal_hash=proposal.content_hash,
+        )
+    except StaleRevision:
+        current = read_goal_bootstrap_receipt(runtime, receipt.bootstrap_id)
+        if (
+            current.stage is not GoalBootstrapStage.PLANNER_RETURNED
+            or current.planner_run_id != run_id
+            or current.plan_proposal_id != proposal.proposal_id
+            or current.plan_proposal_hash != proposal.content_hash
+        ):
+            raise
+        returned = current
+    return GoalBootstrapPlannerResult(
+        receipt=returned,
+        proposal=proposal,
+        planner_run_id=run_id,
+        planner_dependency_plan_hash=dependency_hash,
+        recovered=True,
+    )
+
+
 def _recover_started(
     runtime: OriginForgeRuntime,
     receipt: GoalBootstrapReceipt,
     planning_input: PlanningInput,
     environment: GoalBootstrapPlannerEnvironment,
 ) -> GoalBootstrapPlannerResult:
-    run_id = receipt.planner_run_id
     dependency_hash = receipt.planner_dependency_plan_hash
-    if run_id is None or dependency_hash is None:
+    if dependency_hash is None or receipt.planner_run_id is not None:
         interrupted = _interrupt_started(
             runtime,
             receipt,
-            "PLANNER_STARTED lacks exact durable Run/dependency binding",
+            "PLANNER_STARTED violates frozen dependency/Run schema",
         )
         raise GoalBootstrapPlannerInterrupted(interrupted.terminal_reason or "planner recovery interrupted")
+
     try:
-        run = runtime.get_run(run_id)
-        if (
-            run["task_id"] is not None
-            or run["role"] != _PLANNER_ROLE
-            or run["model_profile"] != environment.primary_model_id
-        ):
-            raise GoalBootstrapPlannerError("durable planner Run identity drifted")
+        markers = _dispatch_marker_rows(runtime, receipt.bootstrap_id)
+        if markers:
+            return _recover_from_marker(runtime, receipt, planning_input, environment, markers[0])
 
-        selection_rows = _matching_verifications(runtime, run_id, "model-resource-selection")
-        generation_rows = _matching_verifications(runtime, run_id, "planner-generation")
-        if len(generation_rows) != 1:
-            raise GoalBootstrapPlannerError(
-                "exact original Planner result cannot be proven without one generation verification"
-            )
-        if len(selection_rows) != 1:
-            raise GoalBootstrapPlannerError(
-                "exact original Planner selection cannot be proven without one selection verification"
-            )
-        selection_evidence = _verification_evidence(selection_rows[0])
-        if (
-            selection_evidence.get("goal_bootstrap_id") != receipt.bootstrap_id
-            or selection_evidence.get("planner_dependency_plan_hash") != dependency_hash
-        ):
-            raise GoalBootstrapPlannerError("planner selection verification escaped GOALBOOT binding")
-        selection = _selection_from_verification(selection_rows[0])
-        environment.validate_selection(selection)
-        plan = environment.dependency_plan(receipt, planning_input, selection)
-        if plan.plan_hash != dependency_hash:
-            raise GoalBootstrapPlannerError("reconstructed planner dependency plan drifted")
-
-        generation = _verification_evidence(generation_rows[0])
-        request, request_hash = _planner_request(runtime, planning_input, run_id)
-        del request
-        if (
-            generation.get("goal_bootstrap_id") != receipt.bootstrap_id
-            or generation.get("planner_dependency_plan_hash") != dependency_hash
-            or generation.get("planning_input_id") != planning_input.planning_input_id
-            or generation.get("planning_input_hash") != planning_input.content_hash
-            or generation.get("request_hash") != request_hash
-            or generation.get("selected_profile_id") != selection.selected_profile_id
-            or generation.get("model_id") != selection.model_id
-        ):
-            raise GoalBootstrapPlannerError("planner generation verification drifted from frozen attempt")
-        if generation.get("model_hash") not in (None, selection.model_hash):
-            raise GoalBootstrapPlannerError("planner generation model hash drifted")
-        proposal_id = generation.get("proposal_id")
-        proposal_hash = generation.get("proposal_hash")
-        if not isinstance(proposal_id, str) or not _digest(proposal_hash):
-            raise GoalBootstrapPlannerError("planner generation proposal binding is invalid")
-        proposal = ProductionPlanningEvidenceStore(runtime).load_proposal(proposal_id)
-        if (
-            proposal.content_hash != proposal_hash
-            or proposal.planning_input_id != planning_input.planning_input_id
-        ):
-            raise GoalBootstrapPlannerError("persisted PlanProposal escaped frozen Planner input")
-
+        candidate_run_id = new_id(IdKind.RUN)
+        scheduled: ScheduledModel | None = None
         try:
-            returned = checkpoint_goal_bootstrap_planner_returned(
+            scheduled = environment.scheduling.scheduler.acquire(candidate_run_id, environment.policy)
+            selection = environment.selection_from_scheduled(scheduled)
+            plan = environment.dependency_plan(receipt, planning_input, selection)
+            if plan.plan_hash != dependency_hash:
+                raise GoalBootstrapPlannerError("planner dependency plan changed before safe dispatch recovery")
+            run_id, created = _claim_or_load_dispatch_marker(
                 runtime,
-                receipt.bootstrap_id,
-                receipt.revision,
-                planner_run_id=run_id,
-                plan_proposal_id=proposal.proposal_id,
-                plan_proposal_hash=proposal.content_hash,
+                receipt,
+                planning_input,
+                plan,
+                candidate_run_id,
             )
-        except StaleRevision:
-            current = read_goal_bootstrap_receipt(runtime, receipt.bootstrap_id)
-            if (
-                current.stage is not GoalBootstrapStage.PLANNER_RETURNED
-                or current.planner_run_id != run_id
-                or current.plan_proposal_id != proposal.proposal_id
-                or current.plan_proposal_hash != proposal.content_hash
-            ):
-                raise
-            returned = current
-        return GoalBootstrapPlannerResult(
-            receipt=returned,
-            proposal=proposal,
-            planner_run_id=run_id,
-            planner_dependency_plan_hash=dependency_hash,
-            recovered=True,
-        )
+            if not created:
+                marker_rows = _dispatch_marker_rows(runtime, receipt.bootstrap_id)
+                if len(marker_rows) != 1:
+                    raise GoalBootstrapPlannerError("planner dispatch marker race did not converge")
+                return _recover_from_marker(
+                    runtime,
+                    receipt,
+                    planning_input,
+                    environment,
+                    marker_rows[0],
+                )
+            proposal = _invoke_reserved_planner(
+                runtime,
+                receipt,
+                planning_input,
+                environment,
+                scheduled,
+                plan,
+                run_id,
+            )
+            try:
+                returned = checkpoint_goal_bootstrap_planner_returned(
+                    runtime,
+                    receipt.bootstrap_id,
+                    receipt.revision,
+                    planner_run_id=run_id,
+                    plan_proposal_id=proposal.proposal_id,
+                    plan_proposal_hash=proposal.content_hash,
+                )
+            except StaleRevision:
+                current = read_goal_bootstrap_receipt(runtime, receipt.bootstrap_id)
+                if (
+                    current.stage is not GoalBootstrapStage.PLANNER_RETURNED
+                    or current.planner_run_id != run_id
+                    or current.plan_proposal_id != proposal.proposal_id
+                    or current.plan_proposal_hash != proposal.content_hash
+                ):
+                    raise
+                returned = current
+            return GoalBootstrapPlannerResult(
+                receipt=returned,
+                proposal=proposal,
+                planner_run_id=run_id,
+                planner_dependency_plan_hash=dependency_hash,
+                recovered=True,
+            )
+        finally:
+            if scheduled is not None:
+                environment.scheduling.scheduler.release(scheduled)
+    except ModelCapacityUnavailable as exc:
+        raise GoalBootstrapPlannerError("Goal-planner capacity is unavailable before model dispatch") from exc
     except GoalBootstrapPlannerInterrupted:
         raise
     except Exception as exc:
+        marker_rows = _dispatch_marker_rows(runtime, receipt.bootstrap_id)
+        run_id = str(marker_rows[0]["target_id"]) if marker_rows else None
+        if run_id is not None:
+            _interrupt_run_if_running(runtime, run_id, f"Planner recovery failed closed: {exc}")
         interrupted = _interrupt_started(runtime, receipt, f"Planner recovery failed closed: {exc}")
         if interrupted.stage is GoalBootstrapStage.PLANNER_RETURNED:
             return _load_returned(runtime, interrupted)
@@ -885,10 +1187,11 @@ def advance_goal_bootstrap_planner(
 ) -> GoalBootstrapPlannerResult:
     """Advance one governed GOALBOOT through exactly the Planner-return checkpoint.
 
-    The function never audits, materializes, publishes PREPPOL, or invokes Manager.
-    A durable PLANNER_STARTED receipt always contains both the exact dependency
-    plan hash and the precreated planner Run ID before model loading/generation.
-    Recovery never issues a second model request for an uncertain started attempt.
+    PLANNER_STARTED stores only the frozen dependency-plan hash, preserving the
+    v12 receipt invariant. The exact taskless Run and selected model are then
+    published atomically in a Run-targeted dispatch marker before any model
+    request. A started receipt with no marker is safe to resume once; a started
+    receipt with a marker but no exact generation proof is never auto-replayed.
     """
 
     if not isinstance(runtime, OriginForgeRuntime):
@@ -922,6 +1225,7 @@ def advance_goal_bootstrap_planner(
         GoalBootstrapStage.PREPPOL_PUBLISHED,
     ):
         return _load_returned(runtime, receipt)
+
     environment = assemble_goal_bootstrap_planner_environment(runtime, receipt, planning_input)
     if receipt.stage is GoalBootstrapStage.PLANNER_STARTED:
         return _recover_started(runtime, receipt, planning_input, environment)
@@ -930,24 +1234,41 @@ def advance_goal_bootstrap_planner(
             f"GOALBOOT cannot invoke Planner from stage {receipt.stage.value}"
         )
 
-    run_id = create_run(
-        runtime.store,
-        None,
-        role=_PLANNER_ROLE,
-        model_profile=environment.primary_model_id,
-    )
+    candidate_run_id = new_id(IdKind.RUN)
     scheduled: ScheduledModel | None = None
     started: GoalBootstrapReceipt | None = None
+    marker_created = False
     try:
-        scheduled = environment.scheduling.scheduler.acquire(run_id, environment.policy)
+        scheduled = environment.scheduling.scheduler.acquire(candidate_run_id, environment.policy)
         selection = environment.selection_from_scheduled(scheduled)
         plan = environment.dependency_plan(receipt, planning_input, selection)
-        started = _checkpoint_planner_started(
+        try:
+            started = _checkpoint_planner_started(
+                runtime,
+                receipt,
+                planner_dependency_plan_hash=plan.plan_hash,
+            )
+        except StaleRevision:
+            current = read_goal_bootstrap_receipt(runtime, receipt.bootstrap_id)
+            if (
+                current.stage is not GoalBootstrapStage.PLANNER_STARTED
+                or current.status is not GoalBootstrapStatus.ACTIVE
+                or current.planner_dependency_plan_hash != plan.plan_hash
+                or current.planner_run_id is not None
+            ):
+                raise
+            started = current
+
+        run_id, marker_created = _claim_or_load_dispatch_marker(
             runtime,
-            receipt,
-            planner_dependency_plan_hash=plan.plan_hash,
-            planner_run_id=run_id,
+            started,
+            planning_input,
+            plan,
+            candidate_run_id,
         )
+        if not marker_created:
+            return _recover_started(runtime, started, planning_input, environment)
+
         proposal = _invoke_reserved_planner(
             runtime,
             started,
@@ -955,6 +1276,7 @@ def advance_goal_bootstrap_planner(
             environment,
             scheduled,
             plan,
+            run_id,
         )
         try:
             returned = checkpoint_goal_bootstrap_planner_returned(
@@ -986,20 +1308,13 @@ def advance_goal_bootstrap_planner(
         if not isinstance(exc, Exception):
             raise
         if started is None:
-            try:
-                run = runtime.get_run(run_id)
-                if run["status"] == RunStatus.RUNNING.value:
-                    finish_run(
-                        runtime.store,
-                        run_id,
-                        RunStatus.FAILED,
-                        failure_reason=f"{type(exc).__name__}: {exc}"[:1000],
-                    )
-            except Exception:
-                pass
             if isinstance(exc, ModelCapacityUnavailable):
-                raise GoalBootstrapPlannerError("Goal-planner capacity is unavailable before Planner start") from exc
+                raise GoalBootstrapPlannerError(
+                    "Goal-planner capacity is unavailable before Planner start"
+                ) from exc
             raise
+        if marker_created:
+            return _recover_started(runtime, started, planning_input, environment)
         return _recover_started(runtime, started, planning_input, environment)
     finally:
         if scheduled is not None:
