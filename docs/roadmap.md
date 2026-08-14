@@ -860,6 +860,30 @@ See `docs/phase-42-governed-manager-recovery-integration.md` for the frozen arch
 
 **Merge gate:** this documentation/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with unrelated heavyweight evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
+## Phase 43 — Governed Bounded Manager Driver — DONE
+
+Implemented the first finite repeated outer Manager driver over the accepted Phase-40/42 one-shot primitive while preserving one-shot authority inside every step:
+
+- fixed infrastructure-owned maximum of six calls to `advance_production_manager_once(runtime)` per outer invocation, with no caller/model/Task/PREPPOL-selected budget;
+- fresh immutable Manager admission and canonical oldest-candidate selection on every permitted continuation, with no cross-step candidate pinning or fallback Task;
+- closed continuation whitelist limited to `PREPARATION_RECOVERY_ADVANCED`, `PREPARATION_PLANNER_RETURNED`, `WORK_ORDER_AUDITED`, and `PHASE34_READY`;
+- immediate stop on every other Manager result, including quiescence, ambiguity, limits, invalid/recovery-required state, PREP acquisition/failure, planner uncertainty, dispatch claim/pre-start/recovery failure, `DISPATCH_RETURNED`, and `DISPATCH_RAISED`;
+- `DISPATCH_RETURNED` deliberately remains terminal for the bounded driver so one outer invocation cannot become a queue drain or reinterpret mechanical dispatch return as Task outcome;
+- immutable typed bounded-driver trace preserving each exact `ManagerAdvanceOnceResult`, step count, fixed maximum, final result, and typed stop reason;
+- malformed lower result/status types fail closed without retry and impossible result traces are rejected;
+- source-level isolation proving the driver imports only the public one-shot Manager module and contains no lower preparation/recovery/finalization/claim/dispatch/model/policy/timer/queue mutation helper;
+- adversarial acceptance proving a normal four-step fresh preparation path and the full six-step `CLAIMED` recovery path both stop at the first dispatch result with no seventh call;
+- terminal pre-planner and dispatch-raised failures stop without falling through to newer Tasks;
+- concurrent bounded drivers preserve lower at-most-once planner/ownership semantics and each race loser stops after its first non-continuable result rather than immediately retrying Manager;
+- prerequisite test-only fail-closed concurrency repairs align legacy Phase-39/40/41 assertions with the already accepted at-most-once semantics without changing production authority;
+- no daemon, polling, background scheduling, retry queue, action-priority change, Task outcome reinterpretation, Artifact adoption/signing, Project Intelligence mutation, Dream promotion, training, merge, or release authority is added.
+
+See `docs/phase-43-governed-bounded-manager-driver.md` for the frozen architecture and `docs/phase-43-implementation-closure.md` for the accepted implementation, prerequisite concurrency-test repair, adversarial acceptance, and exact CI evidence.
+
+**Exit condition met in implementation:** prerequisite repair head `9ce497784180f9c6b59cfa349827350540cec0be` / run `31764367630`, planning head `c8ae085cb4da661ec777dbf921f9dd81e8b28ee9` / run `31764772997`, 43A implementation head `509799ea4ce35a6a800e2635a8da3fdb4278fb5e` / run `31765239984`, and 43B acceptance head `bd26828b88a2d055ffd2739a9a42614631c15c21` / run `31765713379` all passed Python 3.12 and Python 3.13. Accepted implementation/acceptance is merged to `main` as `ec3411940f01aad936a298fd0e3109af0579bc3d`.
+
+**Merge gate:** this documentation/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release
