@@ -884,6 +884,28 @@ See `docs/phase-43-governed-bounded-manager-driver.md` for the frozen architectu
 
 **Merge gate:** this documentation/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
+## Phase 44 — Governed Manager Operator Invocation — DONE
+
+Exposed the accepted bounded Manager through one explicit local operator surface without introducing recurring autonomy or a second production authority path:
+
+- existing main `origin-forge` CLI gains only `manager status` and `manager advance`; no fourth executable, daemon, service, watcher, timer, poller, or scheduler entrypoint is added;
+- `manager status` calls the exact immutable `inspect_manager_advance_status_readonly(runtime)` projection once and prints its typed `.to_dict()` JSON;
+- `manager advance` calls the exact accepted `advance_production_manager_bounded(runtime)` driver once, with no status preflight and no direct lower one-shot/preparation/recovery/finalization/claim/dispatch/model/resource authority;
+- the Phase-43 code-owned six-step limit and closed continuation whitelist remain unchanged, with no caller/model/Task/PREP-selected budget or `--max-steps` override;
+- the Manager group exposes no repeat/watch/until-idle/loop/interval/background mode and no Task/PREP/claim/action/priority/model/resource selector;
+- typed Manager stop results return process code `0` as mechanical operator results without becoming Task success/failure, verification truth, PolicyOutcome truth, merge, or release authority;
+- uninitialized/missing/stale/partial/actively-written durable state remains fail closed and the Manager commands do not initialize, migrate, checkpoint, or silently repair project state;
+- cross-phase acceptance proves a real CLI invocation reaches one exact four-step fresh lifecycle through `DISPATCH_RETURNED`, emits the bounded driver's exact JSON trace, and never drains the newer Task;
+- packaging remains exactly the existing `origin-forge`, `origin-forge-attempt`, and `origin-forge-cockpit` scripts;
+- the cockpit remains a separate read-only `snapshot`/`serve` surface with no Manager mutation command;
+- the v0.1 operator guide documents the explicit Manager commands and their authority limits.
+
+See `docs/phase-44-governed-manager-operator-invocation.md` for the frozen architecture and `docs/phase-44-implementation-closure.md` for the accepted implementation, corrected fixture history, cross-phase acceptance, operator guidance, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `a48afae9835051ab82fce74846cbb23bd9555649` / run `31766870026`, 44A accepted implementation head `8b089a73250343644ff70cc6cfd2eedb446f0fe4` / run `31770262537`, and 44B acceptance head `8166f33a48ac12e817fa521006f98ec5cd3b13ce` / run `31770691249` all passed Python 3.12 and Python 3.13 on attempt 1. Accepted implementation/acceptance is merged to `main` as `891013efb9f95c36bee8850d5ce5ed0a2c4c72cb`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release
