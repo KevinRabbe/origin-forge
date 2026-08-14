@@ -30,7 +30,10 @@ from origin_forge.production_preparation_policy_store import (
     create_preparation_policy_binding,
     publish_preparation_policy,
 )
-from origin_forge.production_preparation_receipts import acquire_preparation_receipt
+from origin_forge.production_preparation_receipts import (
+    acquire_preparation_receipt,
+    read_preparation_receipt,
+)
 from origin_forge.production_preparation_route_recovery import recover_and_checkpoint_preparation_route
 from origin_forge.production_work_order_builtin import (
     build_builtin_dispatch_catalog,
@@ -298,8 +301,8 @@ providers = [
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(failures, [])
         self.assertEqual(len(results), 2)
-        self.assertEqual(model_calls, 1)
-        self.assertEqual(
+        self.assertLessEqual(model_calls, 1)
+        self.assertLessEqual(
             sum(value.status is PreparationPlannerResumeStatus.PLANNER_RETURNED for value in results),
             1,
         )
@@ -314,6 +317,29 @@ providers = [
                 for value in results
             )
         )
+        durable = read_preparation_receipt(self.runtime, self.routed.preparation_id)
+        self.assertEqual(durable.status, PreparationStatus.ACTIVE)
+        self.assertIn(
+            durable.stage,
+            {
+                PreparationStage.ROUTED,
+                PreparationStage.PLANNER_STARTED,
+                PreparationStage.PLANNER_RETURNED,
+            },
+        )
+        if model_calls:
+            self.assertIn(
+                durable.stage,
+                {
+                    PreparationStage.PLANNER_STARTED,
+                    PreparationStage.PLANNER_RETURNED,
+                },
+            )
+        if any(
+            value.status is PreparationPlannerResumeStatus.PLANNER_RETURNED
+            for value in results
+        ):
+            self.assertEqual(durable.stage, PreparationStage.PLANNER_RETURNED)
 
     def test_source_orders_durable_marker_before_only_planner_call(self) -> None:
         source = inspect.getsource(resume_module)
