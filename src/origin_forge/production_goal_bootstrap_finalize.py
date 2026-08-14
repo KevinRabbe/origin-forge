@@ -20,7 +20,7 @@ from .production_goal_bootstrap_store import (
     _require_active_checkpoint,
     _require_goal_current,
     checkpoint_goal_bootstrap_materialized,
-    checkpoint_goal_bootstrap_preparation_policy,
+    checkpoint_goal_bootstrap_preppol_published,
     interrupt_goal_bootstrap,
     read_goal_bootstrap_receipt,
 )
@@ -122,8 +122,6 @@ def _checkpoint_locked(
     updates: dict[str, object],
     target_status: GoalBootstrapStatus = GoalBootstrapStatus.ACTIVE,
 ) -> GoalBootstrapReceipt:
-    """Apply the existing GOALBOOT CAS invariant on an already-locked connection."""
-
     receipt = _load_receipt_connection(conn, bootstrap_id)
     if receipt.project_id != project_id:
         raise GoalBootstrapStoreError("GOALBOOT receipt belongs to another project")
@@ -375,14 +373,6 @@ def _read_policy_without_provenance(
     runtime: OriginForgeRuntime,
     preparation_policy_id: str,
 ) -> TaskPreparationPolicyBinding:
-    """Read immutable PREPPOL bytes without opening another SQLite reader.
-
-    This helper is used only while a GOALBOOT BEGIN IMMEDIATE lock serializes
-    competing PREPPOL publishers. Full provenance/current-owner validation is
-    always performed with read_preparation_policy immediately after that lock
-    is released and before the GOALBOOT READY checkpoint.
-    """
-
     path = _preppol_store._policy_path(
         runtime,
         preparation_policy_id,
@@ -521,8 +511,6 @@ def _preppol_and_checkpoint(
     materialization = inspect_plan_materialization(runtime, materialization_id)
     if materialization.content_hash != materialization_hash:
         raise GoalBootstrapFinalizeError("PlanMaterialization hash drifted before PREPPOL")
-
-    # Full Phase-39 authority derivation occurs while the database is quiescent.
     expected = create_preparation_policy_binding(
         runtime,
         materialization_id=materialization.materialization_id,
@@ -537,8 +525,6 @@ def _preppol_and_checkpoint(
         ),
     )
 
-    # The GOALBOOT write lock serializes only filesystem selection/publication.
-    # No production_read_connection is opened while the SQLite journal is active.
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
         current = _load_receipt_connection(conn, receipt.bootstrap_id)
@@ -571,9 +557,6 @@ def _preppol_and_checkpoint(
             selected = _publish_policy_without_provenance(runtime, expected)
             reused = False
 
-    # Re-enter the standard Phase-39 reader after the journal lock is gone. This
-    # revalidates provenance and the current code-owned preparation owner before
-    # any GOALBOOT READY authority is granted.
     policy = read_preparation_policy(runtime, selected.preparation_policy_id)
     if _semantic_dict(policy, "preparation_policy_id") != _semantic_dict(
         expected,
@@ -582,7 +565,7 @@ def _preppol_and_checkpoint(
         raise GoalBootstrapFinalizeError(
             "persisted PREPPOL drifted from code-owned expected policy"
         )
-    updated = checkpoint_goal_bootstrap_preparation_policy(
+    updated = checkpoint_goal_bootstrap_preppol_published(
         runtime,
         receipt.bootstrap_id,
         receipt.revision,
