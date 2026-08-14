@@ -838,6 +838,28 @@ See `docs/phase-41-governed-preparation-recovery.md` for the frozen architecture
 
 **Merge gate:** this canonical roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded squash merge.
 
+## Phase 42 — Governed Manager Recovery Integration — DONE
+
+Implemented the governed composition of Phase-40 Manager scheduling with the accepted Phase-41 one-PREP recovery primitive:
+
+- exact-current ACTIVE PREPs at `CLAIMED`, `ACTIVATED`, or `ROUTED` are admitted as `RECOVER_PREPARATION`;
+- stale, invalid, ambiguous, unsupported, and otherwise non-current PREP authority remains zero-action `RECOVERY_REQUIRED`;
+- the legacy lost-activation-checkpoint crash window is recoverable only when the exact Phase-41 evidence classifier accepts `ADOPTABLE_ACTIVATION_CHECKPOINT`;
+- global Manager ordering remains solely `(Task.created_at, Task.id)` with no action-kind priority or fallback candidate;
+- one selected recovery candidate calls `recover_preparation_once(runtime, preparation_id)` at most once and then stops;
+- typed Phase-41 results are projected mechanically without becoming Task-outcome authority;
+- recovery never continues in the same Manager invocation into another recovery edge, WorkOrder finalization, Phase-34 finalization, dispatch claim acquisition, or Phase-37 execution;
+- routed recovery retains the durable Phase-41 `PLANNER_STARTED` no-replay fence and guarantees at most one planner model call;
+- concurrent fail-closed zero-call recovery races are permitted by the strict immutable read guard, while every caller remains pinned to the oldest PREP and never falls through to a newer Task;
+- adversarial acceptance proves no newer dispatchable Task receives a dispatch claim or execution when the oldest recovery races or fails closed;
+- no Manager loop, daemon, timer, polling, hidden retry queue, automatic Task reprioritization, Artifact adoption/signing, Project Intelligence mutation, Dream promotion, training, merge, or release authority is added.
+
+See `docs/phase-42-governed-manager-recovery-integration.md` for the frozen architecture and `docs/phase-42-implementation-closure.md` for the accepted implementation, legacy-admission repair, concurrency semantics, and exact CI evidence.
+
+**Exit condition met in implementation:** final adversarial acceptance head `7f8d2ff6a5c0d5575a66ff11bae8bdca06db3753` completed normal run `31753948294`; failed-job rerun attempt 2 records Python 3.12 and Python 3.13 successful on that unchanged head. The accepted implementation was merged to `main` as `d933f6c2b35fdd7d0b0bb0a15a19112b0ce00659`.
+
+**Merge gate:** this documentation/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with unrelated heavyweight evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+
 ---
 
 # v0.1 — First Useful Release
