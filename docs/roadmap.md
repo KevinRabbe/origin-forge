@@ -592,6 +592,60 @@ See `docs/phase-30-full-production-interface.md` for the detailed read-side muta
 
 **Merge gate:** the canonical DONE/documentation head created after that implementation proof must itself pass the normal Python 3.12/3.13 matrix before ready-for-review transition and SHA-guarded merge.
 
+---
+
+# v0.1 — First Useful Release — RELEASED 2026-08-11
+
+The immutable v0.1.0 release closes the roadmap through Phase 30. Final candidate head `98eeab1b5519c5018d003300126f2da247d3f911` passed normal run `31478577762` on Python 3.12 and Python 3.13, was SHA-guarded squash-merged as `fbc6764b3b5e71cb5f5a223f09c82189e7326c1d`, and annotated tag `v0.1.0` points to that exact reviewed/tested release commit.
+
+Target lifecycle:
+
+```text
+Human request
+    ↓
+Goal / Flow / Task
+    ↓
+Workspace snapshot
+    ↓
+Context selection
+    ↓
+Governed Skills
+    ↓
+Fresh Executor
+    ↓
+Patch Proposal
+    ↓
+Deterministic Apply
+    ↓
+Independent Audit
+    ↓
+Sandbox Build / Tests
+    ↓
+FAIL → bounded repair / escalation
+PASS
+    ↓
+Verified durable state + provenance
+    ↓
+Human review / eventual merge
+```
+
+Success criteria:
+
+- no dependency on long chat history
+- process restart does not lose work state
+- known-good project state remains isolated
+- model cannot self-verify completion
+- retries and no-progress loops are bounded
+- selected context is reconstructable
+- final diff is understandable
+- meaningful changes have causal/provenance records
+
+---
+
+# Post-v0.1 Development
+
+Phases 31–44 were implemented after the immutable v0.1.0 release. They are current development-line capabilities and are not retroactively part of the v0.1.0 release payload.
+
 ## Phase 31 — Governed Production Planning & Dependency Graph — DONE
 
 Implemented the Manager-side planning substrate needed to turn one durable Goal into a bounded cross-domain dependency graph without giving a Planner model production authority:
@@ -898,59 +952,13 @@ Exposed the accepted bounded Manager through one explicit local operator surface
 - cross-phase acceptance proves a real CLI invocation reaches one exact four-step fresh lifecycle through `DISPATCH_RETURNED`, emits the bounded driver's exact JSON trace, and never drains the newer Task;
 - packaging remains exactly the existing `origin-forge`, `origin-forge-attempt`, and `origin-forge-cockpit` scripts;
 - the cockpit remains a separate read-only `snapshot`/`serve` surface with no Manager mutation command;
-- the v0.1 operator guide documents the explicit Manager commands and their authority limits.
+- the living current-main operator guide documents the explicit Manager commands and their authority limits.
 
 See `docs/phase-44-governed-manager-operator-invocation.md` for the frozen architecture and `docs/phase-44-implementation-closure.md` for the accepted implementation, corrected fixture history, cross-phase acceptance, operator guidance, and exact CI evidence.
 
 **Exit condition met in implementation:** planning head `a48afae9835051ab82fce74846cbb23bd9555649` / run `31766870026`, 44A accepted implementation head `8b089a73250343644ff70cc6cfd2eedb446f0fe4` / run `31770262537`, and 44B acceptance head `8166f33a48ac12e817fa521006f98ec5cd3b13ce` / run `31770691249` all passed Python 3.12 and Python 3.13 on attempt 1. Accepted implementation/acceptance is merged to `main` as `891013efb9f95c36bee8850d5ce5ed0a2c4c72cb`.
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
-
----
-
-# v0.1 — First Useful Release
-
-Target lifecycle:
-
-```text
-Human request
-    ↓
-Goal / Flow / Task
-    ↓
-Workspace snapshot
-    ↓
-Context selection
-    ↓
-Governed Skills
-    ↓
-Fresh Executor
-    ↓
-Patch Proposal
-    ↓
-Deterministic Apply
-    ↓
-Independent Audit
-    ↓
-Sandbox Build / Tests
-    ↓
-FAIL → bounded repair / escalation
-PASS
-    ↓
-Verified durable state + provenance
-    ↓
-Human review / eventual merge
-```
-
-Success criteria:
-
-- no dependency on long chat history
-- process restart does not lose work state
-- known-good project state remains isolated
-- model cannot self-verify completion
-- retries and no-progress loops are bounded
-- selected context is reconstructable
-- final diff is understandable
-- meaningful changes have causal/provenance records
 
 # v0.5 — Integrated Development Infrastructure
 
