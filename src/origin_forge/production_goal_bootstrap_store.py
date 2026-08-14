@@ -284,11 +284,12 @@ def _checkpoint(
     updates: dict[str, object],
     target_status: GoalBootstrapStatus = GoalBootstrapStatus.ACTIVE,
 ) -> GoalBootstrapReceipt:
+    project_id = runtime.project_id()
     now = utc_now()
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
         receipt = _load_receipt_connection(conn, bootstrap_id)
-        if receipt.project_id != runtime.project_id():
+        if receipt.project_id != project_id:
             raise GoalBootstrapStoreError("GOALBOOT receipt belongs to another project")
         _require_active_checkpoint(
             receipt,
@@ -549,11 +550,12 @@ def _terminalize(
     target_status: GoalBootstrapStatus,
     reason: str,
 ) -> GoalBootstrapReceipt:
+    project_id = runtime.project_id()
     now = utc_now()
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
         receipt = _load_receipt_connection(conn, bootstrap_id)
-        if receipt.project_id != runtime.project_id():
+        if receipt.project_id != project_id:
             raise GoalBootstrapStoreError("GOALBOOT receipt belongs to another project")
         _require_active_checkpoint(
             receipt,
