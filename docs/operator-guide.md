@@ -2,7 +2,7 @@
 
 Status: **POST-v0.1 DEVELOPMENT MAINLINE**
 
-This guide describes the current `main` operator surface. Origin Forge v0.1.0 was released on 2026-08-11 and remains immutably identified by tag `v0.1.0`; the current development line is `0.2.0.dev0` and contains post-release capabilities through Phase 45. For the exact released v0.1.0 surface, see `docs/v0.1-operator-guide.md`.
+This guide describes the current `main` operator surface. Origin Forge v0.1.0 was released on 2026-08-11 and remains immutably identified by tag `v0.1.0`; the current development line is `0.2.0.dev0` and contains post-release capabilities through Phase 46. For the exact released v0.1.0 surface, see `docs/v0.1-operator-guide.md`.
 
 ## Install
 
@@ -63,23 +63,19 @@ origin-forge sandbox --help
 
 A fresh bounded coding attempt requires the target Task and parent Flow to satisfy the orchestration preconditions. The attempt command does not invent Tasks or silently repair lifecycle state.
 
-## Inspect, bootstrap, or recover one explicit Goal programmatically
+## Inspect, bootstrap, or recover one explicit Goal
 
-Phase 45 intentionally exposes the governed Goal-bootstrap boundary as a narrow Python module/API first. It does **not** add a fourth executable or a new packaged `origin-forge` bootstrap command.
+Phase 46 exposes the accepted Phase-45 Goal-bootstrap operator boundary through the existing `origin-forge` executable without adding a fourth packaged command:
 
-The accepted public functions are:
-
-```python
-from origin_forge.production_goal_bootstrap_operator import (
-    bootstrap_goal_once,
-    inspect_goal_bootstrap_status_readonly,
-    recover_goal_once,
-)
+```bash
+origin-forge --project-root /path/to/project goal bootstrap status  <GOAL-ID>
+origin-forge --project-root /path/to/project goal bootstrap start   <GOAL-ID>
+origin-forge --project-root /path/to/project goal bootstrap recover <GOAL-ID>
 ```
 
-Each operation requires one explicit canonical `GOAL-*` identity. There is no implicit Goal selection, fallback to another Goal, Task selector, model/profile/runtime selector, capability/policy/catalog selector, Manager selector, or caller-selected retry/step budget.
+Each operation requires one explicit canonical `GOAL-*` identity. There is no implicit Goal selection, fallback to another Goal, Goal revision/hash override, Task selector, model/profile/runtime selector, capability/policy/catalog selector, Manager selector, or caller-selected retry/step budget.
 
-`inspect_goal_bootstrap_status_readonly(runtime, goal_id)` is the bounded non-creating decision surface. It uses the immutable production read guard and classifies the exact current Goal authority as one of:
+`goal bootstrap status` performs the bounded non-creating Phase-45 decision projection once and prints its exact typed JSON representation. The possible decisions are:
 
 ```text
 ELIGIBLE
@@ -95,13 +91,27 @@ AMBIGUOUS_AUTHORITY
 INVALID_STATE
 ```
 
-The status call does not initialize or migrate state, create SQLite sidecars, publish authority, repair a receipt, call a model, materialize work, publish PREPPOL, or invoke Manager.
+The status command does not initialize or migrate state, create SQLite sidecars, publish authority, repair a receipt, call a model, materialize work, publish PREPPOL, or invoke Manager.
 
-`bootstrap_goal_once(runtime, goal_id)` starts fresh governed bootstrap work only when the exact current Goal revision is `ELIGIBLE`. A trustworthy current READY bootstrap is revalidated and returned idempotently rather than planned again. Existing non-READY same-revision state is not silently replaced; use the explicit recovery call where the status is recoverable.
+`goal bootstrap start` invokes the accepted fresh-bootstrap API exactly once. Fresh work begins only when the exact current Goal revision is `ELIGIBLE`. A trustworthy current READY bootstrap is revalidated and returned idempotently as `ALREADY_READY`; an existing non-READY same-revision receipt is not silently recovered or replaced.
 
-`recover_goal_once(runtime, goal_id)` resumes only the one unique exact current recoverable GOALBOOT receipt. The durable Phase-45 Planner fence remains authoritative: deterministic recovery may continue, but uncertain already-dispatched Planner work is never automatically replayed. Terminal, stale, invalid, or ambiguous same-revision authority remains fail closed. A later Goal revision is a separate authority question.
+`goal bootstrap recover` invokes the accepted explicit-recovery API exactly once. It resumes only the one unique exact current recoverable GOALBOOT receipt. It never turns an `ELIGIBLE` Goal into a fresh bootstrap, never acquires replacement authority for a terminal/stale/ambiguous same-revision receipt, and never automatically replays uncertain already-dispatched Planner work.
 
-A successful bootstrap or recovery stops at GOALBOOT `READY` after exact PREPPOL publication/revalidation. It does not invoke Manager. Production advancement remains a separate explicit `origin-forge manager advance` operation.
+`start` does not perform a CLI-owned status preflight and does not switch itself into `recover`; `recover` likewise does not switch itself into `start`. Neither command retries, watches, polls, loops, waits until READY, or runs in the background.
+
+Expected blocked bootstrap operations are emitted as bounded JSON with the exact Phase-45 decision and process exit code `4`; other expected bootstrap-operator errors use bounded JSON and exit code `5`. Successful typed status/start/recover mechanics return exit code `0`. Those exit codes describe the operator invocation, not Goal completion, Task success/failure, or verification truth.
+
+The same Phase-45 boundary remains available programmatically through:
+
+```python
+from origin_forge.production_goal_bootstrap_operator import (
+    bootstrap_goal_once,
+    inspect_goal_bootstrap_status_readonly,
+    recover_goal_once,
+)
+```
+
+A successful bootstrap or recovery stops at GOALBOOT `READY` after exact PREPPOL publication/revalidation. It does **not** invoke Manager. Production advancement remains a separate explicit `origin-forge manager advance` authorization.
 
 ## Inspect or explicitly advance governed Manager work
 
@@ -118,7 +128,7 @@ A typed Manager result with process exit code `0` means the operator command ran
 
 These commands do not initialize or migrate project state, do not repeat/watch/poll until idle, do not drain a queue, do not run in the background, and expose no Task/PREP/claim/action/model/resource selector. Missing, stale, partial, or actively written durable state remains fail closed through the existing Manager boundary.
 
-The cockpit remains a separate read-only inspection surface. It does not receive a Manager mutation command.
+The cockpit remains a separate read-only inspection surface. It does not receive a Manager or Goal-bootstrap mutation command.
 
 ## Run exactly one bounded coding attempt
 
@@ -196,7 +206,7 @@ Autonomous continuation is intentionally bounded. Failed attempts, blocked infra
 
 The Phase-44 Manager command is similarly bounded: one explicit `manager advance` invocation may traverse only the fixed Phase-43 continuation whitelist and stops at the first non-continuable result or hard six-step limit.
 
-The Phase-45 Goal bootstrap boundary is independently explicit and bounded: a fresh bootstrap starts only from `ELIGIBLE`, uncertain Planner execution is not automatically replayed, recovery must be requested separately, and READY stops before Manager invocation.
+The Phase-45/46 Goal-bootstrap boundary is independently explicit and bounded: a fresh bootstrap starts only from `ELIGIBLE`, uncertain Planner execution is not automatically replayed, recovery must be requested separately, and READY stops before Manager invocation.
 
 ## Current-development boundary
 
