@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 import sqlite3
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -18,6 +20,7 @@ from .production_goal_bootstrap_store import (
     _require_active_checkpoint,
     _require_goal_current,
     checkpoint_goal_bootstrap_materialized,
+    checkpoint_goal_bootstrap_preparation_policy,
     interrupt_goal_bootstrap,
     read_goal_bootstrap_receipt,
 )
@@ -27,12 +30,18 @@ from .production_planning_evidence import (
     ProductionPlanningEvidenceStore,
 )
 from .production_planning_inspection import inspect_plan_materialization
-from .production_planning_models import PlanAudit, PlanAuditStatus, PlanProposal, PlanningInput, audit_plan
+from .production_planning_models import (
+    PlanAudit,
+    PlanAuditStatus,
+    PlanProposal,
+    PlanningInput,
+    audit_plan,
+)
 from .production_preparation_models import TaskPreparationPolicyBinding
+from . import production_preparation_policy_store as _preppol_store
 from .production_preparation_policy_store import (
     ProductionPreparationPolicyStoreError,
     create_preparation_policy_binding,
-    publish_preparation_policy,
     read_preparation_policy,
 )
 from .runtime import OriginForgeRuntime
@@ -362,7 +371,67 @@ def _policy_root(runtime: OriginForgeRuntime) -> Path:
     return runtime.state_dir / "production-preparation" / "policies"
 
 
-def _existing_preparation_policies(
+def _read_policy_without_provenance(
+    runtime: OriginForgeRuntime,
+    preparation_policy_id: str,
+) -> TaskPreparationPolicyBinding:
+    """Read immutable PREPPOL bytes without opening another SQLite reader.
+
+    This helper is used only while a GOALBOOT BEGIN IMMEDIATE lock serializes
+    competing PREPPOL publishers. Full provenance/current-owner validation is
+    always performed with read_preparation_policy immediately after that lock
+    is released and before the GOALBOOT READY checkpoint.
+    """
+
+    path = _preppol_store._policy_path(
+        runtime,
+        preparation_policy_id,
+        require_file=True,
+        create_root=False,
+    )
+    try:
+        size = path.stat().st_size
+        if size <= 0 or size > _preppol_store._MAX_POLICY_BYTES:
+            raise ProductionPreparationPolicyStoreError(
+                "stored PREPPOL byte size is outside bounds"
+            )
+        raw = path.read_bytes()
+        envelope = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_preppol_store._strict_object,
+        )
+    except ProductionPreparationPolicyStoreError:
+        raise
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProductionPreparationPolicyStoreError(
+            "stored PREPPOL is not strict UTF-8 JSON"
+        ) from exc
+    if not isinstance(envelope, dict) or set(envelope) != {
+        "schema_version",
+        "object_type",
+        "object_id",
+        "content_hash",
+        "payload",
+    }:
+        raise ProductionPreparationPolicyStoreError("PREPPOL envelope schema drifted")
+    if (
+        envelope["schema_version"] != _preppol_store._SCHEMA_VERSION
+        or envelope["object_type"] != "preparation-policy"
+        or envelope["object_id"] != preparation_policy_id
+        or not isinstance(envelope["payload"], dict)
+        or _preppol_store._canonical_bytes(envelope) != raw
+    ):
+        raise ProductionPreparationPolicyStoreError("PREPPOL envelope binding drifted")
+    policy = _preppol_store._policy_from_dict(envelope["payload"])
+    if (
+        policy.preparation_policy_id != preparation_policy_id
+        or policy.content_hash != envelope["content_hash"]
+    ):
+        raise ProductionPreparationPolicyStoreError("PREPPOL content hash drifted")
+    return policy
+
+
+def _matching_policies_without_provenance(
     runtime: OriginForgeRuntime,
     expected: TaskPreparationPolicyBinding,
 ) -> tuple[TaskPreparationPolicyBinding, ...]:
@@ -378,29 +447,13 @@ def _existing_preparation_policies(
         )
     if not root.exists():
         return ()
-    if not root.is_dir():
-        raise ProductionPreparationPolicyStoreError(
-            "PREPPOL recovery root is not a directory"
-        )
-    state = runtime.state_dir.resolve(strict=True)
-    resolved = root.resolve(strict=True)
-    try:
-        resolved.relative_to(state)
-    except ValueError as exc:
-        raise ProductionPreparationPolicyStoreError(
-            "PREPPOL recovery root escaped protected state"
-        ) from exc
-    if resolved != root:
-        raise ProductionPreparationPolicyStoreError(
-            "PREPPOL recovery root is aliased"
-        )
-
-    ids: list[str] = []
-    scanned = 0
-    for path in root.iterdir():
-        scanned += 1
-        if scanned > _MAX_PREPARATION_POLICIES:
-            raise GoalBootstrapFinalizeError("PREPPOL recovery scan limit exceeded")
+    root = _preppol_store._root(runtime, create=False)
+    paths = tuple(root.iterdir())
+    if len(paths) > _MAX_PREPARATION_POLICIES:
+        raise GoalBootstrapFinalizeError("PREPPOL recovery scan limit exceeded")
+    expected_semantic = _semantic_dict(expected, "preparation_policy_id")
+    matches: list[TaskPreparationPolicyBinding] = []
+    for path in sorted(paths, key=lambda value: value.name):
         if path.is_symlink() or not path.is_file() or path.suffix != ".json":
             raise ProductionPreparationPolicyStoreError(
                 "PREPPOL recovery contains an undeclared or aliased entry"
@@ -414,12 +467,7 @@ def _existing_preparation_policies(
             raise ProductionPreparationPolicyStoreError(
                 "PREPPOL recovery contains invalid evidence"
             )
-        ids.append(policy_id)
-
-    expected_semantic = _semantic_dict(expected, "preparation_policy_id")
-    matches: list[TaskPreparationPolicyBinding] = []
-    for policy_id in sorted(ids):
-        policy = read_preparation_policy(runtime, policy_id)
+        policy = _read_policy_without_provenance(runtime, policy_id)
         if policy.materialization_id != expected.materialization_id:
             continue
         if _semantic_dict(policy, "preparation_policy_id") != expected_semantic:
@@ -428,6 +476,39 @@ def _existing_preparation_policies(
             )
         matches.append(policy)
     return tuple(matches)
+
+
+def _publish_policy_without_provenance(
+    runtime: OriginForgeRuntime,
+    policy: TaskPreparationPolicyBinding,
+) -> TaskPreparationPolicyBinding:
+    root = _preppol_store._root(runtime, create=True)
+    if len(tuple(root.glob("PREPPOL-*.json"))) >= _MAX_PREPARATION_POLICIES:
+        raise ProductionPreparationPolicyStoreError("PREPPOL object-count limit reached")
+    path = _preppol_store._policy_path(
+        runtime,
+        policy.preparation_policy_id,
+        require_file=False,
+        create_root=True,
+    )
+    if path.exists() or path.is_symlink():
+        raise ProductionPreparationPolicyStoreError("PREPPOL already exists")
+    envelope = {
+        "schema_version": _preppol_store._SCHEMA_VERSION,
+        "object_type": "preparation-policy",
+        "object_id": policy.preparation_policy_id,
+        "content_hash": policy.content_hash,
+        "payload": policy.to_dict(),
+    }
+    data = _preppol_store._canonical_bytes(envelope)
+    try:
+        with path.open("xb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except FileExistsError as exc:
+        raise ProductionPreparationPolicyStoreError("PREPPOL already exists") from exc
+    return _read_policy_without_provenance(runtime, policy.preparation_policy_id)
 
 
 def _preppol_and_checkpoint(
@@ -441,9 +522,28 @@ def _preppol_and_checkpoint(
     if materialization.content_hash != materialization_hash:
         raise GoalBootstrapFinalizeError("PlanMaterialization hash drifted before PREPPOL")
 
+    # Full Phase-39 authority derivation occurs while the database is quiescent.
+    expected = create_preparation_policy_binding(
+        runtime,
+        materialization_id=materialization.materialization_id,
+        capability_catalog_id=_required(receipt.capability_catalog_id, "CAPCAT ID"),
+        capability_routing_policy_id=_required(
+            receipt.capability_routing_policy_id,
+            "CAPPOL ID",
+        ),
+        dispatch_contract_catalog_id=_required(
+            receipt.dispatch_contract_catalog_id,
+            "DISPCAT ID",
+        ),
+    )
+
+    # The GOALBOOT write lock serializes only filesystem selection/publication.
+    # No production_read_connection is opened while the SQLite journal is active.
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
         current = _load_receipt_connection(conn, receipt.bootstrap_id)
+        if current.project_id != project_id:
+            raise GoalBootstrapStoreError("GOALBOOT receipt belongs to another project")
         _require_active_checkpoint(
             current,
             expected_stage=GoalBootstrapStage.MATERIALIZED,
@@ -453,52 +553,43 @@ def _preppol_and_checkpoint(
         if (
             current.materialization_id != materialization.materialization_id
             or current.materialization_hash != materialization.content_hash
+            or current.capability_catalog_id != expected.capability_catalog_id
+            or current.capability_catalog_hash != expected.capability_catalog_hash
+            or current.capability_routing_policy_id != expected.capability_routing_policy_id
+            or current.capability_routing_policy_hash != expected.capability_routing_policy_hash
+            or current.dispatch_contract_catalog_id != expected.dispatch_contract_catalog_id
+            or current.dispatch_contract_catalog_hash != expected.dispatch_contract_catalog_hash
         ):
             raise GoalBootstrapFinalizeError(
-                "locked GOALBOOT materialization relation drifted"
+                "locked GOALBOOT PREPPOL authority drifted"
             )
-        expected = create_preparation_policy_binding(
-            runtime,
-            materialization_id=materialization.materialization_id,
-            capability_catalog_id=_required(current.capability_catalog_id, "CAPCAT ID"),
-            capability_routing_policy_id=_required(
-                current.capability_routing_policy_id,
-                "CAPPOL ID",
-            ),
-            dispatch_contract_catalog_id=_required(
-                current.dispatch_contract_catalog_id,
-                "DISPCAT ID",
-            ),
-        )
-        existing = _existing_preparation_policies(runtime, expected)
+        existing = _matching_policies_without_provenance(runtime, expected)
         if existing:
-            policy = min(existing, key=lambda value: value.preparation_policy_id)
+            selected = min(existing, key=lambda value: value.preparation_policy_id)
             reused = True
         else:
-            publish_preparation_policy(runtime, expected)
-            policy = read_preparation_policy(runtime, expected.preparation_policy_id)
+            selected = _publish_policy_without_provenance(runtime, expected)
             reused = False
-        if _semantic_dict(policy, "preparation_policy_id") != _semantic_dict(
-            expected,
-            "preparation_policy_id",
-        ):
-            raise GoalBootstrapFinalizeError(
-                "persisted PREPPOL drifted from code-owned expected policy"
-            )
-        updated = _checkpoint_locked(
-            conn,
-            project_id=project_id,
-            bootstrap_id=current.bootstrap_id,
-            expected_revision=current.revision,
-            expected_stage=GoalBootstrapStage.MATERIALIZED,
-            target_stage=GoalBootstrapStage.PREPPOL_PUBLISHED,
-            target_status=GoalBootstrapStatus.READY,
-            updates={
-                "preparation_policy_id": policy.preparation_policy_id,
-                "preparation_policy_hash": policy.content_hash,
-            },
+
+    # Re-enter the standard Phase-39 reader after the journal lock is gone. This
+    # revalidates provenance and the current code-owned preparation owner before
+    # any GOALBOOT READY authority is granted.
+    policy = read_preparation_policy(runtime, selected.preparation_policy_id)
+    if _semantic_dict(policy, "preparation_policy_id") != _semantic_dict(
+        expected,
+        "preparation_policy_id",
+    ):
+        raise GoalBootstrapFinalizeError(
+            "persisted PREPPOL drifted from code-owned expected policy"
         )
-        return updated, policy, reused
+    updated = checkpoint_goal_bootstrap_preparation_policy(
+        runtime,
+        receipt.bootstrap_id,
+        receipt.revision,
+        preparation_policy_id=policy.preparation_policy_id,
+        preparation_policy_hash=policy.content_hash,
+    )
+    return updated, policy, reused
 
 
 def _validate_ready(
@@ -578,9 +669,8 @@ def _interrupt_if_unchanged(
         current.status is not GoalBootstrapStatus.ACTIVE
         or current.stage != original.stage
         or current.revision != original.revision
+        or current.stage not in _FINALIZE_STAGES
     ):
-        return None
-    if current.stage not in _FINALIZE_STAGES:
         return None
     try:
         return interrupt_goal_bootstrap(
@@ -592,6 +682,28 @@ def _interrupt_if_unchanged(
         )
     except StaleRevision:
         return None
+
+
+def _result(
+    runtime: OriginForgeRuntime,
+    receipt: GoalBootstrapReceipt,
+    *,
+    status: GoalBootstrapFinalizeStatus,
+    reused_audit: bool,
+    reused_materialization: bool,
+    reused_policy: bool,
+) -> GoalBootstrapFinalizeResult:
+    audit, materialization, policy = _validate_ready(runtime, receipt)
+    return GoalBootstrapFinalizeResult(
+        status,
+        receipt,
+        audit,
+        materialization,
+        policy,
+        reused_audit,
+        reused_materialization,
+        reused_policy,
+    )
 
 
 def finalize_goal_bootstrap(
@@ -608,24 +720,30 @@ def finalize_goal_bootstrap(
 
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
+    initial = read_goal_bootstrap_receipt(runtime, bootstrap_id)
+    if initial.status is GoalBootstrapStatus.READY:
+        return _result(
+            runtime,
+            initial,
+            status=GoalBootstrapFinalizeStatus.ALREADY_READY,
+            reused_audit=False,
+            reused_materialization=False,
+            reused_policy=False,
+        )
     reused_audit = False
     reused_materialization = False
     reused_policy = False
-    originally_ready = False
 
     for _ in range(8):
         receipt = read_goal_bootstrap_receipt(runtime, bootstrap_id)
         if receipt.status is GoalBootstrapStatus.READY:
-            audit, materialization, policy = _validate_ready(runtime, receipt)
-            return GoalBootstrapFinalizeResult(
-                GoalBootstrapFinalizeStatus.ALREADY_READY if originally_ready else GoalBootstrapFinalizeStatus.READY,
+            return _result(
+                runtime,
                 receipt,
-                audit,
-                materialization,
-                policy,
-                reused_audit,
-                reused_materialization,
-                reused_policy,
+                status=GoalBootstrapFinalizeStatus.READY,
+                reused_audit=reused_audit,
+                reused_materialization=reused_materialization,
+                reused_policy=reused_policy,
             )
         if receipt.status is not GoalBootstrapStatus.ACTIVE:
             raise GoalBootstrapFinalizeError(
@@ -655,16 +773,25 @@ def finalize_goal_bootstrap(
                     )
                 continue
             if receipt.stage is GoalBootstrapStage.PLAN_AUDITED:
-                updated, materialization, reused = _materialize_and_checkpoint(runtime, receipt)
-                del updated, materialization
+                _, _, reused = _materialize_and_checkpoint(runtime, receipt)
                 reused_materialization = reused_materialization or reused
                 continue
             if receipt.stage is GoalBootstrapStage.MATERIALIZED:
-                updated, policy, reused = _preppol_and_checkpoint(runtime, receipt)
-                del updated, policy
+                _, _, reused = _preppol_and_checkpoint(runtime, receipt)
                 reused_policy = reused_policy or reused
                 continue
-        except StaleRevision:
+        except StaleRevision as exc:
+            current = read_goal_bootstrap_receipt(runtime, receipt.bootstrap_id)
+            if (
+                current.status is GoalBootstrapStatus.ACTIVE
+                and current.stage == receipt.stage
+                and current.revision == receipt.revision
+            ):
+                interrupted = _interrupt_if_unchanged(runtime, receipt, exc)
+                if interrupted is not None:
+                    raise GoalBootstrapFinalizeInterrupted(
+                        interrupted.terminal_reason or "Phase-45D authority became stale"
+                    ) from exc
             continue
         except GoalBootstrapFinalizeInterrupted:
             raise
