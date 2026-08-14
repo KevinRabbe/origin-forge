@@ -644,7 +644,7 @@ Success criteria:
 
 # Post-v0.1 Development
 
-Phases 31–44 were implemented after the immutable v0.1.0 release. They are current development-line capabilities and are not retroactively part of the v0.1.0 release payload.
+Phases 31–45 were implemented after the immutable v0.1.0 release. They are current development-line capabilities and are not retroactively part of the v0.1.0 release payload.
 
 ## Phase 31 — Governed Production Planning & Dependency Graph — DONE
 
@@ -957,6 +957,28 @@ Exposed the accepted bounded Manager through one explicit local operator surface
 See `docs/phase-44-governed-manager-operator-invocation.md` for the frozen architecture and `docs/phase-44-implementation-closure.md` for the accepted implementation, corrected fixture history, cross-phase acceptance, operator guidance, and exact CI evidence.
 
 **Exit condition met in implementation:** planning head `a48afae9835051ab82fce74846cbb23bd9555649` / run `31766870026`, 44A accepted implementation head `8b089a73250343644ff70cc6cfd2eedb446f0fe4` / run `31770262537`, and 44B acceptance head `8166f33a48ac12e817fa521006f98ec5cd3b13ce` / run `31770691249` all passed Python 3.12 and Python 3.13 on attempt 1. Accepted implementation/acceptance is merged to `main` as `891013efb9f95c36bee8850d5ce5ed0a2c4c72cb`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
+## Phase 45 — Governed Goal Bootstrap Authority — DONE
+
+Implemented the explicit governed bridge from one exact canonical Goal revision into the accepted production-planning and preparation chain without giving the Planner model production authority:
+
+- infrastructure-owned durable `GOALBOOT-*` receipts bind one exact Goal revision/hash and checkpoint immutable bootstrap authority through CAPCAT/CAPPOL/DISPCAT, PLINPUT, Planner evidence, PLAUD, PLMAT, PREPPOL, and READY;
+- code-owned Goal-bootstrap ownership derives the only accepted v1 dispatch-safe capability intersection, `code.change → originforge.code.bounded-retry → code.bounded-retry@1`, with no caller-selected catalog, policy, adapter, contract, model/profile/runtime, Task, or Manager authority;
+- governed PlanningInput construction derives exact Project Intelligence, model/resource-policy, capability, routing, dispatch, Goal and bootstrap-owner evidence rather than accepting caller-supplied authority IDs;
+- durable `PLANNER_STARTED` plus exact taskless Run/dispatch proof fences the single Goal-Planner call, with restart recovery that never automatically replays uncertain already-dispatched model work;
+- independent Phase-31 structural audit is mandatory before exact audited-plan materialization;
+- deterministic post-planner recovery adopts only the one exact persisted PLAUD/PLMAT/PREPPOL relation and converges concurrent workers to one Flow/Task graph and one READY receipt;
+- READY requires exact current PREPPOL provenance and stops before Manager invocation, dispatch claims, dispatch executions, or Task outcome authority;
+- narrow module/API-first operator functions expose bounded non-creating status, fresh bootstrap only from `ELIGIBLE`, and explicit recovery of one unique exact current recoverable receipt;
+- read-only decision semantics distinguish eligible, active pre-planner, Planner recovery, post-planner resumable, materialized-needs-PREPPOL, READY-for-Manager, stale, terminal, ambiguous and invalid state without initialization/migration/repair/model/Manager side effects;
+- same-revision terminal or ambiguous authority fails closed, while a later Goal revision is a distinct authority question;
+- packaging remains exactly `origin-forge`, `origin-forge-attempt`, and `origin-forge-cockpit`; Phase 45 adds no fourth executable, bootstrap CLI command, cockpit mutation, daemon, watcher, poller, timer, or background scheduler.
+
+See `docs/phase-45-governed-goal-bootstrap-authority.md` for the frozen architecture and `docs/phase-45-implementation-closure.md` for the accepted 45A–45E implementation, recovery semantics, operator/API boundary, packaging isolation, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `91a3b84554c5134b3e5ebf3f43cda3cad02d04c5` / run `31807612095`, 45A head `c610bc3abb3dd167ad9955d9bb336bcc62a1db1f` / run `31817876253`, 45B head `3667582747b3f9c9986b613f80d9fcd632537911` / run `31822885546`, 45C accepted head `594a494411a37a9f2adcc42320062d4a1d14046f` / run `31845014956`, 45D accepted head `2f07330a0e8ac07de3404718f167bc30511a885e` / run `31847415346`, and 45E head `9500252ad426ea27a3f45cc9c3aa8872eadd342b` / run `31849238950` all passed the normal Python 3.12/3.13 matrix. Accepted Phase-45 implementation is merged through `f881f47325f960a3a704d67237ce9b55f8f7f9ef`.
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
