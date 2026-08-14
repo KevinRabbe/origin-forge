@@ -34,7 +34,7 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 11)
+            self.assertEqual(SCHEMA_VERSION, 12)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -95,6 +95,14 @@ class MigrationTests(unittest.TestCase):
                     row["name"]
                     for row in upgraded.execute("PRAGMA index_list(task_preparations)")
                 }
+                bootstrap_columns = {
+                    row["name"]
+                    for row in upgraded.execute("PRAGMA table_info(goal_bootstraps)")
+                }
+                bootstrap_indexes = {
+                    row["name"]
+                    for row in upgraded.execute("PRAGMA index_list(goal_bootstraps)")
+                }
             self.assertIn("revision", workspace_columns)
             self.assertIn("base_commit", workspace_columns)
             for table in (
@@ -110,6 +118,7 @@ class MigrationTests(unittest.TestCase):
                 "dispatch_claims",
                 "dispatch_executions",
                 "task_preparations",
+                "goal_bootstraps",
             ):
                 self.assertIn(table, tables)
             self.assertIn("idx_entity_relations_active_unique", relation_indexes)
@@ -222,14 +231,54 @@ class MigrationTests(unittest.TestCase):
                 "idx_task_preparations_one_active_per_task",
                 preparation_indexes,
             )
+            self.assertTrue(
+                {
+                    "bootstrap_id",
+                    "project_id",
+                    "goal_id",
+                    "goal_revision",
+                    "goal_content_hash",
+                    "bootstrap_owner_id",
+                    "bootstrap_owner_fingerprint",
+                    "bootstrap_contract_version",
+                    "capability_catalog_id",
+                    "capability_catalog_hash",
+                    "capability_routing_policy_id",
+                    "capability_routing_policy_hash",
+                    "dispatch_contract_catalog_id",
+                    "dispatch_contract_catalog_hash",
+                    "planning_input_id",
+                    "planning_input_hash",
+                    "planner_dependency_plan_hash",
+                    "planner_run_id",
+                    "plan_proposal_id",
+                    "plan_proposal_hash",
+                    "plan_audit_id",
+                    "plan_audit_hash",
+                    "materialization_id",
+                    "materialization_hash",
+                    "preparation_policy_id",
+                    "preparation_policy_hash",
+                    "stage",
+                    "status",
+                    "revision",
+                    "terminal_reason",
+                }.issubset(bootstrap_columns)
+            )
+            self.assertIn("idx_goal_bootstraps_goal_history", bootstrap_indexes)
+            self.assertIn("idx_goal_bootstraps_status", bootstrap_indexes)
+            self.assertIn(
+                "idx_goal_bootstraps_one_current_per_goal_revision",
+                bootstrap_indexes,
+            )
 
-    def test_version_ten_claim_rows_are_preserved_exactly_by_version_eleven(self) -> None:
+    def test_version_ten_claim_rows_are_preserved_exactly_by_upgrade_to_latest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "project.db"
             conn = sqlite3.connect(path)
             conn.row_factory = sqlite3.Row
             try:
-                for migration in MIGRATIONS[:-1]:
+                for migration in MIGRATIONS[:-2]:
                     conn.executescript(migration.sql)
                     conn.execute(
                         "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
@@ -334,7 +383,7 @@ class MigrationTests(unittest.TestCase):
                     (claim_id,),
                 ).fetchone()
 
-            self.assertEqual(version, 11)
+            self.assertEqual(version, 12)
             self.assertEqual(after, before)
             self.assertEqual(consumed["status"], "CONSUMED")
             self.assertEqual(consumed["revision"], 1)
