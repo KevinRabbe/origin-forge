@@ -2,7 +2,7 @@
 
 Status: **POST-v0.1 DEVELOPMENT MAINLINE**
 
-This guide describes the current `main` operator surface. Origin Forge v0.1.0 was released on 2026-08-11 and remains immutably identified by tag `v0.1.0`; the current development line is `0.2.0.dev0` and contains post-release capabilities through Phase 44. For the exact released v0.1.0 surface, see `docs/v0.1-operator-guide.md`.
+This guide describes the current `main` operator surface. Origin Forge v0.1.0 was released on 2026-08-11 and remains immutably identified by tag `v0.1.0`; the current development line is `0.2.0.dev0` and contains post-release capabilities through Phase 45. For the exact released v0.1.0 surface, see `docs/v0.1-operator-guide.md`.
 
 ## Install
 
@@ -62,6 +62,46 @@ origin-forge sandbox --help
 ```
 
 A fresh bounded coding attempt requires the target Task and parent Flow to satisfy the orchestration preconditions. The attempt command does not invent Tasks or silently repair lifecycle state.
+
+## Inspect, bootstrap, or recover one explicit Goal programmatically
+
+Phase 45 intentionally exposes the governed Goal-bootstrap boundary as a narrow Python module/API first. It does **not** add a fourth executable or a new packaged `origin-forge` bootstrap command.
+
+The accepted public functions are:
+
+```python
+from origin_forge.production_goal_bootstrap_operator import (
+    bootstrap_goal_once,
+    inspect_goal_bootstrap_status_readonly,
+    recover_goal_once,
+)
+```
+
+Each operation requires one explicit canonical `GOAL-*` identity. There is no implicit Goal selection, fallback to another Goal, Task selector, model/profile/runtime selector, capability/policy/catalog selector, Manager selector, or caller-selected retry/step budget.
+
+`inspect_goal_bootstrap_status_readonly(runtime, goal_id)` is the bounded non-creating decision surface. It uses the immutable production read guard and classifies the exact current Goal authority as one of:
+
+```text
+ELIGIBLE
+ACTIVE_PRE_PLANNER
+PLANNER_RECOVERY_REQUIRED
+POST_PLANNER_RESUMABLE
+MATERIALIZED_NEEDS_PREPPOL
+READY_FOR_MANAGER
+STALE_GOAL
+FAILED_PRE_PLANNER
+INTERRUPTED
+AMBIGUOUS_AUTHORITY
+INVALID_STATE
+```
+
+The status call does not initialize or migrate state, create SQLite sidecars, publish authority, repair a receipt, call a model, materialize work, publish PREPPOL, or invoke Manager.
+
+`bootstrap_goal_once(runtime, goal_id)` starts fresh governed bootstrap work only when the exact current Goal revision is `ELIGIBLE`. A trustworthy current READY bootstrap is revalidated and returned idempotently rather than planned again. Existing non-READY same-revision state is not silently replaced; use the explicit recovery call where the status is recoverable.
+
+`recover_goal_once(runtime, goal_id)` resumes only the one unique exact current recoverable GOALBOOT receipt. The durable Phase-45 Planner fence remains authoritative: deterministic recovery may continue, but uncertain already-dispatched Planner work is never automatically replayed. Terminal, stale, invalid, or ambiguous same-revision authority remains fail closed. A later Goal revision is a separate authority question.
+
+A successful bootstrap or recovery stops at GOALBOOT `READY` after exact PREPPOL publication/revalidation. It does not invoke Manager. Production advancement remains a separate explicit `origin-forge manager advance` operation.
 
 ## Inspect or explicitly advance governed Manager work
 
@@ -156,6 +196,8 @@ Autonomous continuation is intentionally bounded. Failed attempts, blocked infra
 
 The Phase-44 Manager command is similarly bounded: one explicit `manager advance` invocation may traverse only the fixed Phase-43 continuation whitelist and stops at the first non-continuable result or hard six-step limit.
 
+The Phase-45 Goal bootstrap boundary is independently explicit and bounded: a fresh bootstrap starts only from `ELIGIBLE`, uncertain Planner execution is not automatically replayed, recovery must be requested separately, and READY stops before Manager invocation.
+
 ## Current-development boundary
 
 Current `main` does not grant:
@@ -166,7 +208,7 @@ Current `main` does not grant:
 - automatic Artifact adoption/signing;
 - automatic Dream promotion;
 - production checkpoint/model activation;
-- background Manager scheduling or queue draining;
+- background Goal bootstrap or Manager scheduling/queue draining;
 - remote/multi-user cockpit hosting.
 
 Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.1.0 release remains documented separately in `docs/v0.1-release-readiness.md`, `docs/v0.1-acceptance-matrix.md`, and `docs/v0.1-operator-guide.md`.
