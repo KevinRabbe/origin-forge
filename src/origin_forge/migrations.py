@@ -726,6 +726,177 @@ ON task_preparations(task_id)
 WHERE status = 'ACTIVE';
 """
 
+MIGRATION_012 = r"""
+CREATE TABLE goal_bootstraps (
+    bootstrap_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE RESTRICT,
+    goal_revision INTEGER NOT NULL CHECK (goal_revision >= 0),
+    goal_content_hash TEXT NOT NULL CHECK (length(goal_content_hash) = 64),
+    bootstrap_owner_id TEXT NOT NULL,
+    bootstrap_owner_fingerprint TEXT NOT NULL CHECK (length(bootstrap_owner_fingerprint) = 64),
+    bootstrap_contract_version TEXT NOT NULL,
+    capability_catalog_id TEXT,
+    capability_catalog_hash TEXT,
+    capability_routing_policy_id TEXT,
+    capability_routing_policy_hash TEXT,
+    dispatch_contract_catalog_id TEXT,
+    dispatch_contract_catalog_hash TEXT,
+    planning_input_id TEXT,
+    planning_input_hash TEXT,
+    planner_dependency_plan_hash TEXT,
+    planner_run_id TEXT,
+    plan_proposal_id TEXT,
+    plan_proposal_hash TEXT,
+    plan_audit_id TEXT,
+    plan_audit_hash TEXT,
+    materialization_id TEXT,
+    materialization_hash TEXT,
+    preparation_policy_id TEXT,
+    preparation_policy_hash TEXT,
+    stage TEXT NOT NULL CHECK (
+        stage IN (
+            'CLAIMED', 'AUTHORITY_PUBLISHED', 'PLANNING_INPUT_PUBLISHED',
+            'PLANNER_STARTED', 'PLANNER_RETURNED', 'PLAN_AUDITED',
+            'MATERIALIZED', 'PREPPOL_PUBLISHED'
+        )
+    ),
+    status TEXT NOT NULL CHECK (
+        status IN ('ACTIVE', 'READY', 'FAILED_PRE_PLANNER', 'INTERRUPTED')
+    ),
+    revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    terminal_reason TEXT,
+    CHECK ((capability_catalog_id IS NULL) = (capability_catalog_hash IS NULL)),
+    CHECK ((capability_routing_policy_id IS NULL) = (capability_routing_policy_hash IS NULL)),
+    CHECK ((dispatch_contract_catalog_id IS NULL) = (dispatch_contract_catalog_hash IS NULL)),
+    CHECK ((planning_input_id IS NULL) = (planning_input_hash IS NULL)),
+    CHECK ((plan_proposal_id IS NULL) = (plan_proposal_hash IS NULL)),
+    CHECK ((plan_audit_id IS NULL) = (plan_audit_hash IS NULL)),
+    CHECK ((materialization_id IS NULL) = (materialization_hash IS NULL)),
+    CHECK ((preparation_policy_id IS NULL) = (preparation_policy_hash IS NULL)),
+    CHECK (
+        (status IN ('ACTIVE', 'READY') AND terminal_reason IS NULL)
+        OR
+        (status IN ('FAILED_PRE_PLANNER', 'INTERRUPTED')
+         AND terminal_reason IS NOT NULL AND length(terminal_reason) > 0)
+    ),
+    CHECK (status != 'READY' OR stage = 'PREPPOL_PUBLISHED'),
+    CHECK (
+        status != 'FAILED_PRE_PLANNER'
+        OR stage IN ('CLAIMED', 'AUTHORITY_PUBLISHED', 'PLANNING_INPUT_PUBLISHED')
+    ),
+    CHECK (
+        (stage = 'CLAIMED'
+         AND capability_catalog_id IS NULL
+         AND capability_routing_policy_id IS NULL
+         AND dispatch_contract_catalog_id IS NULL
+         AND planning_input_id IS NULL
+         AND planner_dependency_plan_hash IS NULL
+         AND planner_run_id IS NULL
+         AND plan_proposal_id IS NULL
+         AND plan_audit_id IS NULL
+         AND materialization_id IS NULL
+         AND preparation_policy_id IS NULL)
+        OR
+        (stage = 'AUTHORITY_PUBLISHED'
+         AND capability_catalog_id IS NOT NULL
+         AND capability_routing_policy_id IS NOT NULL
+         AND dispatch_contract_catalog_id IS NOT NULL
+         AND planning_input_id IS NULL
+         AND planner_dependency_plan_hash IS NULL
+         AND planner_run_id IS NULL
+         AND plan_proposal_id IS NULL
+         AND plan_audit_id IS NULL
+         AND materialization_id IS NULL
+         AND preparation_policy_id IS NULL)
+        OR
+        (stage = 'PLANNING_INPUT_PUBLISHED'
+         AND capability_catalog_id IS NOT NULL
+         AND capability_routing_policy_id IS NOT NULL
+         AND dispatch_contract_catalog_id IS NOT NULL
+         AND planning_input_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NULL
+         AND planner_run_id IS NULL
+         AND plan_proposal_id IS NULL
+         AND plan_audit_id IS NULL
+         AND materialization_id IS NULL
+         AND preparation_policy_id IS NULL)
+        OR
+        (stage = 'PLANNER_STARTED'
+         AND capability_catalog_id IS NOT NULL
+         AND capability_routing_policy_id IS NOT NULL
+         AND dispatch_contract_catalog_id IS NOT NULL
+         AND planning_input_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NOT NULL
+         AND planner_run_id IS NULL
+         AND plan_proposal_id IS NULL
+         AND plan_audit_id IS NULL
+         AND materialization_id IS NULL
+         AND preparation_policy_id IS NULL)
+        OR
+        (stage = 'PLANNER_RETURNED'
+         AND capability_catalog_id IS NOT NULL
+         AND capability_routing_policy_id IS NOT NULL
+         AND dispatch_contract_catalog_id IS NOT NULL
+         AND planning_input_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NOT NULL
+         AND planner_run_id IS NOT NULL
+         AND plan_proposal_id IS NOT NULL
+         AND plan_audit_id IS NULL
+         AND materialization_id IS NULL
+         AND preparation_policy_id IS NULL)
+        OR
+        (stage = 'PLAN_AUDITED'
+         AND capability_catalog_id IS NOT NULL
+         AND capability_routing_policy_id IS NOT NULL
+         AND dispatch_contract_catalog_id IS NOT NULL
+         AND planning_input_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NOT NULL
+         AND planner_run_id IS NOT NULL
+         AND plan_proposal_id IS NOT NULL
+         AND plan_audit_id IS NOT NULL
+         AND materialization_id IS NULL
+         AND preparation_policy_id IS NULL)
+        OR
+        (stage = 'MATERIALIZED'
+         AND capability_catalog_id IS NOT NULL
+         AND capability_routing_policy_id IS NOT NULL
+         AND dispatch_contract_catalog_id IS NOT NULL
+         AND planning_input_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NOT NULL
+         AND planner_run_id IS NOT NULL
+         AND plan_proposal_id IS NOT NULL
+         AND plan_audit_id IS NOT NULL
+         AND materialization_id IS NOT NULL
+         AND preparation_policy_id IS NULL)
+        OR
+        (stage = 'PREPPOL_PUBLISHED'
+         AND capability_catalog_id IS NOT NULL
+         AND capability_routing_policy_id IS NOT NULL
+         AND dispatch_contract_catalog_id IS NOT NULL
+         AND planning_input_id IS NOT NULL
+         AND planner_dependency_plan_hash IS NOT NULL
+         AND planner_run_id IS NOT NULL
+         AND plan_proposal_id IS NOT NULL
+         AND plan_audit_id IS NOT NULL
+         AND materialization_id IS NOT NULL
+         AND preparation_policy_id IS NOT NULL)
+    )
+);
+
+CREATE INDEX idx_goal_bootstraps_goal_history
+ON goal_bootstraps(project_id, goal_id, goal_revision, created_at, bootstrap_id);
+
+CREATE INDEX idx_goal_bootstraps_status
+ON goal_bootstraps(project_id, status, stage, created_at, bootstrap_id);
+
+CREATE UNIQUE INDEX idx_goal_bootstraps_one_current_per_goal_revision
+ON goal_bootstraps(project_id, goal_id, goal_revision)
+WHERE status IN ('ACTIVE', 'READY');
+"""
+
 MIGRATIONS = (
     Migration(1, MIGRATION_001),
     Migration(2, MIGRATION_002),
@@ -738,6 +909,7 @@ MIGRATIONS = (
     Migration(9, MIGRATION_009),
     Migration(10, MIGRATION_010),
     Migration(11, MIGRATION_011),
+    Migration(12, MIGRATION_012),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1].version

@@ -89,6 +89,7 @@ class IdKind(StrEnum):
     DISPATCH_EXECUTION = "DISPEXEC"
     TASK_PREPARATION_POLICY = "PREPPOL"
     TASK_PREPARATION = "PREP"
+    GOAL_BOOTSTRAP = "GOALBOOT"
 
 
 def new_id(kind: IdKind) -> str:
