@@ -590,7 +590,7 @@ See `docs/phase-30-full-production-interface.md` for the detailed read-side muta
 
 **Exit condition met:** exact implementation head `1246fa9f7e9df8aa09c31b5c6e1cf8667f3759fa` passed normal GitHub Actions run `31456921293` on Python 3.12 and Python 3.13 with unrelated heavyweight evidence workflows skipped/disarmed; Origin Forge can inspect the accepted v1 production state through bounded non-creating projections without transferring production authority to the UI.
 
-**Merge gate:** the canonical DONE/documentation head created after that implementation proof must itself pass the final normal matrix before SHA-guarded merge.
+**Merge gate:** the canonical DONE/documentation head created after that implementation proof must itself pass the normal Python 3.12/3.13 matrix before ready-for-review transition and SHA-guarded merge.
 
 ---
 
