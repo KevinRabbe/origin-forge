@@ -46,6 +46,23 @@ _PROJECT_INTELLIGENCE_PROJECTION_VERSION = "phase45.project-intelligence@1"
 _MODEL_POLICY_PROJECTION_VERSION = "phase45.goal-planner-model-policy@1"
 _RESOURCE_POLICY_PROJECTION_VERSION = "phase45.goal-planner-resource-policy@1"
 _MAX_PROJECT_INTELLIGENCE_ROWS = 10_000
+_PREPLANNER_STAGES = frozenset(
+    {
+        GoalBootstrapStage.CLAIMED,
+        GoalBootstrapStage.AUTHORITY_PUBLISHED,
+        GoalBootstrapStage.PLANNING_INPUT_PUBLISHED,
+    }
+)
+_INPUT_AVAILABLE_STAGES = frozenset(
+    {
+        GoalBootstrapStage.PLANNING_INPUT_PUBLISHED,
+        GoalBootstrapStage.PLANNER_STARTED,
+        GoalBootstrapStage.PLANNER_RETURNED,
+        GoalBootstrapStage.PLAN_AUDITED,
+        GoalBootstrapStage.MATERIALIZED,
+        GoalBootstrapStage.PREPPOL_PUBLISHED,
+    }
+)
 
 
 class GoalBootstrapAuthorityError(RuntimeError):
@@ -130,9 +147,7 @@ def build_builtin_goal_bootstrap_owner() -> GoalBootstrapOwnerDescriptor:
             "current preparation-owner registry is ambiguous for Phase-45 v1"
         )
     preparation_owner = registry.descriptors[0]
-    adapters = {
-        adapter.adapter_id: adapter for adapter in catalog.adapters
-    }
+    adapters = {adapter.adapter_id: adapter for adapter in catalog.adapters}
     try:
         adapter = adapters[_SUPPORTED_ADAPTER_ID]
     except KeyError as exc:
@@ -210,10 +225,7 @@ def _rows(
         raise GoalBootstrapAuthorityError(
             f"Project Intelligence {table} changed during bounded projection"
         )
-    return [
-        {column: row[column] for column in columns}
-        for row in rows
-    ]
+    return [{column: row[column] for column in columns} for row in rows]
 
 
 def project_intelligence_projection_hash(runtime: OriginForgeRuntime) -> str:
@@ -237,8 +249,14 @@ def project_intelligence_projection_hash(runtime: OriginForgeRuntime) -> str:
                 project_id=project_id,
                 table="entities",
                 columns=(
-                    "id", "kind", "name", "description", "status", "revision",
-                    "created_at", "updated_at",
+                    "id",
+                    "kind",
+                    "name",
+                    "description",
+                    "status",
+                    "revision",
+                    "created_at",
+                    "updated_at",
                 ),
                 order_by="kind, name, id",
             ),
@@ -247,8 +265,15 @@ def project_intelligence_projection_hash(runtime: OriginForgeRuntime) -> str:
                 project_id=project_id,
                 table="entity_relations",
                 columns=(
-                    "id", "source_entity_id", "relation_type", "target_entity_id",
-                    "status", "revision", "rationale", "created_at", "updated_at",
+                    "id",
+                    "source_entity_id",
+                    "relation_type",
+                    "target_entity_id",
+                    "status",
+                    "revision",
+                    "rationale",
+                    "created_at",
+                    "updated_at",
                 ),
                 order_by="relation_type, source_entity_id, target_entity_id, id",
             ),
@@ -257,8 +282,15 @@ def project_intelligence_projection_hash(runtime: OriginForgeRuntime) -> str:
                 project_id=project_id,
                 table="entity_bindings",
                 columns=(
-                    "id", "entity_id", "binding_type", "target_ref", "target_hash",
-                    "status", "revision", "created_at", "updated_at",
+                    "id",
+                    "entity_id",
+                    "binding_type",
+                    "target_ref",
+                    "target_hash",
+                    "status",
+                    "revision",
+                    "created_at",
+                    "updated_at",
                 ),
                 order_by="entity_id, binding_type, target_ref, id",
             ),
@@ -267,9 +299,18 @@ def project_intelligence_projection_hash(runtime: OriginForgeRuntime) -> str:
                 project_id=project_id,
                 table="design_rules",
                 columns=(
-                    "id", "category", "title", "statement", "rationale", "authority",
-                    "scope_entity_ids_json", "status", "revision", "supersedes_rule_id",
-                    "created_at", "updated_at",
+                    "id",
+                    "category",
+                    "title",
+                    "statement",
+                    "rationale",
+                    "authority",
+                    "scope_entity_ids_json",
+                    "status",
+                    "revision",
+                    "supersedes_rule_id",
+                    "created_at",
+                    "updated_at",
                 ),
                 order_by="category, title, id",
             ),
@@ -318,7 +359,9 @@ def goal_planner_policy_hashes(runtime: OriginForgeRuntime) -> tuple[str, str]:
         raise GoalBootstrapAuthorityError(
             "protected model configuration lacks the CODER_STRONG planning chain"
         ) from exc
-    if not profiles or any(profile.role is not ModelRole.CODER_STRONG for profile in profiles):
+    if not profiles or any(
+        profile.role is not ModelRole.CODER_STRONG for profile in profiles
+    ):
         raise GoalBootstrapAuthorityError(
             "protected CODER_STRONG planning chain contains a role mismatch"
         )
@@ -582,6 +625,8 @@ def _terminalize_preplanner_failure(
     receipt: GoalBootstrapReceipt,
     exc: Exception,
 ) -> None:
+    if receipt.stage not in _PREPLANNER_STAGES:
+        return
     try:
         fail_goal_bootstrap_before_planner(
             runtime,
@@ -680,7 +725,7 @@ def prepare_goal_bootstrap_input(
                 ) from exc
             continue
 
-        if receipt.stage.value >= GoalBootstrapStage.PLANNING_INPUT_PUBLISHED.value:
+        if receipt.stage in _INPUT_AVAILABLE_STAGES:
             planning_input = _load_receipt_planning_input(runtime, receipt)
             return receipt, planning_input
 
