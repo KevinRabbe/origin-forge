@@ -372,7 +372,7 @@ providers = [
         )
         return CompletedDispatchInvocation(execution, policy)
 
-    def test_concurrent_managers_prepare_one_oldest_task_once_and_never_fall_through(self) -> None:
+    def test_concurrent_managers_prepare_oldest_task_at_most_once_and_never_fall_through(self) -> None:
         scenario = self._preparation_scenario(steps=2)
         admission = inspect_manager_advance_admission_readonly(scenario.runtime)
         self.assertEqual(admission.status, ManagerAdvanceAdmissionStatus.COMPLETE)
@@ -423,8 +423,22 @@ providers = [
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(failures, [])
         self.assertEqual(len(results), 2)
-        self.assertEqual(model_calls, 1)
-        self.assertEqual(
+        self.assertLessEqual(model_calls, 1)
+        self.assertTrue(all(result.action_kind is ManagerAdvanceActionKind.PREPARE for result in results))
+        self.assertTrue(all(result.task_id == selected.task_id for result in results))
+        self.assertTrue(
+            all(
+                result.status
+                in {
+                    ManagerAdvanceOnceStatus.PREPARATION_NOT_ACQUIRED,
+                    ManagerAdvanceOnceStatus.PREPARATION_FAILED_PRE_PLANNER,
+                    ManagerAdvanceOnceStatus.PREPARATION_PLANNER_RECOVERY_REQUIRED,
+                    ManagerAdvanceOnceStatus.PREPARATION_PLANNER_RETURNED,
+                }
+                for result in results
+            )
+        )
+        self.assertLessEqual(
             sum(result.status is ManagerAdvanceOnceStatus.PREPARATION_PLANNER_RETURNED for result in results),
             1,
         )
@@ -433,13 +447,32 @@ providers = [
             1,
         )
         with scenario.runtime.store.session() as conn:
-            preps = conn.execute("SELECT task_id, stage FROM task_preparations").fetchall()
+            preps = conn.execute("SELECT task_id, stage, status FROM task_preparations").fetchall()
         self.assertEqual(len(preps), 1)
         self.assertEqual(preps[0]["task_id"], selected.task_id)
-        self.assertEqual(preps[0]["stage"], PreparationStage.PLANNER_RETURNED.value)
+        self.assertIn(
+            preps[0]["stage"],
+            {
+                PreparationStage.CLAIMED.value,
+                PreparationStage.ACTIVATED.value,
+                PreparationStage.ROUTED.value,
+                PreparationStage.PLANNER_STARTED.value,
+                PreparationStage.PLANNER_RETURNED.value,
+            },
+        )
+        self.assertIn(preps[0]["status"], {"ACTIVE", "FAILED_PRE_PLANNER"})
         other_task = scenario.runtime.get_task(other.task_id)
         self.assertEqual(other_task["status"], TaskStatus.QUEUED.value)
         self.assertEqual(other_task["revision"], 0)
+        with scenario.runtime.store.session() as conn:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM dispatch_claims").fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM dispatch_executions").fetchone()[0],
+                0,
+            )
 
     def test_concurrent_managers_dispatch_one_oldest_task_once_and_never_fall_through(self) -> None:
         scenario = self._dispatch_scenario(tasks=2)

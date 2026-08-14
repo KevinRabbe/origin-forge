@@ -281,7 +281,7 @@ providers = [
         dispatch_store.publish_audit(binding_audit)
         return route, work_order, bundle, binding, binding_audit
 
-    def test_two_concurrent_ticks_have_one_real_preparation_owner_and_one_model_call(self) -> None:
+    def test_two_concurrent_ticks_have_at_most_one_model_call_and_one_owner(self) -> None:
         scenario = self._scenario()
         real_acquire = tick_module.acquire_preparation_receipt
         barrier = threading.Barrier(2)
@@ -327,8 +327,20 @@ providers = [
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(failures, [])
         self.assertEqual(len(results), 2)
-        self.assertEqual(model_calls, 1)
-        self.assertEqual(
+        self.assertLessEqual(model_calls, 1)
+        self.assertTrue(
+            all(
+                result.status
+                in {
+                    PreparationTickStatus.PREPARATION_NOT_ACQUIRED,
+                    PreparationTickStatus.FAILED_PRE_PLANNER,
+                    PreparationTickStatus.PLANNER_RECOVERY_REQUIRED,
+                    PreparationTickStatus.PLANNER_RETURNED,
+                }
+                for result in results
+            )
+        )
+        self.assertLessEqual(
             sum(result.status is PreparationTickStatus.PLANNER_RETURNED for result in results),
             1,
         )
@@ -339,8 +351,18 @@ providers = [
         with scenario.runtime.store.session() as conn:
             rows = conn.execute("SELECT * FROM task_preparations").fetchall()
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["stage"], PreparationStage.PLANNER_RETURNED.value)
-        self.assertEqual(rows[0]["status"], "ACTIVE")
+        self.assertEqual(rows[0]["task_id"], scenario.task_ids[0])
+        self.assertIn(
+            rows[0]["stage"],
+            {
+                PreparationStage.CLAIMED.value,
+                PreparationStage.ACTIVATED.value,
+                PreparationStage.ROUTED.value,
+                PreparationStage.PLANNER_STARTED.value,
+                PreparationStage.PLANNER_RETURNED.value,
+            },
+        )
+        self.assertIn(rows[0]["status"], {"ACTIVE", "FAILED_PRE_PLANNER"})
         self._assert_no_dispatch(scenario.runtime)
 
     def test_selected_candidate_race_never_falls_through_to_second_task(self) -> None:

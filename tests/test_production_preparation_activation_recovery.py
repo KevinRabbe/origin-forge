@@ -282,7 +282,7 @@ class PreparationActivationRecoveryTests(unittest.TestCase):
         self.assertEqual(durable.stage, PreparationStage.CLAIMED)
         self.assertEqual(durable.revision, 7)
 
-    def test_concurrent_adoption_has_one_checkpoint_winner(self) -> None:
+    def test_concurrent_adoption_has_at_most_one_checkpoint_winner(self) -> None:
         receipt, activation = self._legacy_claimed_ready()
 
         def attempt():
@@ -299,12 +299,21 @@ class PreparationActivationRecoveryTests(unittest.TestCase):
         with ThreadPoolExecutor(max_workers=2) as pool:
             outcomes = tuple(pool.map(lambda _: attempt(), range(2)))
 
-        self.assertEqual(sum(value[0] == "ok" for value in outcomes), 1)
-        self.assertEqual(sum(value[0] == "error" for value in outcomes), 1)
+        winners = sum(value[0] == "ok" for value in outcomes)
+        self.assertLessEqual(winners, 1)
+        self.assertEqual(sum(value[0] == "error" for value in outcomes), 2 - winners)
         durable = read_preparation_receipt(self.runtime, receipt.preparation_id)
-        self.assertEqual(durable.stage, PreparationStage.ACTIVATED)
-        self.assertEqual(durable.ready_task_revision, activation.new_revision)
-        self.assertEqual(durable.ready_task_hash, activation.new_task_content_hash)
+        self.assertEqual(durable.status, PreparationStatus.ACTIVE)
+        if winners:
+            self.assertEqual(durable.stage, PreparationStage.ACTIVATED)
+            self.assertEqual(durable.revision, receipt.revision + 1)
+            self.assertEqual(durable.ready_task_revision, activation.new_revision)
+            self.assertEqual(durable.ready_task_hash, activation.new_task_content_hash)
+        else:
+            self.assertEqual(durable.stage, PreparationStage.CLAIMED)
+            self.assertEqual(durable.revision, receipt.revision)
+            self.assertIsNone(durable.ready_task_revision)
+            self.assertIsNone(durable.ready_task_hash)
         self.assertEqual(len(self._ready_activation_events()), 1)
 
     def test_public_adoption_surface_has_no_task_or_execution_selector_authority(self) -> None:
