@@ -2,6 +2,19 @@
 
 All notable release-level changes to Origin Forge are summarized here. Detailed architecture and per-phase evidence remain in `docs/` and the canonical roadmap.
 
+## [Unreleased]
+
+### Added
+
+- governed production planning, capability routing, WorkOrders, dispatch binding, Task activation, dispatch claims, execution ownership, and single-shot production invocation from Phases 31–37;
+- Manager dispatch/preparation admission, one-shot global advancement, explicit preparation recovery, recovery integration, and the fixed six-step bounded Manager driver from Phases 38–43;
+- explicit local `origin-forge manager status` and `origin-forge manager advance` operator commands from Phase 44 without a fourth daemon/service entrypoint or recurring queue-drain authority.
+
+### Changed
+
+- current post-v0.1 development now uses package version `0.2.0.dev0` so mutable `main` no longer presents the same package identity as the immutable v0.1.0 tag;
+- living current-main operator guidance is separated from the historical v0.1.0 operator surface.
+
 ## [0.1.0] — 2026-08-11
 
 ### Release boundary
@@ -37,4 +50,4 @@ Origin Forge v0.1.0 is the first useful local production-infrastructure release.
 
 ### Release proof
 
-Phase 30 and release-readiness packaging both passed exact-head Python 3.12/3.13 matrices before their SHA-guarded merges. The final `0.1.0` version/license candidate must pass its own exact-head Python 3.12/3.13 matrix with clean review/thread state before merge. The `v0.1.0` tag is created only after that merge and must point to the exact reviewed/tested release commit.
+Phase 30 and release-readiness packaging passed exact-head Python 3.12/3.13 matrices before their SHA-guarded merges. Final candidate head `98eeab1b5519c5018d003300126f2da247d3f911` then passed normal run `31478577762` on Python 3.12 and Python 3.13, was SHA-guarded squash-merged as `fbc6764b3b5e71cb5f5a223f09c82189e7326c1d`, and annotated tag `v0.1.0` points to that exact reviewed/tested release commit.
