@@ -30,13 +30,13 @@ class BuiltinProductionWorkOrderTests(unittest.TestCase):
         for adapter_id in (
             "originforge.code.bounded-retry",
             "originforge.simulation.deterministic",
+            "originforge.pixelorama.export",
         ):
             self.assertEqual(
                 rows[adapter_id].status,
                 BuiltinDispatchReviewStatus.SUPPORTED,
             )
         for adapter_id in (
-            "originforge.pixelorama.export",
             "originforge.blender.model3d",
             "originforge.image.generate",
             "originforge.vision.inspect",
