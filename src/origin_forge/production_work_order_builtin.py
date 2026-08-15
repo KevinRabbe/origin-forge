@@ -12,6 +12,11 @@ from .production_work_order_models import (
     WorkOrderInputRef,
     content_hash,
 )
+from .production_work_order_simulation import (
+    DeterministicSimulationDispatchValidator,
+    SIMULATION_ADAPTER_ID,
+    SIMULATION_CONTRACT_ID,
+)
 from .production_work_order_validators import (
     DispatchContractValidatorRegistry,
     DispatchPayloadValidator,
@@ -51,12 +56,7 @@ class BuiltinDispatchReview:
 
 
 def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
-    """Document the reviewed v1 dispatch-contract inclusion boundary.
-
-    Absence from the dispatch catalog is intentional. Phase-32 route inventory
-    is broader than Phase-33 dispatch eligibility until exact phase-specific
-    evidence references can be independently resolved and revalidated.
-    """
+    """Document the reviewed dispatch-contract inclusion boundary."""
 
     deferred = (
         "originforge.pixelorama.export",
@@ -67,14 +67,18 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
         "originforge.audio.piper",
         "originforge.runtime.observe",
         "originforge.playtest.cooperative",
-        "originforge.simulation.deterministic",
     )
     rows = [
         BuiltinDispatchReview(
             _CODE_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
             "bounded retry drive inputs are finite context-selection data; model and sandbox authority remain infrastructure-injected",
-        )
+        ),
+        BuiltinDispatchReview(
+            SIMULATION_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "deterministic simulation accepts a self-contained bounded declarative Phase-25 semantic template with no input refs or runtime authority",
+        ),
     ]
     rows.extend(
         BuiltinDispatchReview(
@@ -201,8 +205,6 @@ class CodeBoundedRetryDispatchValidator:
         return self._base.payload_schema_hash
 
     def schema_dict(self) -> dict[str, object]:
-        """Return the inert exact payload schema exposed to bounded planners."""
-
         return self._base.schema_dict()
 
     def validate(
@@ -250,28 +252,19 @@ class CodeBoundedRetryDispatchValidator:
 
 
 def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
-    return (CodeBoundedRetryDispatchValidator(),)
+    return (
+        CodeBoundedRetryDispatchValidator(),
+        DeterministicSimulationDispatchValidator(),
+    )
 
 
 def build_builtin_dispatch_validator_registry() -> DispatchContractValidatorRegistry:
     return DispatchContractValidatorRegistry(builtin_dispatch_validators())
 
 
-def build_builtin_dispatch_catalog(
-    phase32_catalog: CapabilityCatalog,
-) -> DispatchContractCatalog:
-    """Build dispatch inventory only for reviewed currently-safe adapter inputs."""
-
-    if not isinstance(phase32_catalog, CapabilityCatalog):
-        raise TypeError("phase32_catalog must be a CapabilityCatalog")
-    try:
-        adapter = phase32_catalog.adapter(_CODE_ADAPTER_ID)
-    except KeyError as exc:
-        raise ValueError(
-            "Phase-32 catalog lacks the reviewed bounded coding adapter"
-        ) from exc
+def _code_contract(adapter) -> DispatchContract:
     validator = CodeBoundedRetryDispatchValidator()
-    contract = DispatchContract(
+    return DispatchContract(
         contract_id="code.bounded-retry@1",
         contract_version="1",
         adapter_id=adapter.adapter_id,
@@ -284,4 +277,47 @@ def build_builtin_dispatch_catalog(
         max_payload_bytes=64 * 1024,
         max_input_refs=0,
     )
-    return DispatchContractCatalog.create(phase32_catalog, (contract,))
+
+
+def _simulation_contract(adapter) -> DispatchContract:
+    validator = DeterministicSimulationDispatchValidator()
+    return DispatchContract(
+        contract_id=SIMULATION_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(),
+        max_payload_bytes=256 * 1024,
+        max_input_refs=0,
+    )
+
+
+def build_builtin_dispatch_catalog(
+    phase32_catalog: CapabilityCatalog,
+) -> DispatchContractCatalog:
+    """Build only reviewed contracts while preserving Phase-45 code authority.
+
+    The historic full built-in Phase-32 catalog contains the code adapter and is
+    deliberately kept code-only here because Phase 45 freezes that exact v1
+    dispatch boundary. A simulation-only catalog receives the new deterministic
+    simulation contract. A later upstream-authority phase may deliberately widen
+    the mixed/full catalog after independently re-freezing Goal/PREPPOL authority.
+    """
+
+    if not isinstance(phase32_catalog, CapabilityCatalog):
+        raise TypeError("phase32_catalog must be a CapabilityCatalog")
+    adapters = {value.adapter_id: value for value in phase32_catalog.adapters}
+    code = adapters.get(_CODE_ADAPTER_ID)
+    if code is not None:
+        return DispatchContractCatalog.create(phase32_catalog, (_code_contract(code),))
+    simulation = adapters.get(SIMULATION_ADAPTER_ID)
+    if simulation is not None:
+        return DispatchContractCatalog.create(
+            phase32_catalog,
+            (_simulation_contract(simulation),),
+        )
+    raise ValueError("Phase-32 catalog lacks a reviewed Phase-33 dispatch adapter")
