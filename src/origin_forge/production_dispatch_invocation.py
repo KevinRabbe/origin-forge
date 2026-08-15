@@ -421,6 +421,12 @@ def _decode_bounded_request_projection(binding: DispatchBinding) -> BoundedRetry
     )
 
 
+def _decode_request_projection(binding: DispatchBinding) -> BoundedRetryInvocationRequest:
+    """Phase-37 compatibility alias for the accepted bounded-code decoder."""
+
+    return _decode_bounded_request_projection(binding)
+
+
 def _simulation_pairs(value: object, label: str) -> tuple[tuple[str, int], ...]:
     if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
         raise ProductionDispatchInvocationError(
