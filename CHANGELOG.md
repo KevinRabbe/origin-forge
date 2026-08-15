@@ -8,12 +8,17 @@ All notable release-level changes to Origin Forge are summarized here. Detailed 
 
 - governed production planning, capability routing, WorkOrders, dispatch binding, Task activation, dispatch claims, execution ownership, and single-shot production invocation from Phases 31–37;
 - Manager dispatch/preparation admission, one-shot global advancement, explicit preparation recovery, recovery integration, and the fixed six-step bounded Manager driver from Phases 38–43;
-- explicit local `origin-forge manager status` and `origin-forge manager advance` operator commands from Phase 44 without a fourth daemon/service entrypoint or recurring queue-drain authority.
+- explicit local `origin-forge manager status` and `origin-forge manager advance` operator commands from Phase 44 without a fourth daemon/service entrypoint or recurring queue-drain authority;
+- durable governed code-only Goal bootstrap from Phase 45, including exact Goal-revision authority, restart-safe checkpoints, Planner no-replay/recovery semantics, audited materialization, and PREPPOL publication;
+- explicit local `origin-forge goal bootstrap status|start|recover GOAL-ID` operator control from Phase 46, preserving separate fresh-start/recovery authorization and stopping at READY before Manager invocation;
+- governed deterministic simulation production dispatch from Phase 47 through the existing preparation/claim/execution/Manager path, with zero-model execution dependencies, at-most-once simulation invocation after durable STARTED ownership, independent Phase-25 evidence revalidation, no direct simulation mutation command, and no Task terminalization authority from simulation findings;
+- v0.5 release-readiness planning, candidate acceptance traceability, release-readiness ledger, and frozen candidate operator snapshot over the accepted Phase-47 mainline.
 
 ### Changed
 
 - current post-v0.1 development now uses package version `0.2.0.dev0` so mutable `main` no longer presents the same package identity as the immutable v0.1.0 tag;
-- living current-main operator guidance is separated from the historical v0.1.0 operator surface.
+- living current-main operator guidance is separated from the historical v0.1.0 operator surface;
+- README/current release traceability is synchronized through Phase 47 while the v0.5 R1 readiness audit deliberately retains `0.2.0.dev0` until a separate exact-head `0.5.0` release-candidate gate.
 
 ## [0.1.0] — 2026-08-11
 
