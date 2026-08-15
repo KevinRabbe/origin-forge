@@ -644,7 +644,7 @@ Success criteria:
 
 # Post-v0.1 Development
 
-Phases 31–45 were implemented after the immutable v0.1.0 release. They are current development-line capabilities and are not retroactively part of the v0.1.0 release payload.
+Phases 31–46 were implemented after the immutable v0.1.0 release. They are current development-line capabilities and are not retroactively part of the v0.1.0 release payload.
 
 ## Phase 31 — Governed Production Planning & Dependency Graph — DONE
 
@@ -979,6 +979,27 @@ Implemented the explicit governed bridge from one exact canonical Goal revision 
 See `docs/phase-45-governed-goal-bootstrap-authority.md` for the frozen architecture and `docs/phase-45-implementation-closure.md` for the accepted 45A–45E implementation, recovery semantics, operator/API boundary, packaging isolation, and exact CI evidence.
 
 **Exit condition met in implementation:** planning head `91a3b84554c5134b3e5ebf3f43cda3cad02d04c5` / run `31807612095`, 45A head `c610bc3abb3dd167ad9955d9bb336bcc62a1db1f` / run `31817876253`, 45B head `3667582747b3f9c9986b613f80d9fcd632537911` / run `31822885546`, 45C accepted head `594a494411a37a9f2adcc42320062d4a1d14046f` / run `31845014956`, 45D accepted head `2f07330a0e8ac07de3404718f167bc30511a885e` / run `31847415346`, and 45E head `9500252ad426ea27a3f45cc9c3aa8872eadd342b` / run `31849238950` all passed the normal Python 3.12/3.13 matrix. Accepted Phase-45 implementation is merged through `f881f47325f960a3a704d67237ce9b55f8f7f9ef`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
+## Phase 46 — Governed Goal Bootstrap Operator Invocation — DONE
+
+Exposed the accepted Phase-45 Goal-bootstrap authority through one explicit local packaged operator surface while preserving the existing authorization and no-replay boundaries:
+
+- the existing `origin-forge goal` tree gains only `bootstrap status`, `bootstrap start`, and `bootstrap recover`, each requiring one explicit canonical `GOAL-*` identity;
+- `status` delegates exactly once to the accepted non-creating `inspect_goal_bootstrap_status_readonly(runtime, goal_id)` projection and prints its exact typed JSON;
+- `start` delegates exactly once to `bootstrap_goal_once(runtime, goal_id)` with no CLI-owned status preflight, no automatic recovery, no replacement same-revision authority, and no Manager call;
+- `recover` delegates exactly once to `recover_goal_once(runtime, goal_id)` with no CLI-owned status preflight, no automatic fresh bootstrap, no uncertain Planner replay, and no Manager call;
+- successful typed status/start/recover mechanics return exit `0` without becoming Goal completion, Task outcome, verification, merge, or release truth;
+- expected blocked bootstrap decisions are emitted as bounded `GOAL_BOOTSTRAP_BLOCKED` JSON with the exact Phase-45 decision and exit `4`, while other expected bootstrap-operator failures use bounded `GOAL_BOOTSTRAP_ERROR` JSON and exit `5` rather than raw tracebacks;
+- focused source-boundary acceptance proves the CLI imports/calls only the accepted Phase-45 public operator surface, not lower GOALBOOT acquisition/checkpoint, Planner, audit/materialization, PREPPOL, preparation, claim, dispatch, or Manager mutation helpers;
+- cross-phase temporary-project acceptance proves fresh start → READY, READY idempotence without a second Planner/materialization, explicit same-receipt recovery, recover-on-ELIGIBLE refusal, and post-model/pre-proof Planner uncertainty recovery without model replay or replacement GOALBOOT authority;
+- every accepted bootstrap/recovery CLI path stops with zero automatic Manager calls, zero dispatch claims, and zero dispatch executions;
+- packaging remains exactly `origin-forge`, `origin-forge-attempt`, and `origin-forge-cockpit`; no fourth executable, cockpit mutation, HTTP/plugin/model-callable mutation, repeat/watch/poll/loop/background mode, or bootstrap→Manager chaining is added.
+
+See `docs/phase-46-governed-goal-bootstrap-operator-invocation.md` for the frozen architecture and `docs/phase-46-implementation-closure.md` for the accepted implementation, cross-phase acceptance, operator semantics, packaging isolation, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `0c87efd851fa1f5dd9dbc9e4120cecf65c24a661` / run `31850379532`, 46A head `b830d25dfdca87cb0a99f90d430c343004d75234` / run `31850814889`, and 46B acceptance head `5239c08eb2ffea8200c7b127356f1909fbc33b2b` / run `31851197879` all passed Python 3.12 and Python 3.13. Accepted Phase-46 implementation/acceptance is merged to `main` as `a0e8a04cff45e664153247c9f6f643daa4db2267`.
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
