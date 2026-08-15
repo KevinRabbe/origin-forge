@@ -1,0 +1,104 @@
+name: v0.5 immutable release evidence closer
+
+on:
+  push:
+    branches: [chatgpt/v0.5-release-evidence-r3]
+
+permissions:
+  contents: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout R3 evidence branch
+        uses: actions/checkout@v4
+        with:
+          ref: chatgpt/v0.5-release-evidence-r3
+          fetch-depth: 0
+
+      - name: Record immutable v0.5 release evidence
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str, label: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one match, got {count}")
+              p.write_text(text.replace(old, new), encoding="utf-8")
+
+          def replace_tail(path: str, marker: str, lines: list[str], label: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              if text.count(marker) != 1:
+                  raise SystemExit(f"{label}: marker mismatch")
+              p.write_text(text[:text.index(marker)] + "\n".join(lines) + "\n", encoding="utf-8")
+
+          replace_once("README.md", "The v0.5 R2 release candidate uses package version `0.5.0`. Phases 0–47 are included on the candidate line; Phases 31–47 were added after the v0.1.0 release and therefore are not part of the historical v0.1.0 payload.", "Origin Forge **v0.5.0 was released on 2026-08-16**. Its immutable annotated tag `v0.5.0` points to release commit `8ac46ee5f14654187469e79b021dbbd83992270b`. Phases 0–47 are included in that release; Phases 31–47 remain absent from the historical v0.1.0 payload.", "README release status")
+          replace_once("README.md", "The canonical roadmap's next milestone is **v0.5 — Integrated Development Infrastructure**. R0 planning and R1 readiness/traceability are accepted; this R2 branch is the explicit `0.5.0` release candidate. Release status remains pending until exact-head CI, clean review, SHA-guarded merge, and annotated-tag proof are complete.", "The canonical **v0.5 — Integrated Development Infrastructure** milestone is released. Final candidate head `818de3348834709b58d8117d45539e1a80be1298` passed normal run `31914257104` / #1362 on Python 3.12 and 3.13, was SHA-guarded merged as `8ac46ee5f14654187469e79b021dbbd83992270b`, and annotated tag object `b45c1ef4cbb5b219d165331dff96ffcfa10cf609` dereferences to that exact commit.", "README milestone proof")
+          replace_once("README.md", "R1 retained `0.2.0.dev0` while the v0.5 acceptance/readiness/operator boundary was audited. This R2 candidate explicitly transitions package identity to `0.5.0` without changing the three installed commands or runtime authority. It is not declared released until the tested/reviewed merge is tagged `v0.5.0`.", "R1 retained `0.2.0.dev0` while the v0.5 acceptance/readiness/operator boundary was audited. R2 transitioned package identity to `0.5.0` without changing the three installed commands or runtime authority. The immutable annotated `v0.5.0` tag now records the tested/reviewed release commit; later post-release documentation does not move that tag.", "README release identity proof")
+
+          replace_once("CHANGELOG.md", "- README/release traceability is synchronized through Phase 47 and the R2 candidate freezes `0.5.0` without changing package scripts or runtime authority.\n\n## [0.1.0] — 2026-08-11", "- README/release traceability is synchronized through Phase 47 and the R2 candidate freezes `0.5.0` without changing package scripts or runtime authority.\n\n### Release proof\n\n- final candidate head `818de3348834709b58d8117d45539e1a80be1298` passed normal run `31914257104` / #1362 on Python 3.12 and Python 3.13;\n- that exact candidate was SHA-guarded merged as release commit `8ac46ee5f14654187469e79b021dbbd83992270b`;\n- annotated tag `v0.5.0` is tag object `b45c1ef4cbb5b219d165331dff96ffcfa10cf609` and dereferences to that exact release commit;\n- the tag is annotated but unsigned; no claim of cryptographic Git-tag signature is made.\n\n## [0.1.0] — 2026-08-11", "CHANGELOG release proof")
+
+          replace_once("docs/v0.5-operator-guide.md", "Status: **v0.5.0 FINAL RELEASE CANDIDATE — TAG PENDING**", "Status: **v0.5.0 RELEASED — IMMUTABLE TAG RECORDED**", "operator release status")
+          replace_once("docs/v0.5-operator-guide.md", "This guide freezes the operator surface accepted on the Phase-47 mainline for the final `0.5.0` candidate. R1 accepted this command/authority boundary while retaining the development version; R2 changes only release identity to `0.5.0`. The release remains tag-pending until immutable CI/review/merge proof is complete.", "This guide is the operator snapshot for released `v0.5.0`. R1 accepted this command/authority boundary while retaining the development version; R2 changed only release identity to `0.5.0`. Final candidate head `818de3348834709b58d8117d45539e1a80be1298` passed both normal interpreters and was merged as `8ac46ee5f14654187469e79b021dbbd83992270b`; annotated tag `v0.5.0` points to that exact release commit.", "operator release proof")
+
+          replace_once("docs/v0.5-acceptance-matrix.md", "Status: **R2 FINAL CANDIDATE TRACEABILITY — TAG PENDING**", "Status: **v0.5.0 RELEASED — ACCEPTED IMMUTABLE EVIDENCE**", "matrix release status")
+          replace_once("docs/v0.5-acceptance-matrix.md", "R1 accepted this matrix and release/operator boundary while retaining `0.2.0.dev0`. R2 now transitions the final candidate to package version `0.5.0`; release status remains pending until exact-head CI/review/merge and tag proof complete.", "R1 accepted this matrix and release/operator boundary while retaining `0.2.0.dev0`. R2 transitioned the final candidate to package version `0.5.0`; exact-head CI/review/merge and annotated-tag proof are now complete.", "matrix release intro")
+          replace_tail("docs/v0.5-acceptance-matrix.md", "## Accepted readiness evidence and R2 gate\n", [
+              "## Accepted readiness and immutable release evidence",
+              "",
+              "The complete release-readiness chain is:",
+              "",
+              "- R0 planning head `acd44522cebec5f109b08fa894d67557e7d5faab` — normal run `31913373190` / #1357 — Python 3.12 PASS / Python 3.13 PASS — SHA-guarded merge `4d52471c4cb1040f6678d45d005f650b8114a4fc`;",
+              "- R1 readiness head `b7aa954b77667b22a2a757dc4e5512a1a03bced9` — normal run `31913775339` / #1360 — Python 3.12 PASS / Python 3.13 PASS — five documentation files only — SHA-guarded merge `76c1eeb32e996df11fe7e946e81e10d8b64b7afb`;",
+              "- R2 final candidate head `818de3348834709b58d8117d45539e1a80be1298` — normal run `31914257104` / #1362 — Python 3.12 PASS / Python 3.13 PASS — exact seven-file release diff — clean review/thread state;",
+              "- R2 SHA-guarded merge / release commit `8ac46ee5f14654187469e79b021dbbd83992270b`;",
+              "- R3 tag helper run `31914507703` succeeded after verifying no pre-existing `v0.5.0` ref and targeting only the release commit;",
+              "- annotated tag ref `v0.5.0` resolves to tag object `b45c1ef4cbb5b219d165331dff96ffcfa10cf609`;",
+              "- that tag object dereferences to commit `8ac46ee5f14654187469e79b021dbbd83992270b` with message `Origin Forge v0.5.0`;",
+              "- the annotated tag is unsigned (`verification.reason = unsigned`); this release makes no Git-tag signature claim.",
+              "",
+              "This post-release documentation may advance `main`, but it must never move or replace `v0.5.0`. The release identity remains the tagged commit above.",
+          ], "matrix immutable tail")
+
+          replace_once("docs/v0.5-release-readiness.md", "Status: **R2 FINAL `0.5.0` RELEASE CANDIDATE — TAG PENDING**", "Status: **v0.5.0 RELEASED — R3 IMMUTABLE TAG VERIFIED**", "readiness release status")
+          replace_once("docs/v0.5-release-readiness.md", "R2 explicitly sets package version `0.5.0` after the accepted readiness audit. This document still does not declare v0.5.0 released and does not authorize tagging before exact-head CI/review/merge proof.", "R2 set package version `0.5.0` after the accepted readiness audit. Final candidate CI/review/merge and R3 annotated-tag proof are complete; `v0.5.0` is released at immutable commit `8ac46ee5f14654187469e79b021dbbd83992270b`.", "readiness release declaration")
+          replace_tail("docs/v0.5-release-readiness.md", "## R3 still pending\n", [
+              "## R3 immutable release evidence — COMPLETE",
+              "",
+              "The final release proof is:",
+              "",
+              "- final R2 candidate head: `818de3348834709b58d8117d45539e1a80be1298`;",
+              "- authoritative normal workflow: `31914257104` / #1362;",
+              "- Python 3.12: PASS;",
+              "- Python 3.13: PASS;",
+              "- R2 diff: exactly seven release files — five release documents, `pyproject.toml`, and `tests/test_release_packaging.py`;",
+              "- production source/schema/config/workflows: unchanged in the final R2 tree;",
+              "- review submissions / unresolved threads: none;",
+              "- SHA-guarded R2 merge / release commit: `8ac46ee5f14654187469e79b021dbbd83992270b`;",
+              "- R3 tag helper run: `31914507703` — SUCCESS;",
+              "- annotated tag: `v0.5.0`;",
+              "- annotated tag object: `b45c1ef4cbb5b219d165331dff96ffcfa10cf609`;",
+              "- tag object target: exact release commit `8ac46ee5f14654187469e79b021dbbd83992270b`;",
+              "- tag message: `Origin Forge v0.5.0`;",
+              "- tag verification metadata: unsigned; no cryptographic Git-tag signature claim is made.",
+              "",
+              "The `v0.5.0` ref is the immutable release identity. Any later README/readiness/roadmap maintenance is post-release documentation and must not move or replace that tag.",
+          ], "readiness immutable tail")
+
+          replace_once("docs/roadmap.md", "# v0.5 — Integrated Development Infrastructure\n\nTarget capabilities:", "# v0.5 — Integrated Development Infrastructure — RELEASED\n\nReleased as annotated tag `v0.5.0` on exact release commit `8ac46ee5f14654187469e79b021dbbd83992270b`. Final candidate head `818de3348834709b58d8117d45539e1a80be1298` passed normal run `31914257104` / #1362 on Python 3.12 and 3.13; tag object `b45c1ef4cbb5b219d165331dff96ffcfa10cf609` dereferences to the exact release commit. Detailed coverage and authority boundaries are frozen in `docs/v0.5-acceptance-matrix.md`, `docs/v0.5-release-readiness.md`, and `docs/v0.5-operator-guide.md`.\n\nTarget capabilities:", "roadmap v0.5 release proof")
+          PY
+
+      - name: Self-remove evidence helper and commit docs
+        run: |
+          rm .github/workflows/v05-r3-doc-close.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md CHANGELOG.md docs/v0.5-operator-guide.md docs/v0.5-acceptance-matrix.md docs/v0.5-release-readiness.md docs/roadmap.md .github/workflows/v05-r3-doc-close.yml
+          git diff --cached --check
+          git commit -m "docs: record immutable v0.5.0 release evidence"
+          git push origin HEAD:chatgpt/v0.5-release-evidence-r3
