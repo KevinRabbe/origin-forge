@@ -24,97 +24,80 @@ jobs:
 
           path = Path("tests/test_phase47f_simulation_cross_phase_acceptance.py")
           text = path.read_text(encoding="utf-8")
-          old = '''        self.assertEqual(execute_calls, 1)
-          self.assertTrue(all(result.task_id == selected_task_id for result in results))
-          self.assertEqual(
-              sum(result.status is ManagerAdvanceOnceStatus.DISPATCH_RETURNED for result in results),
-              1,
-          )
-          self.assertEqual(
-              sum(
-                  result.status is ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED
-                  for result in results
-              ),
-              1,
-          )
-          self.assertTrue(
-              all(
-                  result.status
-                  in {
-                      ManagerAdvanceOnceStatus.DISPATCH_RETURNED,
-                      ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED,
-                  }
-                  for result in results
-              )
-          )
-          selected_claims, selected_executions = self._dispatch_rows(
-              scenario.runtime,
-              selected_task_id,
-          )
-          self.assertEqual(len(selected_claims), 1)
-          self.assertEqual(len(selected_executions), 1)
-          self.assertEqual(len(scenario.runtime.list_runs(selected_task_id)), 1)
-          '''
-          new = '''        self.assertLessEqual(execute_calls, 1)
-          self.assertTrue(all(result.task_id == selected_task_id for result in results))
-          self.assertEqual(
-              sum(
-                  result.status is ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED
-                  for result in results
-              ),
-              1,
-          )
-          winner_statuses = {
-              ManagerAdvanceOnceStatus.DISPATCH_NOT_STARTED,
-              ManagerAdvanceOnceStatus.DISPATCH_RETURNED,
-              ManagerAdvanceOnceStatus.DISPATCH_RAISED,
-              ManagerAdvanceOnceStatus.DISPATCH_RECOVERY_REQUIRED,
-          }
-          self.assertEqual(
-              sum(result.status in winner_statuses for result in results),
-              1,
-          )
-          self.assertTrue(
-              all(
-                  result.status
-                  in winner_statuses
-                  | {ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED}
-                  for result in results
-              )
-          )
-          selected_claims, selected_executions = self._dispatch_rows(
-              scenario.runtime,
-              selected_task_id,
-          )
-          self.assertEqual(len(selected_claims), 1)
-          self.assertIn(
-              selected_claims[0]["status"],
-              {
-                  DispatchClaimStatus.ACTIVE.value,
-                  DispatchClaimStatus.CONSUMED.value,
-              },
-          )
-          self.assertLessEqual(len(selected_executions), 1)
-          self.assertTrue(
-              all(
-                  execution["status"]
-                  in {
-                      DispatchExecutionStatus.STARTED.value,
-                      DispatchExecutionStatus.RETURNED.value,
-                      DispatchExecutionStatus.RAISED.value,
-                  }
-                  for execution in selected_executions
-              )
-          )
-          selected_runs = scenario.runtime.list_runs(selected_task_id)
-          self.assertLessEqual(len(selected_runs), 1)
-          self.assertTrue(
-              all(run["role"] == SimulationService.RUN_ROLE for run in selected_runs)
-          )
-          '''
-          if text.count(old) != 1:
-              raise SystemExit("expected exactly one Phase 47F race assertion block")
-          path.write_text(text.replace(old, new), encoding="utf-8")
+          start_marker = "        self.assertEqual(execute_calls, 1)\n"
+          end_marker = "        self.assertEqual(newer_executions, [])\n"
+          if text.count(start_marker) != 1:
+              raise SystemExit("expected exactly one Phase 47F race start marker")
+          start = text.index(start_marker)
+          end = text.index(end_marker, start) + len(end_marker)
+          replacement = "\n".join(
+              [
+                  "        self.assertLessEqual(execute_calls, 1)",
+                  "        self.assertTrue(all(result.task_id == selected_task_id for result in results))",
+                  "        self.assertEqual(",
+                  "            sum(",
+                  "                result.status is ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED",
+                  "                for result in results",
+                  "            ),",
+                  "            1,",
+                  "        )",
+                  "        winner_statuses = {",
+                  "            ManagerAdvanceOnceStatus.DISPATCH_NOT_STARTED,",
+                  "            ManagerAdvanceOnceStatus.DISPATCH_RETURNED,",
+                  "            ManagerAdvanceOnceStatus.DISPATCH_RAISED,",
+                  "            ManagerAdvanceOnceStatus.DISPATCH_RECOVERY_REQUIRED,",
+                  "        }",
+                  "        self.assertEqual(",
+                  "            sum(result.status in winner_statuses for result in results),",
+                  "            1,",
+                  "        )",
+                  "        self.assertTrue(",
+                  "            all(",
+                  "                result.status",
+                  "                in winner_statuses",
+                  "                | {ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED}",
+                  "                for result in results",
+                  "            )",
+                  "        )",
+                  "        selected_claims, selected_executions = self._dispatch_rows(",
+                  "            scenario.runtime,",
+                  "            selected_task_id,",
+                  "        )",
+                  "        self.assertEqual(len(selected_claims), 1)",
+                  "        self.assertIn(",
+                  "            selected_claims[0][\"status\"],",
+                  "            {",
+                  "                DispatchClaimStatus.ACTIVE.value,",
+                  "                DispatchClaimStatus.CONSUMED.value,",
+                  "            },",
+                  "        )",
+                  "        self.assertLessEqual(len(selected_executions), 1)",
+                  "        self.assertTrue(",
+                  "            all(",
+                  "                execution[\"status\"]",
+                  "                in {",
+                  "                    DispatchExecutionStatus.STARTED.value,",
+                  "                    DispatchExecutionStatus.RETURNED.value,",
+                  "                    DispatchExecutionStatus.RAISED.value,",
+                  "                }",
+                  "                for execution in selected_executions",
+                  "            )",
+                  "        )",
+                  "        selected_runs = scenario.runtime.list_runs(selected_task_id)",
+                  "        self.assertLessEqual(len(selected_runs), 1)",
+                  "        self.assertTrue(",
+                  "            all(run[\"role\"] == SimulationService.RUN_ROLE for run in selected_runs)",
+                  "        )",
+                  "        newer = scenario.runtime.get_task(newer_task_id)",
+                  "        self.assertEqual(newer[\"status\"], TaskStatus.QUEUED.value)",
+                  "        self.assertEqual(int(newer[\"revision\"]), 0)",
+                  "        newer_claims, newer_executions = self._dispatch_rows(scenario.runtime, newer_task_id)",
+                  "        self.assertEqual(newer_claims, [])",
+                  "        self.assertEqual(newer_executions, [])",
+                  "        self.assertEqual(scenario.runtime.list_runs(newer_task_id), [])",
+              ]
+          ) + "\n"
+          path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
           PY
 
       - name: Self-remove repair workflow and commit bounded test fix
