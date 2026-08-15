@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from .production_capability_builtin import build_builtin_capability_catalog
+from .production_capability_models import CapabilityCatalog
 from .production_dispatch_binding import build_builtin_dispatch_binder_registry
 from .production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
 from .production_work_order_builtin import build_builtin_dispatch_catalog
@@ -34,9 +35,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
     """Return the reviewed Phase-34 built-in binding boundary.
 
     This inventory is evidence-driven. A Phase-32 adapter is bindable only when
-    the current Phase-33 dispatch catalog and the current Phase-34 binder
-    registry both contain the exact adapter/contract relation and every native
-    request input can be reconstructed without invention or backend invocation.
+    a reviewed Phase-33 dispatch view and the current Phase-34 binder registry
+    both contain the exact adapter/contract relation and every native request
+    input can be reconstructed without invention or backend invocation.
     """
 
     rows = (
@@ -96,14 +97,19 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.simulation.deterministic",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_DIRECT_SIMULATION_SPEC_READER",
-            "34C found SIMSPEC data inside simulation workspaces/artifacts with no direct exact SIMSPEC reader",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase-47A exposes simulation.deterministic@1 on the simulation-only Phase-32 view and Phase-47B reconstructs the exact zero-ref SimulationService.execute request projection",
         ),
     )
 
     phase32 = build_builtin_capability_catalog()
-    dispatch_catalog = build_builtin_dispatch_catalog(phase32)
+    code_dispatch_catalog = build_builtin_dispatch_catalog(phase32)
+    simulation_phase32 = CapabilityCatalog.create(
+        (phase32.capability("simulation.run"),),
+        (phase32.adapter("originforge.simulation.deterministic"),),
+    )
+    simulation_dispatch_catalog = build_builtin_dispatch_catalog(simulation_phase32)
     resolver_registry = build_dispatch_input_resolver_registry()
     binder_registry = build_builtin_dispatch_binder_registry()
 
@@ -116,15 +122,22 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         for value in rows
         if value.status is BuiltinBindingReviewStatus.BINDABLE
     }
-    contract_ids = {value.adapter_id for value in dispatch_catalog.contracts}
+    reviewed_contracts = (
+        *code_dispatch_catalog.contracts,
+        *simulation_dispatch_catalog.contracts,
+    )
+    contract_by_adapter = {value.adapter_id: value for value in reviewed_contracts}
+    if len(contract_by_adapter) != len(reviewed_contracts):
+        raise RuntimeError("Phase-34 reviewed dispatch views contain duplicate adapter authority")
+    contract_ids = set(contract_by_adapter)
     binder_ids = {value.adapter_id for value in binder_registry.descriptors}
     if bindable_ids != contract_ids or bindable_ids != binder_ids:
         raise RuntimeError("Phase-34 bindable review drifted from trusted dispatch/binder inventory")
 
     for descriptor in binder_registry.descriptors:
-        contract = dispatch_catalog.contract_for_adapter(descriptor.adapter_id)
-        if descriptor.dispatch_contract_id != contract.contract_id:
-            raise RuntimeError("Phase-34 binder contract drifted from Phase-33 dispatch catalog")
+        contract = contract_by_adapter.get(descriptor.adapter_id)
+        if contract is None or descriptor.dispatch_contract_id != contract.contract_id:
+            raise RuntimeError("Phase-34 binder contract drifted from reviewed Phase-33 dispatch views")
 
     resolved_ref_types = {
         claim.ref_type
