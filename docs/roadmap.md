@@ -644,7 +644,7 @@ Success criteria:
 
 # Post-v0.1 Development
 
-Phases 31–46 were implemented after the immutable v0.1.0 release. They are current development-line capabilities and are not retroactively part of the v0.1.0 release payload.
+Phases 31–47 were implemented after the immutable v0.1.0 release. They are current development-line capabilities and are not retroactively part of the v0.1.0 release payload.
 
 ## Phase 31 — Governed Production Planning & Dependency Graph — DONE
 
@@ -1000,6 +1000,28 @@ Exposed the accepted Phase-45 Goal-bootstrap authority through one explicit loca
 See `docs/phase-46-governed-goal-bootstrap-operator-invocation.md` for the frozen architecture and `docs/phase-46-implementation-closure.md` for the accepted implementation, cross-phase acceptance, operator semantics, packaging isolation, and exact CI evidence.
 
 **Exit condition met in implementation:** planning head `0c87efd851fa1f5dd9dbc9e4120cecf65c24a661` / run `31850379532`, 46A head `b830d25dfdca87cb0a99f90d430c343004d75234` / run `31850814889`, and 46B acceptance head `5239c08eb2ffea8200c7b127356f1909fbc33b2b` / run `31851197879` all passed Python 3.12 and Python 3.13. Accepted Phase-46 implementation/acceptance is merged to `main` as `a0e8a04cff45e664153247c9f6f643daa4db2267`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
+## Phase 47 — Governed Deterministic Simulation Production Dispatch — DONE
+
+Promoted only the existing deterministic simulation backend through the governed production preparation/claim/execution path while preserving simulation evidence as non-Task-authoritative evidence:
+
+- explicit simulation-capable Phase-32 authority is limited to `simulation.run → originforge.simulation.deterministic → simulation.deterministic@1`; the full/global Phase-45/46 Goal-bootstrap authority remains code-only;
+- an ID-free bounded `SimulationSpecTemplate` and strict no-input-ref WorkOrder validator preserve the accepted Phase-25 deterministic semantic/work bounds while excluding model/caller engine/runtime/path/executable/resource authority;
+- Phase-34 binding expands to exactly bounded code plus deterministic simulation and reconstructs only Task identity plus the independently validated simulation template;
+- Phase-39 adds a separate simulation preparation owner while preserving the historic bounded-code owner identity/fingerprint and fail-closing multi-owner catalogs;
+- Phase-36 adds a zero-model simulation execution owner requiring no model runtime, resource lease, sandbox, or Git Workspace and atomically commits `DISPEXEC STARTED + Task READY→RUNNING`;
+- concrete `SIMSPEC-*`, `SIM-*`, and `SIMWS-*` identities are allocated only after durable STARTED ownership and the existing `SimulationService.execute(...)` is invoked exactly once;
+- returned evidence is independently revalidated against the exact SUCCEEDED `SIMULATOR` Run, canonical spec/result/summary Artifacts, hashes, lineage, and PASS `simulation-structure` Run Verification before DISPEXEC RETURNED;
+- normal return consumes the claim but deliberately leaves the production Task RUNNING with no Task-level PASS/FAIL or semantic-balance authority;
+- ordinary owner exceptions record RAISED/CONSUMED; BaseException/crash or post-evidence terminalization uncertainty preserves explicit recovery-required state and never auto-replays the simulation owner;
+- cross-phase acceptance proves the real Phase-39→34→35→36→37→38/40/43 Manager path, at-most-one concurrent simulation invocation, no fallback to a newer Task, bounded-code compatibility, and unchanged Phase-45/46 code-only bootstrap authority;
+- packaging remains exactly `origin-forge`, `origin-forge-attempt`, and `origin-forge-cockpit`; no direct simulation mutation command, cockpit mutation, background loop, generic owner/plugin dispatch, Task terminalization from metrics, adoption/signing, merge, or release authority is added.
+
+See `docs/phase-47-governed-deterministic-simulation-production-dispatch.md` for the frozen architecture and `docs/phase-47-implementation-closure.md` for the accepted planning through 47F implementation, adversarial acceptance, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `d0c93da80b8e8a8f62c23c9e26a238f85fbb289f` / run `31854658992`, 47A head `33905dd52fcf0d7e107311321f8d2cc584bc4de5` / run `31855236685`, 47B head `b84d52caf0f52f1ec782427e3d9615a3f8d5fe85` / run `31863500202`, 47C head `a750bc59c3ae8470e727586d41fb0e9c886c1b73` / run `31890507717`, 47D head `72f473691c11b664e276ca1d7afe797f532736ba` / run `31900288864`, 47E head `32306b005eff6296eb0c94c1152d8b14e5977f04` / run `31900910397`, and 47F acceptance head `6389dd236df636b38f260f832afb252b86b72c62` / run `31910549681` all passed Python 3.12 and Python 3.13. Accepted Phase-47 implementation/acceptance is merged to `main` as `29e00d8d5afa20f9f24c6a20fef35b8cfffa5340`.
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 

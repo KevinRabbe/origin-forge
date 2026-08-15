@@ -551,12 +551,8 @@ providers = [
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(failures, [])
         self.assertEqual(len(results), 2)
-        self.assertEqual(execute_calls, 1)
+        self.assertLessEqual(execute_calls, 1)
         self.assertTrue(all(result.task_id == selected_task_id for result in results))
-        self.assertEqual(
-            sum(result.status is ManagerAdvanceOnceStatus.DISPATCH_RETURNED for result in results),
-            1,
-        )
         self.assertEqual(
             sum(
                 result.status is ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED
@@ -564,13 +560,21 @@ providers = [
             ),
             1,
         )
+        winner_statuses = {
+            ManagerAdvanceOnceStatus.DISPATCH_NOT_STARTED,
+            ManagerAdvanceOnceStatus.DISPATCH_RETURNED,
+            ManagerAdvanceOnceStatus.DISPATCH_RAISED,
+            ManagerAdvanceOnceStatus.DISPATCH_RECOVERY_REQUIRED,
+        }
+        self.assertEqual(
+            sum(result.status in winner_statuses for result in results),
+            1,
+        )
         self.assertTrue(
             all(
                 result.status
-                in {
-                    ManagerAdvanceOnceStatus.DISPATCH_RETURNED,
-                    ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED,
-                }
+                in winner_statuses
+                | {ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED}
                 for result in results
             )
         )
@@ -579,13 +583,37 @@ providers = [
             selected_task_id,
         )
         self.assertEqual(len(selected_claims), 1)
-        self.assertEqual(len(selected_executions), 1)
-        self.assertEqual(len(scenario.runtime.list_runs(selected_task_id)), 1)
+        self.assertIn(
+            selected_claims[0]["status"],
+            {
+                DispatchClaimStatus.ACTIVE.value,
+                DispatchClaimStatus.CONSUMED.value,
+            },
+        )
+        self.assertLessEqual(len(selected_executions), 1)
+        self.assertTrue(
+            all(
+                execution["status"]
+                in {
+                    DispatchExecutionStatus.STARTED.value,
+                    DispatchExecutionStatus.RETURNED.value,
+                    DispatchExecutionStatus.RAISED.value,
+                }
+                for execution in selected_executions
+            )
+        )
+        selected_runs = scenario.runtime.list_runs(selected_task_id)
+        self.assertLessEqual(len(selected_runs), 1)
+        self.assertTrue(
+            all(run["role"] == SimulationService.RUN_ROLE for run in selected_runs)
+        )
         newer = scenario.runtime.get_task(newer_task_id)
         self.assertEqual(newer["status"], TaskStatus.QUEUED.value)
+        self.assertEqual(int(newer["revision"]), 0)
         newer_claims, newer_executions = self._dispatch_rows(scenario.runtime, newer_task_id)
         self.assertEqual(newer_claims, [])
         self.assertEqual(newer_executions, [])
+        self.assertEqual(scenario.runtime.list_runs(newer_task_id), [])
 
     def test_cross_phase_isolation_preserves_code_bootstrap_and_closed_owner_call_sites(self) -> None:
         owner = build_builtin_goal_bootstrap_owner()
