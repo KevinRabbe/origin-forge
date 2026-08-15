@@ -4,6 +4,8 @@ All notable release-level changes to Origin Forge are summarized here. Detailed 
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-16
+
 ### Added
 
 - governed production planning, capability routing, WorkOrders, dispatch binding, Task activation, dispatch claims, execution ownership, and single-shot production invocation from Phases 31–37;
@@ -16,9 +18,9 @@ All notable release-level changes to Origin Forge are summarized here. Detailed 
 
 ### Changed
 
-- current post-v0.1 development now uses package version `0.2.0.dev0` so mutable `main` no longer presents the same package identity as the immutable v0.1.0 tag;
+- the v0.5 release candidate transitions package version from `0.2.0.dev0` to `0.5.0` after accepted R1 readiness while the immutable v0.1.0 tag remains historical release evidence;
 - living current-main operator guidance is separated from the historical v0.1.0 operator surface;
-- README/current release traceability is synchronized through Phase 47 while the v0.5 R1 readiness audit deliberately retains `0.2.0.dev0` until a separate exact-head `0.5.0` release-candidate gate.
+- README/release traceability is synchronized through Phase 47 and the R2 candidate freezes `0.5.0` without changing package scripts or runtime authority.
 
 ## [0.1.0] — 2026-08-11
 
