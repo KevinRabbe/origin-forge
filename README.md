@@ -189,3 +189,7 @@ A feature should remain in Origin Forge only if it measurably improves at least 
 - safety.
 
 Complexity by itself is not progress.
+
+## License
+
+Origin Forge is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
