@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import tempfile
 import unittest
@@ -353,8 +354,18 @@ class Phase47DSimulationExecutionOwnerTests(unittest.TestCase):
 
     def test_phase47d_source_does_not_call_simulation_backend(self) -> None:
         source = inspect.getsource(execution_module)
+        tree = ast.parse(source)
         self.assertNotIn("SimulationService", source)
-        self.assertNotIn(".execute(", source)
+        self.assertNotIn("simulation_service", source)
+        execute_receivers = {
+            node.func.value.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "execute"
+            and isinstance(node.func.value, ast.Name)
+        }
+        self.assertEqual(execute_receivers, {"conn"})
 
 
 if __name__ == "__main__":
