@@ -43,9 +43,9 @@ Human review / eventual merge
 
 Origin Forge **v0.1.0 was released on 2026-08-11**. Its immutable annotated tag points to release commit `fbc6764b3b5e71cb5f5a223f09c82189e7326c1d`, after exact-head Python 3.12/3.13 CI on the final release candidate.
 
-The v0.5 R2 release candidate uses package version `0.5.0`. Phases 0–47 are included on the candidate line; Phases 31–47 were added after the v0.1.0 release and therefore are not part of the historical v0.1.0 payload.
+Origin Forge **v0.5.0 was released on 2026-08-16**. Its immutable annotated tag `v0.5.0` points to release commit `8ac46ee5f14654187469e79b021dbbd83992270b`. Phases 0–47 are included in that release; Phases 31–47 remain absent from the historical v0.1.0 payload.
 
-The canonical roadmap's next milestone is **v0.5 — Integrated Development Infrastructure**. R0 planning and R1 readiness/traceability are accepted; this R2 branch is the explicit `0.5.0` release candidate. Release status remains pending until exact-head CI, clean review, SHA-guarded merge, and annotated-tag proof are complete.
+The canonical **v0.5 — Integrated Development Infrastructure** milestone is released. Final candidate head `818de3348834709b58d8117d45539e1a80be1298` passed normal run `31914257104` / #1362 on Python 3.12 and 3.13, was SHA-guarded merged as `8ac46ee5f14654187469e79b021dbbd83992270b`, and annotated tag object `b45c1ef4cbb5b219d165331dff96ffcfa10cf609` dereferences to that exact commit.
 
 ### What exists now on current main
 
@@ -134,7 +134,7 @@ See the [current operator guide](docs/operator-guide.md) for the current-main co
 
 The historical v0.1.0 release proof is complete: final candidate head `98eeab1b5519c5018d003300126f2da247d3f911` passed run `31478577762` on Python 3.12 and 3.13, was SHA-guarded squash-merged as `fbc6764b3b5e71cb5f5a223f09c82189e7326c1d`, and annotated tag `v0.1.0` points to that exact commit.
 
-R1 retained `0.2.0.dev0` while the v0.5 acceptance/readiness/operator boundary was audited. This R2 candidate explicitly transitions package identity to `0.5.0` without changing the three installed commands or runtime authority. It is not declared released until the tested/reviewed merge is tagged `v0.5.0`.
+R1 retained `0.2.0.dev0` while the v0.5 acceptance/readiness/operator boundary was audited. R2 transitioned package identity to `0.5.0` without changing the three installed commands or runtime authority. The immutable annotated `v0.5.0` tag now records the tested/reviewed release commit; later post-release documentation does not move that tag.
 
 See the [v0.5 readiness plan](docs/v0.5-release-readiness-plan.md), [v0.5 release-readiness ledger](docs/v0.5-release-readiness.md), [v0.5 acceptance matrix](docs/v0.5-acceptance-matrix.md), [v0.5 candidate operator guide](docs/v0.5-operator-guide.md), historical [v0.1 release-readiness record](docs/v0.1-release-readiness.md), [v0.1 acceptance matrix](docs/v0.1-acceptance-matrix.md), and [changelog](CHANGELOG.md).
 

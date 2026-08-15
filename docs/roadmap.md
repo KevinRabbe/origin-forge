@@ -1025,7 +1025,9 @@ See `docs/phase-47-governed-deterministic-simulation-production-dispatch.md` for
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
-# v0.5 — Integrated Development Infrastructure
+# v0.5 — Integrated Development Infrastructure — RELEASED
+
+Released as annotated tag `v0.5.0` on exact release commit `8ac46ee5f14654187469e79b021dbbd83992270b`. Final candidate head `818de3348834709b58d8117d45539e1a80be1298` passed normal run `31914257104` / #1362 on Python 3.12 and 3.13; tag object `b45c1ef4cbb5b219d165331dff96ffcfa10cf609` dereferences to the exact release commit. Detailed coverage and authority boundaries are frozen in `docs/v0.5-acceptance-matrix.md`, `docs/v0.5-release-readiness.md`, and `docs/v0.5-operator-guide.md`.
 
 Target capabilities:
 
