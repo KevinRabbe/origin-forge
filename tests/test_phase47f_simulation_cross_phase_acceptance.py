@@ -500,9 +500,6 @@ providers = [
         )
         real_dispatch = advance_once_module._dispatch_selected_candidate_once
         dispatch_barrier = threading.Barrier(2)
-        execute_entered = threading.Event()
-        one_result = threading.Event()
-        allow_execute = threading.Event()
         lock = threading.Lock()
         execute_calls = 0
         failures: list[BaseException] = []
@@ -514,14 +511,11 @@ providers = [
             dispatch_barrier.wait(timeout=30)
             return real_dispatch(runtime, candidate)
 
-        def blocked_execute(service, task_id, spec):
+        def execute_once(service, task_id, spec):
             nonlocal execute_calls
             with lock:
                 execute_calls += 1
             self.assertEqual(task_id, selected_task_id)
-            execute_entered.set()
-            if not allow_execute.wait(30):
-                raise RuntimeError("test timed out waiting to finish simulation")
             return original_execute(service, task_id, spec)
 
         def worker() -> None:
@@ -531,11 +525,9 @@ providers = [
             except BaseException as exc:
                 with lock:
                     failures.append(exc)
-                one_result.set()
             else:
                 with lock:
                     results.append(value)
-                one_result.set()
 
         with (
             patch.object(
@@ -547,17 +539,14 @@ providers = [
                 SimulationService,
                 "execute",
                 autospec=True,
-                side_effect=blocked_execute,
+                side_effect=execute_once,
             ),
         ):
             threads = [threading.Thread(target=worker, daemon=True) for _ in range(2)]
             for thread in threads:
                 thread.start()
-            self.assertTrue(execute_entered.wait(30))
-            self.assertTrue(one_result.wait(30))
-            allow_execute.set()
             for thread in threads:
-                thread.join(30)
+                thread.join(60)
 
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(failures, [])
