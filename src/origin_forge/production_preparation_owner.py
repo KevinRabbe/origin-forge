@@ -11,6 +11,7 @@ from .production_capability_builtin import (
     build_builtin_capability_catalog,
     builtin_trusted_production_adapters,
 )
+from .production_capability_models import CapabilityCatalog
 from .production_preparation_models import TaskPreparationPolicyBinding
 from .production_work_order_builtin import build_builtin_dispatch_catalog
 from .production_work_order_models import DispatchContractCatalog
@@ -186,7 +187,8 @@ def builtin_preparation_owner_descriptors() -> tuple[ProductionPreparationOwnerD
     # Build the reviewed contract through the same code-owned Phase-33 builder.
     # Catalog IDs are intentionally irrelevant here; the contract itself has a
     # stable content identity over adapter/validator/schema authority.
-    catalog = build_builtin_dispatch_catalog(build_builtin_capability_catalog())
+    phase32_catalog = build_builtin_capability_catalog()
+    catalog = build_builtin_dispatch_catalog(phase32_catalog)
     try:
         contract = catalog.contract_for_adapter(adapter_id)
     except KeyError as exc:
@@ -198,19 +200,59 @@ def builtin_preparation_owner_descriptors() -> tuple[ProductionPreparationOwnerD
             "built-in preparation adapter/dispatch-contract relation drifted"
         )
 
-    return (
-        ProductionPreparationOwnerDescriptor(
-            owner_id="originforge.preparation.work-order-planner@1",
-            owner_version="1",
-            planner_request_version="1",
-            planner_contract_id="BoundedProductionWorkOrderPlanner.propose@1",
-            supported_adapter_id=adapter.adapter_id,
-            supported_adapter_fingerprint=adapter.implementation_fingerprint,
-            supported_dispatch_contract_id=contract.contract_id,
-            supported_dispatch_contract_hash=contract.content_hash,
-            model_strategy_roles=(ModelRole.CODER_STRONG,),
-        ),
+    code_owner = ProductionPreparationOwnerDescriptor(
+        owner_id="originforge.preparation.work-order-planner@1",
+        owner_version="1",
+        planner_request_version="1",
+        planner_contract_id="BoundedProductionWorkOrderPlanner.propose@1",
+        supported_adapter_id=adapter.adapter_id,
+        supported_adapter_fingerprint=adapter.implementation_fingerprint,
+        supported_dispatch_contract_id=contract.contract_id,
+        supported_dispatch_contract_hash=contract.content_hash,
+        model_strategy_roles=(ModelRole.CODER_STRONG,),
     )
+
+    simulation_adapter_id = "originforge.simulation.deterministic"
+    try:
+        simulation_adapter = adapters[simulation_adapter_id]
+    except KeyError as exc:
+        raise ProductionPreparationOwnerError(
+            "built-in capability inventory lacks deterministic simulation adapter"
+        ) from exc
+    simulation_phase32_catalog = CapabilityCatalog.create(
+        (phase32_catalog.capability("simulation.run"),),
+        (phase32_catalog.adapter(simulation_adapter_id),),
+    )
+    simulation_catalog = build_builtin_dispatch_catalog(simulation_phase32_catalog)
+    try:
+        simulation_contract = simulation_catalog.contract_for_adapter(
+            simulation_adapter_id
+        )
+    except KeyError as exc:
+        raise ProductionPreparationOwnerError(
+            "built-in dispatch inventory lacks deterministic simulation contract"
+        ) from exc
+    if (
+        simulation_contract.adapter_fingerprint
+        != simulation_adapter.implementation_fingerprint
+    ):
+        raise ProductionPreparationOwnerError(
+            "built-in simulation preparation adapter/dispatch-contract relation drifted"
+        )
+
+    simulation_owner = ProductionPreparationOwnerDescriptor(
+        owner_id="originforge.preparation.simulation-work-order-planner@1",
+        owner_version="1",
+        planner_request_version="1",
+        planner_contract_id="BoundedProductionWorkOrderPlanner.propose@1",
+        supported_adapter_id=simulation_adapter.adapter_id,
+        supported_adapter_fingerprint=simulation_adapter.implementation_fingerprint,
+        supported_dispatch_contract_id=simulation_contract.contract_id,
+        supported_dispatch_contract_hash=simulation_contract.content_hash,
+        model_strategy_roles=(ModelRole.CODER_STRONG,),
+    )
+
+    return (code_owner, simulation_owner)
 
 
 def build_builtin_preparation_owner_registry() -> ProductionPreparationOwnerRegistry:

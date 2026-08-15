@@ -168,18 +168,37 @@ providers = [
                 result[relative] = ("dir", None)
         return result
 
-    def test_builtin_owner_is_deterministic_inert_and_exactly_coder_strong(self) -> None:
+    def test_builtin_owner_is_deterministic_inert_and_preserves_code_owner(self) -> None:
         first = build_builtin_preparation_owner_registry()
         second = build_builtin_preparation_owner_registry()
         self.assertEqual(first.fingerprint, second.fingerprint)
-        self.assertEqual(len(first.descriptors), 1)
-        owner = first.descriptors[0]
+        self.assertEqual(len(first.descriptors), 2)
+        owner = first.owner("originforge.preparation.work-order-planner@1")
         self.assertEqual(owner.owner_id, "originforge.preparation.work-order-planner@1")
         self.assertEqual(owner.planner_contract_id, "BoundedProductionWorkOrderPlanner.propose@1")
         self.assertEqual(owner.supported_adapter_id, "originforge.code.bounded-retry")
         self.assertEqual(owner.supported_dispatch_contract_id, "code.bounded-retry@1")
         self.assertEqual(owner.model_strategy_roles, (ModelRole.CODER_STRONG,))
         self.assertEqual(owner.policy_role_names, ("CODER_STRONG",))
+        simulation_owner = first.owner(
+            "originforge.preparation.simulation-work-order-planner@1"
+        )
+        self.assertEqual(
+            simulation_owner.planner_contract_id,
+            "BoundedProductionWorkOrderPlanner.propose@1",
+        )
+        self.assertEqual(
+            simulation_owner.supported_adapter_id,
+            "originforge.simulation.deterministic",
+        )
+        self.assertEqual(
+            simulation_owner.supported_dispatch_contract_id,
+            "simulation.deterministic@1",
+        )
+        self.assertEqual(
+            simulation_owner.model_strategy_roles,
+            (ModelRole.CODER_STRONG,),
+        )
         forbidden = {
             "callable",
             "import_path",
@@ -194,6 +213,7 @@ providers = [
             "workspace",
         }
         self.assertTrue(forbidden.isdisjoint(owner.to_dict()))
+        self.assertTrue(forbidden.isdisjoint(simulation_owner.to_dict()))
 
     def test_policy_owner_fields_are_derived_and_current(self) -> None:
         owner = require_current_preparation_owner(

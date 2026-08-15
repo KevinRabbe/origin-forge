@@ -42,6 +42,7 @@ _PLANNER_CONTRACT_ID = "BoundedProductionPlanner.propose@1"
 _SUPPORTED_CAPABILITY_ID = "code.change"
 _SUPPORTED_ADAPTER_ID = "originforge.code.bounded-retry"
 _SUPPORTED_DISPATCH_CONTRACT_ID = "code.bounded-retry@1"
+_SUPPORTED_PREPARATION_OWNER_ID = "originforge.preparation.work-order-planner@1"
 _PROJECT_INTELLIGENCE_PROJECTION_VERSION = "phase45.project-intelligence@1"
 _MODEL_POLICY_PROJECTION_VERSION = "phase45.goal-planner-model-policy@1"
 _RESOURCE_POLICY_PROJECTION_VERSION = "phase45.goal-planner-resource-policy@1"
@@ -142,11 +143,16 @@ def build_builtin_goal_bootstrap_owner() -> GoalBootstrapOwnerDescriptor:
         )
 
     registry = build_builtin_preparation_owner_registry()
-    if len(registry.descriptors) != 1:
+    preparation_owners = tuple(
+        owner
+        for owner in registry.descriptors
+        if owner.owner_id == _SUPPORTED_PREPARATION_OWNER_ID
+    )
+    if len(preparation_owners) != 1:
         raise GoalBootstrapAuthorityError(
-            "current preparation-owner registry is ambiguous for Phase-45 v1"
+            "current code preparation owner is not unique for Phase-45 v1"
         )
-    preparation_owner = registry.descriptors[0]
+    preparation_owner = preparation_owners[0]
     adapters = {adapter.adapter_id: adapter for adapter in catalog.adapters}
     try:
         adapter = adapters[_SUPPORTED_ADAPTER_ID]
