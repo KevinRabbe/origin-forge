@@ -10,6 +10,7 @@ from .production_dispatch_binding_core import (
     DispatchInputBinderRegistry,
     _binding_with_id,
     _frozen_binding_audit_matches,
+    _require_bundle_revalidates,
 )
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
 
