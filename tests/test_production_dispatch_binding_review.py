@@ -6,6 +6,7 @@ import unittest
 
 import origin_forge.production_dispatch_binding_review as review_module
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
+from origin_forge.production_capability_models import CapabilityCatalog
 from origin_forge.production_dispatch_binding import build_builtin_dispatch_binder_registry
 from origin_forge.production_dispatch_binding_review import (
     BuiltinBindingReviewStatus,
@@ -28,9 +29,14 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         )
         self.assertEqual(len(rows), len({value.adapter_id for value in rows}))
 
-    def test_bindable_set_exactly_matches_dispatch_catalog_and_binder_registry(self) -> None:
+    def test_bindable_set_exactly_matches_reviewed_dispatch_views_and_binder_registry(self) -> None:
         phase32 = build_builtin_capability_catalog()
-        dispatch_catalog = build_builtin_dispatch_catalog(phase32)
+        code_dispatch = build_builtin_dispatch_catalog(phase32)
+        simulation_phase32 = CapabilityCatalog.create(
+            (phase32.capability("simulation.run"),),
+            (phase32.adapter("originforge.simulation.deterministic"),),
+        )
+        simulation_dispatch = build_builtin_dispatch_catalog(simulation_phase32)
         binder_registry = build_builtin_dispatch_binder_registry()
         rows = builtin_binding_review()
 
@@ -39,18 +45,36 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             for value in rows
             if value.status is BuiltinBindingReviewStatus.BINDABLE
         }
-        self.assertEqual(bindable, {"originforge.code.bounded-retry"})
         self.assertEqual(
             bindable,
-            {value.adapter_id for value in dispatch_catalog.contracts},
+            {
+                "originforge.code.bounded-retry",
+                "originforge.simulation.deterministic",
+            },
+        )
+        reviewed_contracts = (*code_dispatch.contracts, *simulation_dispatch.contracts)
+        self.assertEqual(
+            bindable,
+            {value.adapter_id for value in reviewed_contracts},
         )
         self.assertEqual(
             bindable,
             {value.adapter_id for value in binder_registry.descriptors},
         )
+        contracts_by_adapter = {
+            value.adapter_id: value.contract_id for value in reviewed_contracts
+        }
         self.assertEqual(
-            binder_registry.descriptors[0].dispatch_contract_id,
-            dispatch_catalog.contracts[0].contract_id,
+            {
+                value.adapter_id: value.dispatch_contract_id
+                for value in binder_registry.descriptors
+            },
+            contracts_by_adapter,
+        )
+        self.assertEqual(code_dispatch.contract_ids, ("code.bounded-retry@1",))
+        self.assertEqual(
+            simulation_dispatch.contract_ids,
+            ("simulation.deterministic@1",),
         )
 
     def test_audio_profile_resolution_does_not_silently_promote_audio_backends(self) -> None:
@@ -66,6 +90,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         rows = {value.adapter_id: value for value in builtin_binding_review()}
         ffmpeg = rows["originforge.audio.ffmpeg"]
         piper = rows["originforge.audio.piper"]
+        simulation = rows["originforge.simulation.deterministic"]
         self.assertEqual(ffmpeg.status, BuiltinBindingReviewStatus.DEFERRED)
         self.assertEqual(
             ffmpeg.blocker,
@@ -78,6 +103,9 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             "AUDIO_NATIVE_REQUEST_IDENTITY_INCOMPLETE",
         )
         self.assertIn("operation/workspace identity", piper.reason)
+        self.assertEqual(simulation.status, BuiltinBindingReviewStatus.BINDABLE)
+        self.assertIsNone(simulation.blocker)
+        self.assertIn("zero-ref", simulation.reason)
 
     def test_every_deferred_adapter_has_one_explicit_nonempty_blocker(self) -> None:
         rows = builtin_binding_review()
@@ -86,7 +114,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             for value in rows
             if value.status is BuiltinBindingReviewStatus.DEFERRED
         ]
-        self.assertEqual(len(deferred), 9)
+        self.assertEqual(len(deferred), 8)
         self.assertTrue(all(value.blocker for value in deferred))
         self.assertEqual(
             len({value.blocker for value in deferred}),
