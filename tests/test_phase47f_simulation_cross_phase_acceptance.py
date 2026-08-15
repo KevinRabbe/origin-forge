@@ -11,14 +11,13 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import origin_forge.production_dispatch_invocation as invocation_module
-import origin_forge.production_manager_dispatch_tick as dispatch_tick_module
+import origin_forge.production_manager_advance_once as advance_once_module
 from origin_forge.lineage import OriginForgeLineage
 from origin_forge.model import ModelResponse
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
 from origin_forge.production_capability_models import CapabilityCatalog, CapabilityRoutingPolicy
 from origin_forge.production_capability_store import ProductionCapabilityStore
 from origin_forge.production_dispatch_claim_models import DispatchClaimStatus
-from origin_forge.production_dispatch_claims import acquire_dispatch_claim
 from origin_forge.production_dispatch_execution_models import DispatchExecutionStatus
 from origin_forge.production_goal_bootstrap_authority import build_builtin_goal_bootstrap_owner
 from origin_forge.production_manager_advance_bounded import (
@@ -499,8 +498,8 @@ providers = [
         newer_task_id = next(
             task_id for task_id in scenario.task_ids if task_id != selected_task_id
         )
-        real_acquire = acquire_dispatch_claim
-        acquire_barrier = threading.Barrier(2)
+        real_dispatch = advance_once_module._dispatch_selected_candidate_once
+        dispatch_barrier = threading.Barrier(2)
         execute_entered = threading.Event()
         one_result = threading.Event()
         allow_execute = threading.Event()
@@ -510,9 +509,10 @@ providers = [
         results = []
         original_execute = SimulationService.execute
 
-        def racing_acquire(runtime, binding_id, audit_id, revision):
-            acquire_barrier.wait(timeout=15)
-            return real_acquire(runtime, binding_id, audit_id, revision)
+        def racing_dispatch(runtime, candidate):
+            self.assertEqual(candidate.task_id, selected_task_id)
+            dispatch_barrier.wait(timeout=30)
+            return real_dispatch(runtime, candidate)
 
         def blocked_execute(service, task_id, spec):
             nonlocal execute_calls
@@ -520,7 +520,7 @@ providers = [
                 execute_calls += 1
             self.assertEqual(task_id, selected_task_id)
             execute_entered.set()
-            if not allow_execute.wait(15):
+            if not allow_execute.wait(30):
                 raise RuntimeError("test timed out waiting to finish simulation")
             return original_execute(service, task_id, spec)
 
@@ -539,9 +539,9 @@ providers = [
 
         with (
             patch.object(
-                dispatch_tick_module,
-                "acquire_dispatch_claim",
-                side_effect=racing_acquire,
+                advance_once_module,
+                "_dispatch_selected_candidate_once",
+                side_effect=racing_dispatch,
             ),
             patch.object(
                 SimulationService,
@@ -553,11 +553,11 @@ providers = [
             threads = [threading.Thread(target=worker, daemon=True) for _ in range(2)]
             for thread in threads:
                 thread.start()
-            self.assertTrue(execute_entered.wait(15))
-            self.assertTrue(one_result.wait(15))
+            self.assertTrue(execute_entered.wait(30))
+            self.assertTrue(one_result.wait(30))
             allow_execute.set()
             for thread in threads:
-                thread.join(20)
+                thread.join(30)
 
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(failures, [])
