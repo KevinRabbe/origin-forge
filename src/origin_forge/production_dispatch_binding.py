@@ -8,6 +8,8 @@ from .production_dispatch_binding_core import (
     CodeBoundedRetryInputBinder,
     DispatchInputBinder,
     DispatchInputBinderRegistry,
+    _binding_with_id,
+    _frozen_binding_audit_matches,
 )
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
 
