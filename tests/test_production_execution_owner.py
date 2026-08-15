@@ -8,6 +8,7 @@ import origin_forge.production_execution_owner as owner_module
 from origin_forge.model_scheduler import ModelRole
 from origin_forge.production_capability_builtin import builtin_trusted_production_adapters
 from origin_forge.production_dispatch_binding import CodeBoundedRetryInputBinder
+from origin_forge.production_dispatch_binding_simulation import DeterministicSimulationInputBinder
 from origin_forge.production_execution_owner import (
     ProductionExecutionOwnerDescriptor,
     ProductionExecutionOwnerError,
@@ -40,37 +41,73 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
             requires_workspace_manager=True,
         )
 
-    def test_builtin_owner_exactly_matches_reviewed_adapter_and_binder(self) -> None:
+    def test_builtin_owners_exactly_match_reviewed_adapters_and_binders(self) -> None:
         owners = builtin_execution_owner_descriptors()
-        self.assertEqual(len(owners), 1)
-        owner = owners[0]
-        adapter = next(
-            value
-            for value in builtin_trusted_production_adapters()
-            if value.adapter_id == "originforge.code.bounded-retry"
-        )
-        binder = CodeBoundedRetryInputBinder().descriptor
+        self.assertEqual(len(owners), 2)
+        code_owner, simulation_owner = owners
+        adapters = {
+            value.adapter_id: value for value in builtin_trusted_production_adapters()
+        }
 
-        self.assertEqual(owner.owner_id, "originforge.execution.bounded-retry@1")
-        self.assertEqual(owner.adapter_id, adapter.adapter_id)
-        self.assertEqual(owner.adapter_fingerprint, adapter.implementation_fingerprint)
-        self.assertEqual(owner.dispatch_contract_id, binder.dispatch_contract_id)
-        self.assertEqual(owner.binder_id, binder.binder_id)
-        self.assertEqual(owner.binder_fingerprint, binder.binder_fingerprint)
-        self.assertEqual(owner.request_type_id, binder.request_type_id)
-        self.assertEqual(owner.request_schema_hash, binder.request_schema_hash)
-        self.assertEqual(owner.model_strategy_roles, (ModelRole.CODER_STRONG,))
-        self.assertNotIn(ModelRole.CODER_FAST, owner.model_strategy_roles)
-        self.assertTrue(owner.requires_sandbox)
-        self.assertTrue(owner.requires_workspace_manager)
+        code_adapter = adapters["originforge.code.bounded-retry"]
+        code_binder = CodeBoundedRetryInputBinder().descriptor
+        self.assertEqual(code_owner.owner_id, "originforge.execution.bounded-retry@1")
+        self.assertEqual(code_owner.adapter_id, code_adapter.adapter_id)
+        self.assertEqual(
+            code_owner.adapter_fingerprint,
+            code_adapter.implementation_fingerprint,
+        )
+        self.assertEqual(code_owner.dispatch_contract_id, code_binder.dispatch_contract_id)
+        self.assertEqual(code_owner.binder_id, code_binder.binder_id)
+        self.assertEqual(code_owner.binder_fingerprint, code_binder.binder_fingerprint)
+        self.assertEqual(code_owner.request_type_id, code_binder.request_type_id)
+        self.assertEqual(code_owner.request_schema_hash, code_binder.request_schema_hash)
+        self.assertEqual(code_owner.model_strategy_roles, (ModelRole.CODER_STRONG,))
+        self.assertNotIn(ModelRole.CODER_FAST, code_owner.model_strategy_roles)
+        self.assertTrue(code_owner.requires_sandbox)
+        self.assertTrue(code_owner.requires_workspace_manager)
+
+        simulation_adapter = adapters["originforge.simulation.deterministic"]
+        simulation_binder = DeterministicSimulationInputBinder().descriptor
+        self.assertEqual(
+            simulation_owner.owner_id,
+            "originforge.execution.simulation.deterministic@1",
+        )
+        self.assertEqual(simulation_owner.adapter_id, simulation_adapter.adapter_id)
+        self.assertEqual(
+            simulation_owner.adapter_fingerprint,
+            simulation_adapter.implementation_fingerprint,
+        )
+        self.assertEqual(
+            simulation_owner.dispatch_contract_id,
+            simulation_binder.dispatch_contract_id,
+        )
+        self.assertEqual(simulation_owner.binder_id, simulation_binder.binder_id)
+        self.assertEqual(
+            simulation_owner.binder_fingerprint,
+            simulation_binder.binder_fingerprint,
+        )
+        self.assertEqual(
+            simulation_owner.request_type_id,
+            simulation_binder.request_type_id,
+        )
+        self.assertEqual(
+            simulation_owner.request_schema_hash,
+            simulation_binder.request_schema_hash,
+        )
+        self.assertEqual(simulation_owner.model_strategy_roles, ())
+        self.assertFalse(simulation_owner.requires_sandbox)
+        self.assertFalse(simulation_owner.requires_workspace_manager)
 
     def test_owner_and_registry_fingerprints_are_deterministic(self) -> None:
         first = build_builtin_execution_owner_registry()
         second = build_builtin_execution_owner_registry()
         self.assertEqual(first.fingerprint, second.fingerprint)
-        self.assertEqual(first.descriptors[0].fingerprint, second.descriptors[0].fingerprint)
+        self.assertEqual(first.descriptors, second.descriptors)
         self.assertRegex(first.fingerprint, r"^[0-9a-f]{64}$")
-        self.assertRegex(first.descriptors[0].fingerprint, r"^[0-9a-f]{64}$")
+        for first_owner, second_owner in zip(first.descriptors, second.descriptors):
+            self.assertEqual(first_owner.fingerprint, second_owner.fingerprint)
+            self.assertRegex(first_owner.fingerprint, r"^[0-9a-f]{64}$")
 
     def test_exact_relation_selects_owner_and_any_drift_fails_closed(self) -> None:
         registry = build_builtin_execution_owner_registry()
@@ -119,7 +156,7 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ProductionExecutionOwnerError, "ambiguous"):
             ProductionExecutionOwnerRegistry((first, ambiguous))
 
-    def test_descriptor_rejects_implicit_or_malformed_strategy_authority(self) -> None:
+    def test_descriptor_allows_empty_roles_and_rejects_malformed_strategy_authority(self) -> None:
         base = self._descriptor()
         values = base.authority_dict()
         common = {
@@ -135,11 +172,11 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
             "requires_sandbox": True,
             "requires_workspace_manager": True,
         }
-        with self.assertRaises(ProductionExecutionOwnerError):
-            ProductionExecutionOwnerDescriptor(
-                **common,
-                model_strategy_roles=(),
-            )
+        empty = ProductionExecutionOwnerDescriptor(
+            **common,
+            model_strategy_roles=(),
+        )
+        self.assertEqual(empty.model_strategy_roles, ())
         with self.assertRaises(ProductionExecutionOwnerError):
             ProductionExecutionOwnerDescriptor(
                 **common,
@@ -157,39 +194,39 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
             )
 
     def test_persistable_descriptor_contains_no_dynamic_execution_authority(self) -> None:
-        owner = build_builtin_execution_owner_registry().descriptors[0]
-        payload = owner.to_dict()
-        self.assertEqual(
-            set(payload),
-            {
-                "owner_id",
-                "owner_version",
-                "adapter_id",
-                "adapter_fingerprint",
-                "dispatch_contract_id",
-                "binder_id",
-                "binder_fingerprint",
-                "request_type_id",
-                "request_schema_hash",
-                "model_strategy_roles",
-                "requires_sandbox",
-                "requires_workspace_manager",
-                "owner_fingerprint",
-            },
-        )
-        for forbidden in (
-            "callable",
-            "import",
-            "module",
-            "shell",
-            "argv",
-            "endpoint",
-            "api_key",
-            "executable",
-            "environment",
-            "loader",
-        ):
-            self.assertNotIn(forbidden, payload)
+        for owner in build_builtin_execution_owner_registry().descriptors:
+            payload = owner.to_dict()
+            self.assertEqual(
+                set(payload),
+                {
+                    "owner_id",
+                    "owner_version",
+                    "adapter_id",
+                    "adapter_fingerprint",
+                    "dispatch_contract_id",
+                    "binder_id",
+                    "binder_fingerprint",
+                    "request_type_id",
+                    "request_schema_hash",
+                    "model_strategy_roles",
+                    "requires_sandbox",
+                    "requires_workspace_manager",
+                    "owner_fingerprint",
+                },
+            )
+            for forbidden in (
+                "callable",
+                "import",
+                "module",
+                "shell",
+                "argv",
+                "endpoint",
+                "api_key",
+                "executable",
+                "environment",
+                "loader",
+            ):
+                self.assertNotIn(forbidden, payload)
 
     def test_source_has_no_executor_runtime_or_process_authority(self) -> None:
         source = inspect.getsource(owner_module)
