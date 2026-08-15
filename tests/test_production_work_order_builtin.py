@@ -25,12 +25,16 @@ from origin_forge.runtime import OriginForgeRuntime
 
 
 class BuiltinProductionWorkOrderTests(unittest.TestCase):
-    def test_review_supports_only_bounded_code_and_records_every_deferred_boundary(self) -> None:
+    def test_review_supports_code_and_simulation_and_records_deferred_boundary(self) -> None:
         rows = {value.adapter_id: value for value in builtin_dispatch_review()}
-        self.assertEqual(
-            rows["originforge.code.bounded-retry"].status,
-            BuiltinDispatchReviewStatus.SUPPORTED,
-        )
+        for adapter_id in (
+            "originforge.code.bounded-retry",
+            "originforge.simulation.deterministic",
+        ):
+            self.assertEqual(
+                rows[adapter_id].status,
+                BuiltinDispatchReviewStatus.SUPPORTED,
+            )
         for adapter_id in (
             "originforge.pixelorama.export",
             "originforge.blender.model3d",
@@ -40,7 +44,6 @@ class BuiltinProductionWorkOrderTests(unittest.TestCase):
             "originforge.audio.piper",
             "originforge.runtime.observe",
             "originforge.playtest.cooperative",
-            "originforge.simulation.deterministic",
         ):
             self.assertEqual(
                 rows[adapter_id].status,
