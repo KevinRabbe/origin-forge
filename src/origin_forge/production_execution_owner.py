@@ -9,6 +9,7 @@ from typing import Sequence
 from .model_scheduler import ModelRole
 from .production_capability_builtin import builtin_trusted_production_adapters
 from .production_dispatch_binding import CodeBoundedRetryInputBinder
+from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
 
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -71,7 +72,7 @@ class ProductionExecutionOwnerDescriptor:
         _identity(self.request_type_id, "request_type_id")
         _digest(self.request_schema_hash, "request_schema_hash")
         roles = tuple(self.model_strategy_roles)
-        if not roles or any(not isinstance(role, ModelRole) for role in roles):
+        if any(not isinstance(role, ModelRole) for role in roles):
             raise ProductionExecutionOwnerError(
                 "model_strategy_roles must contain ModelRole values"
             )
@@ -218,22 +219,50 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         raise ProductionExecutionOwnerError(
             "built-in bounded-retry binder relation drifted"
         )
-    return (
-        ProductionExecutionOwnerDescriptor(
-            owner_id="originforge.execution.bounded-retry@1",
-            owner_version="1",
-            adapter_id=adapter.adapter_id,
-            adapter_fingerprint=adapter.implementation_fingerprint,
-            dispatch_contract_id=binder.dispatch_contract_id,
-            binder_id=binder.binder_id,
-            binder_fingerprint=binder.binder_fingerprint,
-            request_type_id=binder.request_type_id,
-            request_schema_hash=binder.request_schema_hash,
-            model_strategy_roles=(ModelRole.CODER_STRONG,),
-            requires_sandbox=True,
-            requires_workspace_manager=True,
-        ),
+    code_owner = ProductionExecutionOwnerDescriptor(
+        owner_id="originforge.execution.bounded-retry@1",
+        owner_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        dispatch_contract_id=binder.dispatch_contract_id,
+        binder_id=binder.binder_id,
+        binder_fingerprint=binder.binder_fingerprint,
+        request_type_id=binder.request_type_id,
+        request_schema_hash=binder.request_schema_hash,
+        model_strategy_roles=(ModelRole.CODER_STRONG,),
+        requires_sandbox=True,
+        requires_workspace_manager=True,
     )
+
+    try:
+        simulation_adapter = adapters["originforge.simulation.deterministic"]
+    except KeyError as exc:
+        raise ProductionExecutionOwnerError(
+            "built-in capability inventory lacks deterministic simulation adapter"
+        ) from exc
+    simulation_binder = DeterministicSimulationInputBinder().descriptor
+    if (
+        simulation_binder.adapter_id != simulation_adapter.adapter_id
+        or simulation_binder.dispatch_contract_id != "simulation.deterministic@1"
+    ):
+        raise ProductionExecutionOwnerError(
+            "built-in deterministic simulation binder relation drifted"
+        )
+    simulation_owner = ProductionExecutionOwnerDescriptor(
+        owner_id="originforge.execution.simulation.deterministic@1",
+        owner_version="1",
+        adapter_id=simulation_adapter.adapter_id,
+        adapter_fingerprint=simulation_adapter.implementation_fingerprint,
+        dispatch_contract_id=simulation_binder.dispatch_contract_id,
+        binder_id=simulation_binder.binder_id,
+        binder_fingerprint=simulation_binder.binder_fingerprint,
+        request_type_id=simulation_binder.request_type_id,
+        request_schema_hash=simulation_binder.request_schema_hash,
+        model_strategy_roles=(),
+        requires_sandbox=False,
+        requires_workspace_manager=False,
+    )
+    return (code_owner, simulation_owner)
 
 
 def build_builtin_execution_owner_registry() -> ProductionExecutionOwnerRegistry:
