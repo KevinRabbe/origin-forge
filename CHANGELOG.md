@@ -22,6 +22,13 @@ All notable release-level changes to Origin Forge are summarized here. Detailed 
 - living current-main operator guidance is separated from the historical v0.1.0 operator surface;
 - README/release traceability is synchronized through Phase 47 and the R2 candidate freezes `0.5.0` without changing package scripts or runtime authority.
 
+### Release proof
+
+- final candidate head `818de3348834709b58d8117d45539e1a80be1298` passed normal run `31914257104` / #1362 on Python 3.12 and Python 3.13;
+- that exact candidate was SHA-guarded merged as release commit `8ac46ee5f14654187469e79b021dbbd83992270b`;
+- annotated tag `v0.5.0` is tag object `b45c1ef4cbb5b219d165331dff96ffcfa10cf609` and dereferences to that exact release commit;
+- the tag is annotated but unsigned; no claim of cryptographic Git-tag signature is made.
+
 ## [0.1.0] — 2026-08-11
 
 ### Release boundary
