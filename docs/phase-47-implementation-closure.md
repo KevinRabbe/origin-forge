@@ -120,6 +120,8 @@ The accepted real temporary-project scenarios prove:
 
 No acceptance failure demonstrated a production defect. The final 47F repair history only removed interpreter-sensitive test timing; production code remained unchanged throughout 47F.
 
+The Phase-47G closure gate later reproduced a Python 3.12 scheduling outcome in which the single claim winner stopped fail-closed before `SimulationService.execute()` while the competing claim transaction resolved. The concurrency acceptance was therefore corrected to assert its stated at-most-once/no-fallback contract instead of requiring exactly one simulation call in every concurrent schedule. The repair remains test-only and adds stronger zero-authority assertions for the newer Task; production code is unchanged.
+
 ## Manager, Goal-bootstrap, and packaging boundaries preserved
 
 A simulation `DISPATCH_RETURNED` is terminal for the current bounded Manager invocation just like the existing bounded-code dispatch result. Manager does not automatically dispatch another Task in the same call and does not treat simulation metrics as Task outcome truth.
@@ -169,6 +171,6 @@ Phase 47 adds no:
 
 This documentation/operator-guide/roadmap closure branch starts from exact merged Phase-47F main `29e00d8d5afa20f9f24c6a20fef35b8cfffa5340`.
 
-The closure branch may modify documentation only. It must preserve the three packaged scripts, read-only cockpit boundary, code-only Phase-45/46 Goal bootstrap, bounded Manager semantics, and the accepted two-owner production invocation surface.
+The intended closure diff is exactly three documentation files plus the single Phase-47F concurrency acceptance stabilization described above. It may not modify production code, schema, config, packaging, workflows in the final tree, or runtime authority. It must preserve the three packaged scripts, read-only cockpit boundary, code-only Phase-45/46 Goal bootstrap, bounded Manager semantics, and the accepted two-owner production invocation surface.
 
 The final immutable closure head must pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error. Only that exact green head may be transitioned out of draft and SHA-guarded merged.
