@@ -30,151 +30,52 @@ jobs:
                   raise SystemExit(f"{label}: expected one match, got {count}")
               p.write_text(text.replace(old, new), encoding="utf-8")
 
-          replace_once(
-              "README.md",
-              "Current `main` is **post-v0.1 development** with package version `0.2.0.dev0`. Phases 0–47 are merged on the development line; Phases 31–47 were added after the v0.1.0 release and therefore are not part of the historical v0.1.0 payload.",
-              "The v0.5 R2 release candidate uses package version `0.5.0`. Phases 0–47 are included on the candidate line; Phases 31–47 were added after the v0.1.0 release and therefore are not part of the historical v0.1.0 payload.",
-              "README current identity",
-          )
-          replace_once(
-              "README.md",
-              "The canonical roadmap's next milestone is **v0.5 — Integrated Development Infrastructure**. Release-readiness work is currently validating the already-implemented milestone targets and synchronizing release traceability before any explicit `0.5.0` version/tag transition.",
-              "The canonical roadmap's next milestone is **v0.5 — Integrated Development Infrastructure**. R0 planning and R1 readiness/traceability are accepted; this R2 branch is the explicit `0.5.0` release candidate. Release status remains pending until exact-head CI, clean review, SHA-guarded merge, and annotated-tag proof are complete.",
-              "README milestone state",
-          )
-          replace_once(
-              "README.md",
-              "Current main uses `0.2.0.dev0` only to distinguish post-release development from the immutable v0.1.0 package identity. It is not a v0.2.0 release declaration. The accepted v0.5 readiness plan keeps this development version throughout R1; an explicit later R2 gate may transition the final candidate to `0.5.0` only after acceptance/readiness/operator traceability is frozen and exact-head CI is green.",
-              "R1 retained `0.2.0.dev0` while the v0.5 acceptance/readiness/operator boundary was audited. This R2 candidate explicitly transitions package identity to `0.5.0` without changing the three installed commands or runtime authority. It is not declared released until the tested/reviewed merge is tagged `v0.5.0`.",
-              "README release identity",
-          )
+          def replace_tail(path: str, marker: str, lines: list[str], label: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              if text.count(marker) != 1:
+                  raise SystemExit(f"{label}: marker mismatch")
+              p.write_text(text[:text.index(marker)] + "\n".join(lines) + "\n", encoding="utf-8")
 
-          replace_once(
-              "CHANGELOG.md",
-              "## [Unreleased]\n\n### Added",
-              "## [Unreleased]\n\n## [0.5.0] — 2026-08-16\n\n### Added",
-              "CHANGELOG release header",
-          )
-          replace_once(
-              "CHANGELOG.md",
-              "- current post-v0.1 development now uses package version `0.2.0.dev0` so mutable `main` no longer presents the same package identity as the immutable v0.1.0 tag;",
-              "- the v0.5 release candidate transitions package version from `0.2.0.dev0` to `0.5.0` after accepted R1 readiness while the immutable v0.1.0 tag remains historical release evidence;",
-              "CHANGELOG version bullet",
-          )
-          replace_once(
-              "CHANGELOG.md",
-              "- README/current release traceability is synchronized through Phase 47 while the v0.5 R1 readiness audit deliberately retains `0.2.0.dev0` until a separate exact-head `0.5.0` release-candidate gate.",
-              "- README/release traceability is synchronized through Phase 47 and the R2 candidate freezes `0.5.0` without changing package scripts or runtime authority.",
-              "CHANGELOG R2 bullet",
-          )
+          replace_once("README.md", "Current `main` is **post-v0.1 development** with package version `0.2.0.dev0`. Phases 0–47 are merged on the development line; Phases 31–47 were added after the v0.1.0 release and therefore are not part of the historical v0.1.0 payload.", "The v0.5 R2 release candidate uses package version `0.5.0`. Phases 0–47 are included on the candidate line; Phases 31–47 were added after the v0.1.0 release and therefore are not part of the historical v0.1.0 payload.", "README current identity")
+          replace_once("README.md", "The canonical roadmap's next milestone is **v0.5 — Integrated Development Infrastructure**. Release-readiness work is currently validating the already-implemented milestone targets and synchronizing release traceability before any explicit `0.5.0` version/tag transition.", "The canonical roadmap's next milestone is **v0.5 — Integrated Development Infrastructure**. R0 planning and R1 readiness/traceability are accepted; this R2 branch is the explicit `0.5.0` release candidate. Release status remains pending until exact-head CI, clean review, SHA-guarded merge, and annotated-tag proof are complete.", "README milestone state")
+          replace_once("README.md", "Current main uses `0.2.0.dev0` only to distinguish post-release development from the immutable v0.1.0 package identity. It is not a v0.2.0 release declaration. The accepted v0.5 readiness plan keeps this development version throughout R1; an explicit later R2 gate may transition the final candidate to `0.5.0` only after acceptance/readiness/operator traceability is frozen and exact-head CI is green.", "R1 retained `0.2.0.dev0` while the v0.5 acceptance/readiness/operator boundary was audited. This R2 candidate explicitly transitions package identity to `0.5.0` without changing the three installed commands or runtime authority. It is not declared released until the tested/reviewed merge is tagged `v0.5.0`.", "README release identity")
 
-          replace_once(
-              "docs/v0.5-operator-guide.md",
-              "Status: **R1 RELEASE-CANDIDATE OPERATOR SNAPSHOT — `0.5.0` VERSION / TAG PENDING**",
-              "Status: **v0.5.0 FINAL RELEASE CANDIDATE — TAG PENDING**",
-              "operator status",
-          )
-          replace_once(
-              "docs/v0.5-operator-guide.md",
-              "This guide freezes the operator surface accepted on the Phase-47 mainline for the canonical v0.5 milestone. During R1 the package intentionally remains `0.2.0.dev0`; a later R2 may change release identity wording to `0.5.0` only after this operator boundary and the v0.5 acceptance/readiness records are accepted.",
-              "This guide freezes the operator surface accepted on the Phase-47 mainline for the final `0.5.0` candidate. R1 accepted this command/authority boundary while retaining the development version; R2 changes only release identity to `0.5.0`. The release remains tag-pending until immutable CI/review/merge proof is complete.",
-              "operator intro",
-          )
-          replace_once(
-              "docs/v0.5-operator-guide.md",
-              "R1 candidate metadata still uses package version `0.2.0.dev0` under the Apache License 2.0. The final `0.5.0` version transition is an explicit later release-candidate gate, not an authority change.",
-              "The final R2 candidate uses package version `0.5.0` under the Apache License 2.0. The installed command set remains exactly the three surfaces above; the version transition grants no new authority.",
-              "operator version",
-          )
+          replace_once("CHANGELOG.md", "## [Unreleased]\n\n### Added", "## [Unreleased]\n\n## [0.5.0] — 2026-08-16\n\n### Added", "CHANGELOG release header")
+          replace_once("CHANGELOG.md", "- current post-v0.1 development now uses package version `0.2.0.dev0` so mutable `main` no longer presents the same package identity as the immutable v0.1.0 tag;", "- the v0.5 release candidate transitions package version from `0.2.0.dev0` to `0.5.0` after accepted R1 readiness while the immutable v0.1.0 tag remains historical release evidence;", "CHANGELOG version bullet")
+          replace_once("CHANGELOG.md", "- README/current release traceability is synchronized through Phase 47 while the v0.5 R1 readiness audit deliberately retains `0.2.0.dev0` until a separate exact-head `0.5.0` release-candidate gate.", "- README/release traceability is synchronized through Phase 47 and the R2 candidate freezes `0.5.0` without changing package scripts or runtime authority.", "CHANGELOG R2 bullet")
 
-          replace_once(
-              "docs/v0.5-acceptance-matrix.md",
-              "Status: **R1 CANDIDATE TRACEABILITY — VERSION / TAG PENDING**",
-              "Status: **R2 FINAL CANDIDATE TRACEABILITY — TAG PENDING**",
-              "matrix status",
-          )
-          replace_once(
-              "docs/v0.5-acceptance-matrix.md",
-              "R1 deliberately retains package version `0.2.0.dev0`. A later R2 candidate may transition to `0.5.0` only after this matrix and the release/operator boundary are accepted.",
-              "R1 accepted this matrix and release/operator boundary while retaining `0.2.0.dev0`. R2 now transitions the final candidate to package version `0.5.0`; release status remains pending until exact-head CI/review/merge and tag proof complete.",
-              "matrix intro version",
-          )
-          replace_once(
-              "docs/v0.5-acceptance-matrix.md",
-              "R1 preserves the current package identity and proves the intended candidate surface before version transition:",
-              "R2 consumes the accepted R1 package/operator boundary and changes only the release identity to:",
-              "matrix package intro",
-          )
-          replace_once(
-              "docs/v0.5-acceptance-matrix.md",
-              "package version: 0.2.0.dev0   (R1 only; R2 candidate transition pending)",
-              "package version: 0.5.0",
-              "matrix version line",
-          )
-          matrix = Path("docs/v0.5-acceptance-matrix.md")
-          text = matrix.read_text(encoding="utf-8")
-          marker = "## R1 evidence gate\n"
-          if text.count(marker) != 1:
-              raise SystemExit("matrix tail marker mismatch")
-          prefix = text[: text.index(marker)]
-          tail = '''## Accepted readiness evidence and R2 gate
+          replace_once("docs/v0.5-operator-guide.md", "Status: **R1 RELEASE-CANDIDATE OPERATOR SNAPSHOT — `0.5.0` VERSION / TAG PENDING**", "Status: **v0.5.0 FINAL RELEASE CANDIDATE — TAG PENDING**", "operator status")
+          replace_once("docs/v0.5-operator-guide.md", "This guide freezes the operator surface accepted on the Phase-47 mainline for the canonical v0.5 milestone. During R1 the package intentionally remains `0.2.0.dev0`; a later R2 may change release identity wording to `0.5.0` only after this operator boundary and the v0.5 acceptance/readiness records are accepted.", "This guide freezes the operator surface accepted on the Phase-47 mainline for the final `0.5.0` candidate. R1 accepted this command/authority boundary while retaining the development version; R2 changes only release identity to `0.5.0`. The release remains tag-pending until immutable CI/review/merge proof is complete.", "operator intro")
+          replace_once("docs/v0.5-operator-guide.md", "R1 candidate metadata still uses package version `0.2.0.dev0` under the Apache License 2.0. The final `0.5.0` version transition is an explicit later release-candidate gate, not an authority change.", "The final R2 candidate uses package version `0.5.0` under the Apache License 2.0. The installed command set remains exactly the three surfaces above; the version transition grants no new authority.", "operator version")
 
-The release-readiness chain before this final candidate is:
+          replace_once("docs/v0.5-acceptance-matrix.md", "Status: **R1 CANDIDATE TRACEABILITY — VERSION / TAG PENDING**", "Status: **R2 FINAL CANDIDATE TRACEABILITY — TAG PENDING**", "matrix status")
+          replace_once("docs/v0.5-acceptance-matrix.md", "R1 deliberately retains package version `0.2.0.dev0`. A later R2 candidate may transition to `0.5.0` only after this matrix and the release/operator boundary are accepted.", "R1 accepted this matrix and release/operator boundary while retaining `0.2.0.dev0`. R2 now transitions the final candidate to package version `0.5.0`; release status remains pending until exact-head CI/review/merge and tag proof complete.", "matrix intro version")
+          replace_once("docs/v0.5-acceptance-matrix.md", "R1 preserves the current package identity and proves the intended candidate surface before version transition:", "R2 consumes the accepted R1 package/operator boundary and changes only the release identity to:", "matrix package intro")
+          replace_once("docs/v0.5-acceptance-matrix.md", "package version: 0.2.0.dev0   (R1 only; R2 candidate transition pending)", "package version: 0.5.0", "matrix version line")
+          replace_tail("docs/v0.5-acceptance-matrix.md", "## R1 evidence gate\n", [
+              "## Accepted readiness evidence and R2 gate",
+              "",
+              "The release-readiness chain before this final candidate is:",
+              "",
+              "- R0 planning head: `acd44522cebec5f109b08fa894d67557e7d5faab`;",
+              "- R0 normal workflow: `31913373190` / #1357 — Python 3.12 PASS / Python 3.13 PASS;",
+              "- R0 SHA-guarded merge: `4d52471c4cb1040f6678d45d005f650b8114a4fc`;",
+              "- R1 readiness head: `b7aa954b77667b22a2a757dc4e5512a1a03bced9`;",
+              "- R1 normal workflow: `31913775339` / #1360 — Python 3.12 PASS / Python 3.13 PASS;",
+              "- R1 diff: exactly five documentation files with version/package/runtime state unchanged;",
+              "- R1 clean review/thread state and SHA-guarded merge: `76c1eeb32e996df11fe7e946e81e10d8b64b7afb`.",
+              "",
+              "R2 may change only the package version assertion/metadata and candidate release wording defined by the accepted plan. The exact final R2 head must pass the normal Python 3.12/3.13 matrix, have a bounded diff and clean review/thread state, and be SHA-guarded merged. Only that tested merge may receive the annotated `v0.5.0` tag.",
+          ], "matrix tail")
 
-- R0 planning head: `acd44522cebec5f109b08fa894d67557e7d5faab`;
-- R0 normal workflow: `31913373190` / #1357 — Python 3.12 PASS / Python 3.13 PASS;
-- R0 SHA-guarded merge: `4d52471c4cb1040f6678d45d005f650b8114a4fc`;
-- R1 readiness head: `b7aa954b77667b22a2a757dc4e5512a1a03bced9`;
-- R1 normal workflow: `31913775339` / #1360 — Python 3.12 PASS / Python 3.13 PASS;
-- R1 diff: exactly five documentation files with version/package/runtime state unchanged;
-- R1 clean review/thread state and SHA-guarded merge: `76c1eeb32e996df11fe7e946e81e10d8b64b7afb`.
-
-R2 may change only the package version assertion/metadata and candidate release wording defined by the accepted plan. The exact final R2 head must pass the normal Python 3.12/3.13 matrix, have a bounded diff and clean review/thread state, and be SHA-guarded merged. Only that tested merge may receive the annotated `v0.5.0` tag.
-'''
-          matrix.write_text(prefix + tail, encoding="utf-8")
-
-          replace_once(
-              "docs/v0.5-release-readiness.md",
-              "Status: **R1 READINESS AUDIT — `0.5.0` VERSION / TAG PENDING**",
-              "Status: **R2 FINAL `0.5.0` RELEASE CANDIDATE — TAG PENDING**",
-              "readiness status",
-          )
-          replace_once(
-              "docs/v0.5-release-readiness.md",
-              "The R1 base is exact accepted planning merge:\n\n```text\n4d52471c4cb1040f6678d45d005f650b8114a4fc\n```\n\nR1 intentionally retains package version `0.2.0.dev0`. This document does not declare v0.5.0 released and does not authorize creation/movement of a tag.",
-              "The R2 base is exact accepted R1 readiness merge:\n\n```text\n76c1eeb32e996df11fe7e946e81e10d8b64b7afb\n```\n\nR2 explicitly sets package version `0.5.0` after the accepted readiness audit. This document still does not declare v0.5.0 released and does not authorize tagging before exact-head CI/review/merge proof.",
-              "readiness base/version",
-          )
-          replace_once(
-              "docs/v0.5-release-readiness.md",
-              "At R1:",
-              "At the R2 final candidate:",
-              "readiness identity intro",
-          )
-          replace_once(
-              "docs/v0.5-release-readiness.md",
-              "version:        0.2.0.dev0",
-              "version:        0.5.0",
-              "readiness version line",
-          )
-          replace_once(
-              "docs/v0.5-release-readiness.md",
-              "## Packaging readiness — SATISFIED FOR R1",
-              "## Packaging readiness — SATISFIED FOR R2 CANDIDATE",
-              "readiness package heading",
-          )
-          replace_once(
-              "docs/v0.5-release-readiness.md",
-              "## Operator readiness — SATISFIED FOR R1",
-              "## Operator readiness — SATISFIED / FROZEN FOR R2",
-              "readiness operator heading",
-          )
-          replace_once(
-              "docs/v0.5-release-readiness.md",
-              "R1 freezes this accepted surface into `docs/v0.5-operator-guide.md`. R2 may change only release identity wording from development candidate to released `0.5.0`; it may not widen the command/authority surface without a separately planned architecture change.",
-              "R1 froze this accepted surface into `docs/v0.5-operator-guide.md`. R2 changes only release identity wording to the `0.5.0` final candidate; it does not widen the command/authority surface. Tagging remains downstream evidence rather than an operator capability.",
-              "readiness operator text",
-          )
+          replace_once("docs/v0.5-release-readiness.md", "Status: **R1 READINESS AUDIT — `0.5.0` VERSION / TAG PENDING**", "Status: **R2 FINAL `0.5.0` RELEASE CANDIDATE — TAG PENDING**", "readiness status")
+          replace_once("docs/v0.5-release-readiness.md", "The R1 base is exact accepted planning merge:\n\n```text\n4d52471c4cb1040f6678d45d005f650b8114a4fc\n```\n\nR1 intentionally retains package version `0.2.0.dev0`. This document does not declare v0.5.0 released and does not authorize creation/movement of a tag.", "The R2 base is exact accepted R1 readiness merge:\n\n```text\n76c1eeb32e996df11fe7e946e81e10d8b64b7afb\n```\n\nR2 explicitly sets package version `0.5.0` after the accepted readiness audit. This document still does not declare v0.5.0 released and does not authorize tagging before exact-head CI/review/merge proof.", "readiness base/version")
+          replace_once("docs/v0.5-release-readiness.md", "At R1:", "At the R2 final candidate:", "readiness identity intro")
+          replace_once("docs/v0.5-release-readiness.md", "version:        0.2.0.dev0", "version:        0.5.0", "readiness version line")
+          replace_once("docs/v0.5-release-readiness.md", "## Packaging readiness — SATISFIED FOR R1", "## Packaging readiness — SATISFIED FOR R2 CANDIDATE", "readiness package heading")
+          replace_once("docs/v0.5-release-readiness.md", "## Operator readiness — SATISFIED FOR R1", "## Operator readiness — SATISFIED / FROZEN FOR R2", "readiness operator heading")
+          replace_once("docs/v0.5-release-readiness.md", "R1 freezes this accepted surface into `docs/v0.5-operator-guide.md`. R2 may change only release identity wording from development candidate to released `0.5.0`; it may not widen the command/authority surface without a separately planned architecture change.", "R1 froze this accepted surface into `docs/v0.5-operator-guide.md`. R2 changes only release identity wording to the `0.5.0` final candidate; it does not widen the command/authority surface. Tagging remains downstream evidence rather than an operator capability.", "readiness operator text")
           readiness = Path("docs/v0.5-release-readiness.md")
           text = readiness.read_text(encoding="utf-8")
           start_marker = "## Documentation synchronization — R1 SCOPE\n"
@@ -183,53 +84,49 @@ R2 may change only the package version assertion/metadata and candidate release 
               raise SystemExit("readiness bounded-section markers mismatch")
           start = text.index(start_marker)
           end = text.index(end_marker)
-          replacement = '''## Documentation and release-identity synchronization
-
-R1 corrected README/CHANGELOG release-maintenance drift through Phase 47 and added the v0.5 readiness, acceptance, and operator records while retaining `0.2.0.dev0`.
-
-R2 is allowed to mutate only:
-
-- `pyproject.toml` version `0.2.0.dev0 → 0.5.0`;
-- the matching existing packaging regression assertion;
-- README/CHANGELOG/v0.5 readiness/acceptance/operator wording needed to identify the final `0.5.0` candidate.
-
-R2 must not change package script mappings, production source, schema, protected config, runtime/model/resource/Manager/Goal-bootstrap/simulation semantics, trust roots, historical v0.1 records/tag, or workflow definitions in the final tree.
-
-'''
-          readiness.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
-          text = readiness.read_text(encoding="utf-8")
-          tail_marker = "## R1 exit condition\n"
-          if text.count(tail_marker) != 1:
-              raise SystemExit("readiness tail marker mismatch")
-          prefix = text[: text.index(tail_marker)]
-          tail = '''## Accepted R0 / R1 evidence
-
-- R0 planning head `acd44522cebec5f109b08fa894d67557e7d5faab` passed normal run `31913373190` / #1357 on Python 3.12 and 3.13 and SHA-guarded merged as `4d52471c4cb1040f6678d45d005f650b8114a4fc`.
-- R1 readiness head `b7aa954b77667b22a2a757dc4e5512a1a03bced9` passed normal run `31913775339` / #1360 on Python 3.12 and 3.13, had clean review/thread state and exactly five documentation files, and SHA-guarded merged as `76c1eeb32e996df11fe7e946e81e10d8b64b7afb`.
-
-## R2 exit condition
-
-The final R2 diff must be limited to the `0.5.0` package/test identity pair plus release-candidate wording in the already-reviewed release documents. Production/source/schema/config/workflow/tag state must remain unchanged.
-
-The exact final R2 head must:
-
-1. pass the normal Python 3.12 and 3.13 matrix with `ResourceWarning` treated as error;
-2. retain exactly the existing three package scripts and Apache-2.0/Python/build metadata;
-3. have clean review submissions and unresolved review threads;
-4. be SHA-guarded merged.
-
-Only that exact tested merge may receive the annotated `v0.5.0` tag.
-
-## R3 still pending
-
-After the R2 merge only:
-
-- verify `main` equals the tested R2 merge commit;
-- create annotated tag `v0.5.0` on that exact commit;
-- verify the tag dereferences to the exact release commit;
-- record immutable release evidence without moving the tag or rewriting historical v0.1 release identity.
-'''
-          readiness.write_text(prefix + tail, encoding="utf-8")
+          section = "\n".join([
+              "## Documentation and release-identity synchronization",
+              "",
+              "R1 corrected README/CHANGELOG release-maintenance drift through Phase 47 and added the v0.5 readiness, acceptance, and operator records while retaining `0.2.0.dev0`.",
+              "",
+              "R2 is allowed to mutate only:",
+              "",
+              "- `pyproject.toml` version `0.2.0.dev0 → 0.5.0`;",
+              "- the matching existing packaging regression assertion;",
+              "- README/CHANGELOG/v0.5 readiness/acceptance/operator wording needed to identify the final `0.5.0` candidate.",
+              "",
+              "R2 must not change package script mappings, production source, schema, protected config, runtime/model/resource/Manager/Goal-bootstrap/simulation semantics, trust roots, historical v0.1 records/tag, or workflow definitions in the final tree.",
+              "",
+          ])
+          readiness.write_text(text[:start] + section + text[end:], encoding="utf-8")
+          replace_tail("docs/v0.5-release-readiness.md", "## R1 exit condition\n", [
+              "## Accepted R0 / R1 evidence",
+              "",
+              "- R0 planning head `acd44522cebec5f109b08fa894d67557e7d5faab` passed normal run `31913373190` / #1357 on Python 3.12 and 3.13 and SHA-guarded merged as `4d52471c4cb1040f6678d45d005f650b8114a4fc`.",
+              "- R1 readiness head `b7aa954b77667b22a2a757dc4e5512a1a03bced9` passed normal run `31913775339` / #1360 on Python 3.12 and 3.13, had clean review/thread state and exactly five documentation files, and SHA-guarded merged as `76c1eeb32e996df11fe7e946e81e10d8b64b7afb`.",
+              "",
+              "## R2 exit condition",
+              "",
+              "The final R2 diff must be limited to the `0.5.0` package/test identity pair plus release-candidate wording in the already-reviewed release documents. Production/source/schema/config/workflow/tag state must remain unchanged.",
+              "",
+              "The exact final R2 head must:",
+              "",
+              "1. pass the normal Python 3.12 and 3.13 matrix with `ResourceWarning` treated as error;",
+              "2. retain exactly the existing three package scripts and Apache-2.0/Python/build metadata;",
+              "3. have clean review submissions and unresolved review threads;",
+              "4. be SHA-guarded merged.",
+              "",
+              "Only that exact tested merge may receive the annotated `v0.5.0` tag.",
+              "",
+              "## R3 still pending",
+              "",
+              "After the R2 merge only:",
+              "",
+              "- verify `main` equals the tested R2 merge commit;",
+              "- create annotated tag `v0.5.0` on that exact commit;",
+              "- verify the tag dereferences to the exact release commit;",
+              "- record immutable release evidence without moving the tag or rewriting historical v0.1 release identity.",
+          ], "readiness tail")
           PY
 
       - name: Self-remove helper and commit exact R2 docs
