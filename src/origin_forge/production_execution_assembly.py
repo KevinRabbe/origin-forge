@@ -26,6 +26,21 @@ from .scheduled_model_adapter import RuntimeModelScheduleRecorder, ScheduledMode
 from .workspaces import GitWorkspaceManager
 
 
+_BOUNDED_RETRY_OWNER_ID = "originforge.execution.bounded-retry@1"
+_SIMULATION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
+_NOT_REQUIRED_RESOURCE_MODEL_HASH = content_hash(
+    {"kind": "NO_MODEL_RESOURCE_CONFIG", "version": 1}
+)
+_NOT_REQUIRED_MODEL_RUNTIME_HASH = content_hash(
+    {"kind": "NO_MODEL_RUNTIME_CONFIG", "version": 1}
+)
+_NOT_REQUIRED_SANDBOX_HASH = content_hash(
+    {"kind": "NO_SANDBOX_CONFIG", "version": 1}
+)
+_NOT_REQUIRED_SANDBOX_BACKEND = "not-required"
+_SIMULATION_DEPENDENCY_MODE = "deterministic-simulation-no-runtime@1"
+
+
 class ProductionExecutionAssemblyError(RuntimeError):
     pass
 
@@ -90,9 +105,7 @@ class ProductionExecutionDependencyPlan:
 
 
 @dataclass(frozen=True)
-class ProductionExecutionDependencies:
-    plan: ProductionExecutionDependencyPlan
-    owner: ProductionExecutionOwnerDescriptor
+class BoundedRetryExecutionPayload:
     model_scheduling: ConfiguredModelScheduling
     runtime_registry: ModelRuntimeRegistry
     runtime_dispatch_loader: RuntimeDispatchLoader
@@ -101,6 +114,96 @@ class ProductionExecutionDependencies:
     sandbox_backend: SandboxBackend
     workspaces: GitWorkspaceManager
     bounded_retry_policy: BoundedRetryPolicy
+
+
+@dataclass(frozen=True)
+class DeterministicSimulationExecutionPayload:
+    dependency_mode: str = _SIMULATION_DEPENDENCY_MODE
+
+    def __post_init__(self) -> None:
+        if self.dependency_mode != _SIMULATION_DEPENDENCY_MODE:
+            raise ProductionExecutionAssemblyError(
+                "simulation dependency payload mode is not current"
+            )
+
+
+ExecutionDependencyPayload = (
+    BoundedRetryExecutionPayload | DeterministicSimulationExecutionPayload
+)
+
+
+@dataclass(frozen=True)
+class ProductionExecutionDependencies:
+    plan: ProductionExecutionDependencyPlan
+    owner: ProductionExecutionOwnerDescriptor
+    payload: ExecutionDependencyPayload
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.plan, ProductionExecutionDependencyPlan):
+            raise TypeError("plan must be a ProductionExecutionDependencyPlan")
+        if not isinstance(self.owner, ProductionExecutionOwnerDescriptor):
+            raise TypeError("owner must be a ProductionExecutionOwnerDescriptor")
+        if self.plan.owner_id != self.owner.owner_id:
+            raise ProductionExecutionAssemblyError(
+                "dependency payload owner does not match dependency plan"
+            )
+        if self.plan.owner_fingerprint != self.owner.fingerprint:
+            raise ProductionExecutionAssemblyError(
+                "dependency payload owner fingerprint does not match dependency plan"
+            )
+        if self.owner.owner_id == _BOUNDED_RETRY_OWNER_ID:
+            if not isinstance(self.payload, BoundedRetryExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "bounded-retry owner requires bounded execution payload"
+                )
+        elif self.owner.owner_id == _SIMULATION_OWNER_ID:
+            if not isinstance(self.payload, DeterministicSimulationExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "simulation owner requires no-runtime simulation payload"
+                )
+        else:
+            raise ProductionExecutionAssemblyError(
+                "execution dependency payload has unsupported owner"
+            )
+
+    def _bounded_payload(self) -> BoundedRetryExecutionPayload:
+        if not isinstance(self.payload, BoundedRetryExecutionPayload):
+            raise ProductionExecutionAssemblyError(
+                "execution dependencies do not contain bounded-retry runtime authority"
+            )
+        return self.payload
+
+    @property
+    def model_scheduling(self) -> ConfiguredModelScheduling:
+        return self._bounded_payload().model_scheduling
+
+    @property
+    def runtime_registry(self) -> ModelRuntimeRegistry:
+        return self._bounded_payload().runtime_registry
+
+    @property
+    def runtime_dispatch_loader(self) -> RuntimeDispatchLoader:
+        return self._bounded_payload().runtime_dispatch_loader
+
+    @property
+    def managed_loaders(self) -> tuple[ManagedLlamaCppCpuLoader, ...]:
+        return self._bounded_payload().managed_loaders
+
+    @property
+    def models(self) -> tuple[ScheduledModelAdapter, ...]:
+        return self._bounded_payload().models
+
+    @property
+    def sandbox_backend(self) -> SandboxBackend:
+        return self._bounded_payload().sandbox_backend
+
+    @property
+    def workspaces(self) -> GitWorkspaceManager:
+        return self._bounded_payload().workspaces
+
+    @property
+    def bounded_retry_policy(self) -> BoundedRetryPolicy:
+        return self._bounded_payload().bounded_retry_policy
 
 
 def _resource_model_config_hash(config: ProjectConfig) -> str:
@@ -185,42 +288,73 @@ def _role_policies(
     return tuple(result)
 
 
-def assemble_production_execution_dependencies(
-    runtime: OriginForgeRuntime,
-    claim_id: str,
+def _common_plan_fields(claim, binding, owner, owner_registry) -> dict[str, object]:
+    return {
+        "claim_id": claim.claim_id,
+        "claim_revision": claim.revision,
+        "task_id": claim.task_id,
+        "task_revision": claim.task_revision,
+        "task_content_hash": claim.task_content_hash,
+        "dispatch_binding_id": binding.dispatch_binding_id,
+        "dispatch_binding_hash": binding.content_hash,
+        "request_type_id": binding.request_type_id,
+        "request_schema_hash": binding.request_schema_hash,
+        "request_content_hash": binding.request_content_hash,
+        "owner_id": owner.owner_id,
+        "owner_fingerprint": owner.fingerprint,
+        "owner_registry_fingerprint": owner_registry.fingerprint,
+    }
+
+
+def _assemble_simulation_dependencies(
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
 ) -> ProductionExecutionDependencies:
-    """Assemble one exact execution dependency graph without invoking it."""
-
-    if not isinstance(runtime, OriginForgeRuntime):
-        raise TypeError("runtime must be an OriginForgeRuntime")
-
-    currentness = inspect_dispatch_claim_currentness_readonly(runtime, claim_id)
-    if currentness.status is not DispatchClaimCurrentnessStatus.CURRENT_ACTIVE:
+    if owner.owner_id != _SIMULATION_OWNER_ID:
         raise ProductionExecutionAssemblyError(
-            f"dispatch claim is not CURRENT_ACTIVE: {currentness.status.value}"
+            "simulation dependency assembler received an unexpected owner"
         )
-    claim = read_dispatch_claim(runtime, claim_id)
-    binding = read_dispatch_binding(runtime, claim.dispatch_binding_id)
-    if binding.content_hash != claim.dispatch_binding_hash:
+    if owner.model_strategy_roles:
         raise ProductionExecutionAssemblyError(
-            "dispatch claim binding hash no longer matches exact Phase-34 binding"
+            "deterministic simulation owner must not require model strategy roles"
+        )
+    if owner.requires_sandbox or owner.requires_workspace_manager:
+        raise ProductionExecutionAssemblyError(
+            "deterministic simulation owner must not require sandbox or workspace authority"
         )
 
-    owner_registry = build_builtin_execution_owner_registry()
-    try:
-        owner = owner_registry.owner_for(
-            adapter_id=binding.selected_adapter_id,
-            adapter_fingerprint=binding.selected_adapter_fingerprint,
-            dispatch_contract_id=binding.dispatch_contract_id,
-            binder_id=binding.binder_id,
-            binder_fingerprint=binding.binder_fingerprint,
-            request_type_id=binding.request_type_id,
-            request_schema_hash=binding.request_schema_hash,
-        )
-    except RuntimeError as exc:
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=DeterministicSimulationExecutionPayload(),
+    )
+
+
+def _assemble_bounded_retry_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _BOUNDED_RETRY_OWNER_ID:
         raise ProductionExecutionAssemblyError(
-            "no trusted execution owner matches the exact current dispatch binding"
-        ) from exc
+            "bounded execution dependency assembler received an unexpected owner"
+        )
 
     config = load_config(runtime.project_root)
     if config.version < 6:
@@ -302,19 +436,7 @@ def assemble_production_execution_dependencies(
         for runtime_id in sorted(runtime_ids)
     )
     plan = ProductionExecutionDependencyPlan(
-        claim_id=claim.claim_id,
-        claim_revision=claim.revision,
-        task_id=claim.task_id,
-        task_revision=claim.task_revision,
-        task_content_hash=claim.task_content_hash,
-        dispatch_binding_id=binding.dispatch_binding_id,
-        dispatch_binding_hash=binding.content_hash,
-        request_type_id=binding.request_type_id,
-        request_schema_hash=binding.request_schema_hash,
-        request_content_hash=binding.request_content_hash,
-        owner_id=owner.owner_id,
-        owner_fingerprint=owner.fingerprint,
-        owner_registry_fingerprint=owner_registry.fingerprint,
+        **_common_plan_fields(claim, binding, owner, owner_registry),
         config_version=config.version,
         resource_model_config_hash=_resource_model_config_hash(config),
         model_runtime_config_fingerprint=config.model_runtimes.fingerprint,
@@ -328,12 +450,71 @@ def assemble_production_execution_dependencies(
     return ProductionExecutionDependencies(
         plan=plan,
         owner=owner,
-        model_scheduling=scheduling,
-        runtime_registry=runtime_registry,
-        runtime_dispatch_loader=runtime_dispatch_loader,
-        managed_loaders=managed_loaders,
-        models=models,
-        sandbox_backend=sandbox_backend,
-        workspaces=workspaces,
-        bounded_retry_policy=bounded_retry_policy,
+        payload=BoundedRetryExecutionPayload(
+            model_scheduling=scheduling,
+            runtime_registry=runtime_registry,
+            runtime_dispatch_loader=runtime_dispatch_loader,
+            managed_loaders=managed_loaders,
+            models=models,
+            sandbox_backend=sandbox_backend,
+            workspaces=workspaces,
+            bounded_retry_policy=bounded_retry_policy,
+        ),
+    )
+
+
+def assemble_production_execution_dependencies(
+    runtime: OriginForgeRuntime,
+    claim_id: str,
+) -> ProductionExecutionDependencies:
+    """Assemble one exact owner-specific dependency graph without invoking it."""
+
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+
+    currentness = inspect_dispatch_claim_currentness_readonly(runtime, claim_id)
+    if currentness.status is not DispatchClaimCurrentnessStatus.CURRENT_ACTIVE:
+        raise ProductionExecutionAssemblyError(
+            f"dispatch claim is not CURRENT_ACTIVE: {currentness.status.value}"
+        )
+    claim = read_dispatch_claim(runtime, claim_id)
+    binding = read_dispatch_binding(runtime, claim.dispatch_binding_id)
+    if binding.content_hash != claim.dispatch_binding_hash:
+        raise ProductionExecutionAssemblyError(
+            "dispatch claim binding hash no longer matches exact Phase-34 binding"
+        )
+
+    owner_registry = build_builtin_execution_owner_registry()
+    try:
+        owner = owner_registry.owner_for(
+            adapter_id=binding.selected_adapter_id,
+            adapter_fingerprint=binding.selected_adapter_fingerprint,
+            dispatch_contract_id=binding.dispatch_contract_id,
+            binder_id=binding.binder_id,
+            binder_fingerprint=binding.binder_fingerprint,
+            request_type_id=binding.request_type_id,
+            request_schema_hash=binding.request_schema_hash,
+        )
+    except RuntimeError as exc:
+        raise ProductionExecutionAssemblyError(
+            "no trusted execution owner matches the exact current dispatch binding"
+        ) from exc
+
+    if owner.owner_id == _SIMULATION_OWNER_ID:
+        return _assemble_simulation_dependencies(
+            claim,
+            binding,
+            owner,
+            owner_registry,
+        )
+    if owner.owner_id == _BOUNDED_RETRY_OWNER_ID:
+        return _assemble_bounded_retry_dependencies(
+            runtime,
+            claim,
+            binding,
+            owner,
+            owner_registry,
+        )
+    raise ProductionExecutionAssemblyError(
+        "trusted execution owner has no dependency assembler"
     )
