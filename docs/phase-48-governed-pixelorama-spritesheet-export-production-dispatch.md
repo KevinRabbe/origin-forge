@@ -165,7 +165,7 @@ The Phase-33 Pixelorama export WorkOrder accepts exactly one input ref:
 
 ```text
 ref_type = ARTIFACT
-role     = PIXELORAMA_PROJECT
+role     = pixelorama_project
 ```
 
 The referenced Artifact must be a current project-owned canonical Artifact with:
@@ -263,7 +263,7 @@ request_type_id = PixeloramaCliExportService.execute@production-v1
 
 The binder requires exactly one resolved input and independently checks:
 
-- ref role is `PIXELORAMA_PROJECT`;
+- ref role is `pixelorama_project`;
 - source object type is `ARTIFACT`;
 - resolved Artifact ID equals the frozen ref ID;
 - resolved Artifact `type` is exactly `PIXELORAMA_PROJECT`;
@@ -670,7 +670,7 @@ Phase 48 is implemented as small independently gated slices.
 Scope:
 
 - add `pixelorama.spritesheet-export@1`;
-- require exactly one `ARTIFACT` / `PIXELORAMA_PROJECT` input ref;
+- require exactly one `ARTIFACT` / `pixelorama_project` input ref;
 - keep payload inert/fixed and execution/profile/path identity out of the WorkOrder;
 - make Pixelorama-only Phase-32 catalogs produce exactly the new contract;
 - preserve existing code-only/simulation-only and Goal-bootstrap authority;
