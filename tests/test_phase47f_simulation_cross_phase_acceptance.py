@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import inspect
 import json
 import tempfile
 import threading
@@ -9,13 +11,16 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import origin_forge.production_dispatch_invocation as invocation_module
+import origin_forge.production_manager_dispatch_tick as dispatch_tick_module
 from origin_forge.lineage import OriginForgeLineage
 from origin_forge.model import ModelResponse
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
 from origin_forge.production_capability_models import CapabilityCatalog, CapabilityRoutingPolicy
 from origin_forge.production_capability_store import ProductionCapabilityStore
 from origin_forge.production_dispatch_claim_models import DispatchClaimStatus
+from origin_forge.production_dispatch_claims import acquire_dispatch_claim
 from origin_forge.production_dispatch_execution_models import DispatchExecutionStatus
+from origin_forge.production_goal_bootstrap_authority import build_builtin_goal_bootstrap_owner
 from origin_forge.production_manager_advance_bounded import (
     BoundedManagerAdvanceStopReason,
     advance_production_manager_bounded,
@@ -451,7 +456,10 @@ providers = [
             result = advance_production_manager_bounded(scenario.runtime)
 
         self.assertEqual(execute.call_count, 1)
-        self.assertEqual(result.final_result.status, ManagerAdvanceOnceStatus.RECOVERY_REQUIRED)
+        self.assertEqual(
+            result.final_result.status,
+            ManagerAdvanceOnceStatus.DISPATCH_RECOVERY_REQUIRED,
+        )
         task_id = scenario.task_ids[0]
         self.assertEqual(scenario.runtime.get_task(task_id)["status"], TaskStatus.RUNNING.value)
         claims, executions = self._dispatch_rows(scenario.runtime, task_id)
@@ -491,13 +499,20 @@ providers = [
         newer_task_id = next(
             task_id for task_id in scenario.task_ids if task_id != selected_task_id
         )
+        real_acquire = acquire_dispatch_claim
+        acquire_barrier = threading.Barrier(2)
         execute_entered = threading.Event()
+        one_result = threading.Event()
         allow_execute = threading.Event()
         lock = threading.Lock()
         execute_calls = 0
         failures: list[BaseException] = []
         results = []
         original_execute = SimulationService.execute
+
+        def racing_acquire(runtime, binding_id, audit_id, revision):
+            acquire_barrier.wait(timeout=15)
+            return real_acquire(runtime, binding_id, audit_id, revision)
 
         def blocked_execute(service, task_id, spec):
             nonlocal execute_calls
@@ -516,27 +531,35 @@ providers = [
             except BaseException as exc:
                 with lock:
                     failures.append(exc)
+                one_result.set()
             else:
                 with lock:
                     results.append(value)
+                one_result.set()
 
-        with patch.object(
-            SimulationService,
-            "execute",
-            autospec=True,
-            side_effect=blocked_execute,
+        with (
+            patch.object(
+                dispatch_tick_module,
+                "acquire_dispatch_claim",
+                side_effect=racing_acquire,
+            ),
+            patch.object(
+                SimulationService,
+                "execute",
+                autospec=True,
+                side_effect=blocked_execute,
+            ),
         ):
-            first = threading.Thread(target=worker, daemon=True)
-            first.start()
+            threads = [threading.Thread(target=worker, daemon=True) for _ in range(2)]
+            for thread in threads:
+                thread.start()
             self.assertTrue(execute_entered.wait(15))
-            second = threading.Thread(target=worker, daemon=True)
-            second.start()
-            second.join(15)
-            self.assertFalse(second.is_alive())
+            self.assertTrue(one_result.wait(15))
             allow_execute.set()
-            first.join(20)
-            self.assertFalse(first.is_alive())
+            for thread in threads:
+                thread.join(20)
 
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(failures, [])
         self.assertEqual(len(results), 2)
         self.assertEqual(execute_calls, 1)
@@ -545,14 +568,19 @@ providers = [
             sum(result.status is ManagerAdvanceOnceStatus.DISPATCH_RETURNED for result in results),
             1,
         )
+        self.assertEqual(
+            sum(
+                result.status is ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED
+                for result in results
+            ),
+            1,
+        )
         self.assertTrue(
             all(
                 result.status
                 in {
                     ManagerAdvanceOnceStatus.DISPATCH_RETURNED,
-                    ManagerAdvanceOnceStatus.RECOVERY_REQUIRED,
-                    ManagerAdvanceOnceStatus.INVALID_STATE,
-                    ManagerAdvanceOnceStatus.AMBIGUOUS_AUTHORITY,
+                    ManagerAdvanceOnceStatus.DISPATCH_CLAIM_NOT_ACQUIRED,
                 }
                 for result in results
             )
@@ -569,6 +597,34 @@ providers = [
         newer_claims, newer_executions = self._dispatch_rows(scenario.runtime, newer_task_id)
         self.assertEqual(newer_claims, [])
         self.assertEqual(newer_executions, [])
+
+    def test_cross_phase_isolation_preserves_code_bootstrap_and_closed_owner_call_sites(self) -> None:
+        owner = build_builtin_goal_bootstrap_owner()
+        self.assertEqual(owner.supported_capability_id, "code.change")
+        self.assertEqual(owner.supported_adapter_id, "originforge.code.bounded-retry")
+        self.assertEqual(owner.supported_dispatch_contract_id, "code.bounded-retry@1")
+        self.assertEqual(
+            owner.preparation_owner_id,
+            "originforge.preparation.work-order-planner@1",
+        )
+
+        tree = ast.parse(inspect.getsource(invocation_module.dispatch_claim_once))
+        drive_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "drive"
+        ]
+        execute_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "execute"
+        ]
+        self.assertEqual(len(drive_calls), 1)
+        self.assertEqual(len(execute_calls), 1)
 
 
 if __name__ == "__main__":
