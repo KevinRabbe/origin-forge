@@ -21,7 +21,7 @@ from .production_execution_assembly import (
 from .production_work_order_models import content_hash
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision, utc_now
-from .state import TaskStatus
+from .state import TASK_TRANSITIONS, TaskStatus, ensure_transition
 from .task_readiness import (
     DependencyReadinessStatus,
     TaskReadinessError,
@@ -30,6 +30,7 @@ from .task_readiness import (
 
 
 _MAX_DETAIL_CHARS = 4096
+_SIMULATION_EXECUTION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 
 
 class ProductionDispatchExecutionError(RuntimeError):
@@ -170,7 +171,7 @@ def _terminal_detail_hash(status: DispatchExecutionStatus, detail: str) -> str:
     return content_hash({"status": status.value, "detail": detail})
 
 
-def _validate_transactional_task_currentness(conn, claim: DispatchClaim) -> None:
+def _validate_transactional_task_currentness(conn, claim: DispatchClaim):
     row = conn.execute(
         """SELECT t.*, g.project_id
            FROM tasks t
@@ -206,6 +207,59 @@ def _validate_transactional_task_currentness(conn, claim: DispatchClaim) -> None
         raise ProductionDispatchExecutionError(
             "claim Task is no longer READY and dependency-ready"
         )
+    return row
+
+
+def _transition_simulation_task_running_connection(
+    runtime: OriginForgeRuntime,
+    conn,
+    claim: DispatchClaim,
+    execution_id: str,
+    now: str,
+) -> tuple[int, str]:
+    ensure_transition(TaskStatus.READY, TaskStatus.RUNNING, TASK_TRANSITIONS)
+    new_revision = claim.task_revision + 1
+    cursor = conn.execute(
+        """UPDATE tasks
+           SET status = ?, revision = ?, updated_at = ?
+           WHERE id = ? AND status = ? AND revision = ?""",
+        (
+            TaskStatus.RUNNING.value,
+            new_revision,
+            now,
+            claim.task_id,
+            TaskStatus.READY.value,
+            claim.task_revision,
+        ),
+    )
+    if cursor.rowcount != 1:
+        raise StaleRevision(f"task {claim.task_id} changed concurrently")
+
+    updated = conn.execute(
+        "SELECT * FROM tasks WHERE id = ?",
+        (claim.task_id,),
+    ).fetchone()
+    if updated is None:
+        raise ProductionDispatchExecutionError(
+            "simulation Task disappeared during execution begin"
+        )
+    try:
+        updated_status = TaskStatus(updated["status"])
+        updated_revision = int(updated["revision"])
+        updated_hash = task_routing_hash(updated)
+    except (TypeError, ValueError) as exc:
+        raise ProductionDispatchExecutionError(
+            "simulation Task failed canonical validation after RUNNING transition"
+        ) from exc
+    if updated_status is not TaskStatus.RUNNING or updated_revision != new_revision:
+        raise ProductionDispatchExecutionError(
+            "simulation Task did not enter exact RUNNING revision"
+        )
+    if updated_hash == claim.task_content_hash:
+        raise ProductionDispatchExecutionError(
+            "simulation Task RUNNING transition did not change revision-bound content hash"
+        )
+    return new_revision, updated_hash
 
 
 def _claim_matches_execution(claim: DispatchClaim, execution: DispatchExecution) -> bool:
@@ -242,7 +296,9 @@ def begin_dispatch_execution(
 
     Dependencies are assembled before the transaction but never invoked. The
     ACTIVE claim remains the durable exclusivity lock throughout the STARTED
-    execution window; only a later terminalization may consume or interrupt it.
+    execution window. Deterministic simulation additionally transitions its exact
+    READY Task to RUNNING in this same transaction; bounded-code behavior remains
+    unchanged. Only a later terminalization may consume or interrupt the claim.
     """
 
     if not isinstance(runtime, OriginForgeRuntime):
@@ -364,6 +420,17 @@ def begin_dispatch_execution(
                 now,
             ),
         )
+
+        simulation_task_transition: tuple[int, str] | None = None
+        if dependencies.plan.owner_id == _SIMULATION_EXECUTION_OWNER_ID:
+            simulation_task_transition = _transition_simulation_task_running_connection(
+                runtime,
+                conn,
+                claim,
+                execution_id,
+                now,
+            )
+
         runtime.store._append_event(
             conn,
             "DISPATCH_EXECUTION",
@@ -384,6 +451,28 @@ def begin_dispatch_execution(
             },
             now,
         )
+        if simulation_task_transition is not None:
+            new_task_revision, new_task_hash = simulation_task_transition
+            runtime.store._append_event(
+                conn,
+                "TASK",
+                claim.task_id,
+                "TASK_STATUS_CHANGED",
+                TaskStatus.READY.value,
+                TaskStatus.RUNNING.value,
+                new_task_revision,
+                "SYSTEM",
+                None,
+                {
+                    "reason": "SIMULATION_DISPATCH_EXECUTION_STARTED",
+                    "claim_id": claim.claim_id,
+                    "execution_id": execution_id,
+                    "previous_task_content_hash": claim.task_content_hash,
+                    "new_task_content_hash": new_task_hash,
+                },
+                now,
+            )
+
         execution_row = conn.execute(
             "SELECT * FROM dispatch_executions WHERE execution_id = ?",
             (execution_id,),
@@ -406,6 +495,19 @@ def begin_dispatch_execution(
             raise ProductionDispatchExecutionError(
                 "begin transaction changed ACTIVE claim authority or lifecycle"
             )
+        if simulation_task_transition is not None:
+            task_after = conn.execute(
+                "SELECT status, revision FROM tasks WHERE id = ?",
+                (claim.task_id,),
+            ).fetchone()
+            if (
+                task_after is None
+                or task_after["status"] != TaskStatus.RUNNING.value
+                or int(task_after["revision"]) != claim.task_revision + 1
+            ):
+                raise ProductionDispatchExecutionError(
+                    "simulation begin transaction lost atomic RUNNING Task state"
+                )
 
     return StartedDispatchExecution(result, dependencies)
 
