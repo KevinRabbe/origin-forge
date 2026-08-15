@@ -25,7 +25,7 @@ class ReleasePackagingTests(unittest.TestCase):
         project = config["project"]
         self.assertEqual(config["build-system"]["requires"], ["setuptools>=68"])
         self.assertEqual(project["name"], "origin-forge")
-        self.assertEqual(project["version"], "0.2.0.dev0")
+        self.assertEqual(project["version"], "0.5.0")
         self.assertEqual(project["readme"], "README.md")
         self.assertEqual(project["license"], {"file": "LICENSE"})
         self.assertEqual(project["requires-python"], ">=3.12")
