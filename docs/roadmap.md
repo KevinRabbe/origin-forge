@@ -1043,6 +1043,28 @@ Target capabilities:
 - cryptographic provenance
 - basic 2D production
 
+## Phase 48 — Governed Pixelorama Spritesheet Export Production Dispatch — DONE
+
+Completed as the first separately gated **post-v0.5 v1.0 production-integration slice**, without changing the immutable `v0.5.0` tag or claiming Phase 48 was part of that release:
+
+- explicit Pixelorama production authority is limited to `media.2d.export → originforge.pixelorama.export → pixelorama.spritesheet-export@1`;
+- the Phase-33 WorkOrder contract accepts exactly one project-owned `ARTIFACT` ref with role `pixelorama_project` and an inert `{}` payload; it exposes no caller/model process, path, profile, workspace, identity, adoption, signing, or Task authority;
+- Phase-34 binding reuses the existing metadata-only Artifact resolver and requires a current `PIXELORAMA_PROJECT` Artifact without reading source bytes before execution ownership;
+- Phase-39 adds the separate `originforge.preparation.pixelorama-spritesheet-export-planner@1` owner, reuses the one-shot `CODER_STRONG` WorkOrder Planner, and preserves mixed-owner fail-closed semantics and code-only Goal bootstrap;
+- Phase-36 adds `originforge.execution.pixelorama.spritesheet-export@1`, requires only infrastructure-owned trusted Pixelorama profile dependencies, and atomically commits DISPEXEC `STARTED + Task READY→RUNNING` with no model/runtime/resource/sandbox/Git-Workspace stack;
+- post-STARTED execution validates the exact local `.pxo` source path, containment, no-symlink/regular-file status, frozen hash, and bounded byte count before allocating fresh `PXOP-*` / `MEDIA-*` identities;
+- the durable direct CLI export service invokes the already-proven Pixelorama v1.2 spritesheet-export adapter at most once, persists one PIXELORAMA Run plus request/result/PNG Artifact/Verification lineage, and independently revalidates that evidence before DISPEXEC RETURNED;
+- normal return consumes the claim but leaves the production Task RUNNING; export structure is not aesthetic quality, Task PASS/FAIL, adoption, signing, merge, release, or deployment truth;
+- ordinary owner exceptions record RAISED/CONSUMED while BaseException/crash or post-evidence terminalization uncertainty preserves explicit no-replay recovery state;
+- cross-phase acceptance proves the real preparation→claim→execution→Manager path, exact one-ref persisted planner recovery/currentness, at-most-one concurrent Pixelorama invocation, no newer-Task fallback, unchanged bounded-code/simulation behavior, and unchanged Phase-45/46 code-only Goal-bootstrap authority;
+- the final production execution owner set is exactly bounded code, deterministic simulation, and Pixelorama spritesheet export; no dynamic owner/plugin dispatch, generic media execution, project create/import/edit/save, arbitrary editor scripting, automatic adoption/signing, direct mutating Pixelorama CLI, cockpit mutation, background loop, or fourth packaged command is added.
+
+See `docs/phase-48-governed-pixelorama-spritesheet-export-production-dispatch.md` for the frozen architecture and `docs/phase-48-implementation-closure.md` for the accepted 48A–48F implementation, integration repairs, cross-phase adversarial acceptance, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `52411df4` / run `31915469094`, 48A head `c6e32857` / run `31915910291`, 48B head `78e86b4da53be894be2223ee807ba208d42f618a` / run `31922527176`, 48C head `12e10bcbbba5a19d286dbd924ef1270ef929b900` / run `31924707175`, 48D head `66d8c52d4d8f57eed43ddb376a06981ea0bf71e1` / run `31928255035`, the persisted-currentness repair head `4e3bafee120232f607c6405c1dfee6acb33b8845` / run `31929089584`, 48E head `2e1131c85adf3039cd2685c7380300ebfdc6b7ea` / run `31936867196`, and 48F accepted head `68315a50526ac00634ce03d26e669a7053c8ace1` / run `31945142450` all passed Python 3.12 and Python 3.13. Accepted Phase-48 implementation/acceptance is merged to `main` as `16eb0cd631ec572d07605209cb8ca29a1c5f3db9`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 # v1.0 — Integrated Game Production
 
 Representative Goal:
