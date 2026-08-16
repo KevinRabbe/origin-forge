@@ -14,6 +14,10 @@ from .production_preparation_assembly import (
     ProductionPreparationAssemblyError,
     _assemble_preparation_planner_dependencies_from_provenance,
 )
+from .production_preparation_input_authority import (
+    PreparationInputAuthorityError,
+    planner_allowed_input_refs,
+)
 from .production_preparation_models import (
     PreparationStage,
     TaskPreparationPolicyBinding,
@@ -22,7 +26,6 @@ from .production_preparation_models import (
 from .production_preparation_planner_boundary import (
     PreparationPlannerBoundaryError,
     RoutedPreparationPlannerBoundary,
-    _planner_allowed_input_refs,
 )
 from .production_preparation_provenance import PreparationPolicyProvenance
 from .production_preparation_receipts import (
@@ -176,7 +179,7 @@ def resolve_same_call_routed_preparation_planner_boundary(
             raise PreparationPlannerBoundaryError(
                 "current dispatch contract exceeds exact v1 preparation-owner authority"
             )
-        allowed_input_refs = _planner_allowed_input_refs(
+        allowed_input_refs = planner_allowed_input_refs(
             provenance.planning_input,
             owner.owner_id,
             contract,
@@ -188,6 +191,7 @@ def resolve_same_call_routed_preparation_planner_boundary(
         ProductionPlanningInspectionError,
         ProductionCapabilityStoreError,
         ProductionPreparationAssemblyError,
+        PreparationInputAuthorityError,
         ProductionWorkOrderReadError,
         CapabilityRoutingError,
         StaleRevision,
