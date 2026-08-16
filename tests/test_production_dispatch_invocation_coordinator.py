@@ -395,7 +395,7 @@ providers = [
             tuple(signature.parameters),
             ("runtime", "claim_id", "expected_claim_revision"),
         )
-        source = inspect.getsource(dispatch_claim_once)
+        source = inspect.getsource(invocation_module._legacy_dispatch_claim_once)
         tree = ast.parse(source)
         drive_calls = [
             node

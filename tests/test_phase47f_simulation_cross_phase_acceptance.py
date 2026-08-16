@@ -625,7 +625,9 @@ providers = [
             "originforge.preparation.work-order-planner@1",
         )
 
-        tree = ast.parse(inspect.getsource(invocation_module.dispatch_claim_once))
+        source = inspect.getsource(invocation_module._legacy_dispatch_claim_once) + "
+" + inspect.getsource(invocation_module.dispatch_claim_once)
+        tree = ast.parse(source)
         drive_calls = [
             node
             for node in ast.walk(tree)
@@ -641,7 +643,7 @@ providers = [
             and node.func.attr == "execute"
         ]
         self.assertEqual(len(drive_calls), 1)
-        self.assertEqual(len(execute_calls), 1)
+        self.assertEqual(len(execute_calls), 2)
 
 
 if __name__ == "__main__":
