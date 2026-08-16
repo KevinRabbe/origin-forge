@@ -216,13 +216,13 @@ Phase 48 adds no:
 
 ## Exact-head accepted evidence
 
-- **Phase-48 planning — PR #108:** exact accepted head `52411df4` / normal run `31915469094` / #1369 passed Python 3.12 and Python 3.13; merged as `e52a101e`.
-- **48A — exact WorkOrder contract — PR #109:** exact accepted head `c6e32857` / normal run `31915910291` / #1371 passed Python 3.12 and Python 3.13; merged as `d0097e52`.
+- **Phase-48 planning — PR #108:** exact accepted head `52411df4e876a7bb2c0a2fc6023e15abb6eb87c4` / normal run `31915469094` / #1369 passed Python 3.12 and Python 3.13; merged as `e52a101e578783c7731bdde0d53051a586f5791a`.
+- **48A — exact WorkOrder contract — PR #109:** exact accepted head `c6e328575db4ecaa7b0ca3c191ede56f42857f92` / normal run `31915910291` / #1371 passed Python 3.12 and Python 3.13; merged as `d0097e521b94aa2e576f3f3afb8acb09c8147ecf`.
 - **48B — Artifact metadata binding/currentness — PR #110:** exact accepted head `78e86b4da53be894be2223ee807ba208d42f618a` / normal run `31922527176` / #1374 passed Python 3.12 and Python 3.13; merged as `dc189925778498ab27bca57b78f97902a6f6d3e2`.
-- **48C — Pixelorama preparation owner — PR #111:** exact accepted head `12e10bcbbba5a19d286dbd924ef1270ef929b900` / normal run `31924707175` / #1403 passed Python 3.12 and Python 3.13; merged as `8cef4f62c8d22d06e24b7d768205baeefd73d437`.
-- **48D — execution owner + atomic start — PR #112:** exact accepted head `66d8c52d4d8f57eed43ddb376a06981ea0bf71e1` / normal run `31928255035` / #1408 passed Python 3.12 and Python 3.13; merged as `4ebaba55efec22382fa0b47b43202aa152ee07f8`.
-- **Phase-34 persisted Pixelorama currentness repair — PR #113:** exact accepted head `4e3bafee120232f607c6405c1dfee6acb33b8845` / normal run `31929089584` / #1410 passed Python 3.12 and Python 3.13; merged as `b05658dc37bd6bfd42c7c04b29b48821b4d0d128`.
-- **48E — durable direct CLI export service — PR #114:** exact accepted head `2e1131c85adf3039cd2685c7380300ebfdc6b7ea` / normal run `31936867196` / #1413 passed Python 3.12 and Python 3.13; merged as `c1072a0f8c1526331f9f0797b10168061943206f`.
+- **48C — Pixelorama preparation owner — PR #111:** exact accepted head `12e10bcbbba5a19d286dbd924ef1270ef929b900` / normal run `31926045992` / #1376 passed Python 3.12 and Python 3.13; merged as `4101b1568f1effdbc8e595afc558bce76cafc942`.
+- **48D — execution owner + atomic start — PR #112:** exact accepted head `66d8c52d4d8f57eed43ddb376a06981ea0bf71e1` / normal run `31929383977` / #1382 passed Python 3.12 and Python 3.13; merged as `4ebaba55efec22382fa0b47b43202aa152ee07f8`.
+- **Phase-34 persisted Pixelorama currentness repair — PR #113:** exact accepted head `4e3bafee120232f607c6405c1dfee6acb33b8845` / normal run `31929132808` / #1380 passed Python 3.12 and Python 3.13; merged as `b05658dc37bd6bfd42c7c04b29b48821b4d0d128`.
+- **48E — durable direct CLI export service — PR #114:** exact accepted head `2e1131c85adf3039cd2685c7380300ebfdc6b7ea` / normal run `31930898625` / #1384 passed Python 3.12 and Python 3.13; merged as `c1072a0f8c1526331f9f0797b10168061943206f`.
 - **48F — invocation integration + cross-phase adversarial acceptance — PR #115:** exact accepted head `68315a50526ac00634ce03d26e669a7053c8ace1`; normal run `31945142450` / #1433 passed Python 3.12 and Python 3.13; the final net diff contains exactly 15 source/test files and no helper-workflow residue; merged as `16eb0cd631ec572d07605209cb8ca29a1c5f3db9`.
 
 ## Closure gate
