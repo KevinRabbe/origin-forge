@@ -32,7 +32,7 @@ jobs:
           assert text.count(old) == 1
           text = text.replace(old, new, 1)
           anchor = "class PreparationPlannerBoundaryError(RuntimeError):\n    pass\n\n\n@dataclass(frozen=True)\nclass RoutedPreparationPlannerBoundary:\n"
-          replacement = """class PreparationPlannerBoundaryError(RuntimeError):
+          replacement = '''class PreparationPlannerBoundaryError(RuntimeError):
               pass
 
 
@@ -79,7 +79,7 @@ jobs:
 
           @dataclass(frozen=True)
           class RoutedPreparationPlannerBoundary:
-          """
+          '''
           replacement = "\n".join(line[10:] if line.startswith("          ") else line for line in replacement.splitlines()) + "\n"
           assert text.count(anchor) == 1
           text = text.replace(anchor, replacement, 1)
