@@ -1,16 +1,12 @@
 name: Phase 49A schema bootstrap
 
-on:
-  push:
-    branches:
-      - chatgpt/phase49a-pixelorama-dispatch-output-binding
+on: push
 
 permissions:
   contents: write
 
 jobs:
   patch-schema:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +16,7 @@ jobs:
       - name: Insert migration 13 and remove helper
         shell: bash
         run: |
+          test "$GITHUB_REF_NAME" = "chatgpt/phase49a-pixelorama-dispatch-output-binding"
           python - <<'PY'
           from pathlib import Path
 
