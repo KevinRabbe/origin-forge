@@ -2,7 +2,7 @@
 
 Status: **POST-v0.1 DEVELOPMENT MAINLINE**
 
-This guide describes the current `main` operator surface. Origin Forge v0.1.0 was released on 2026-08-11 and remains immutably identified by tag `v0.1.0`; the current development line is `0.2.0.dev0` and contains post-release capabilities through Phase 47. For the exact released v0.1.0 surface, see `docs/v0.1-operator-guide.md`.
+This guide describes the current `main` operator surface. Origin Forge v0.1.0 was released on 2026-08-11 and remains immutably identified by tag `v0.1.0`; the current development line is `0.2.0.dev0` and contains post-release capabilities through Phase 48. For the exact released v0.1.0 surface, see `docs/v0.1-operator-guide.md`.
 
 ## Install
 
@@ -113,7 +113,7 @@ from origin_forge.production_goal_bootstrap_operator import (
 
 A successful bootstrap or recovery stops at GOALBOOT `READY` after exact PREPPOL publication/revalidation. It does **not** invoke Manager. Production advancement remains a separate explicit `origin-forge manager advance` authorization.
 
-Phase 47 does not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run` Tasks.
+Phases 47–48 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run` or `media.2d.export` Tasks.
 
 ## Inspect or explicitly advance governed Manager work
 
@@ -136,7 +136,13 @@ A normal simulation dispatch creates the canonical Phase-25 `SIMULATOR` Run plus
 
 There is no direct `origin-forge simulation run` mutation command. Production simulation execution is reachable only through already-governed preparation/claim/dispatch authority and the existing explicit Manager invocation.
 
-The cockpit remains a separate read-only inspection surface. It does not receive a Manager, Goal-bootstrap, or simulation mutation command.
+Phase 48 also allows an **already-governed** `media.2d.export` Task with the exact `originforge.pixelorama.export → pixelorama.spritesheet-export@1` relation and exactly one current `PIXELORAMA_PROJECT` Artifact ref to execute through this same explicit Manager path. Phase-34 binding remains metadata-only. The `.pxo` source path and bytes are opened only after durable DISPEXEC `STARTED` plus Task `READY → RUNNING`, then revalidated for canonical portable path, protected-root exclusion, containment, regular-file/no-symlink status, `.pxo` type, exact hash, and exact size before any process launch.
+
+The Pixelorama execution owner itself uses an infrastructure/operator-owned trusted Pixelorama v1.2 CLI profile and no model/runtime/resource/sandbox/Git-Workspace dependency stack. Infrastructure allocates fresh PXOP/MEDIA identities and fixed request paths, invokes the durable Pixelorama CLI export service at most once, then independently revalidates its Run, request/result/export Artifacts, structural Verification, hashes, and lineage before returning `DISPATCH_RETURNED` and consuming the claim. The production Task deliberately remains `RUNNING`.
+
+There is no direct Pixelorama production mutation command. Phase 48 does not add project create/import/edit/save dispatch, generic bridge authority, Artifact adoption/signing, aesthetic truth, Task success/failure authority, or automatic replay after STARTED uncertainty.
+
+The cockpit remains a separate read-only inspection surface. It does not receive a Manager, Goal-bootstrap, simulation, or Pixelorama mutation command.
 
 ## Run exactly one bounded coding attempt
 
@@ -218,6 +224,8 @@ The Phase-45/46 Goal-bootstrap boundary is independently explicit and bounded: a
 
 The Phase-47 deterministic simulation dispatch boundary follows the same no-replay law: once simulation DISPEXEC `STARTED` is durable, a BaseException/crash or post-evidence terminalization failure requires explicit recovery rather than a second automatic simulation call.
 
+The Phase-48 Pixelorama dispatch boundary follows that law as well: once Pixelorama DISPEXEC `STARTED` and Task `RUNNING` are durable, source validation or execution uncertainty is not repaired by an automatic second export call.
+
 ## Current-development boundary
 
 Current `main` does not grant:
@@ -229,6 +237,7 @@ Current `main` does not grant:
 - automatic Dream promotion;
 - production checkpoint/model activation;
 - direct simulation mutation commands or automatic Task terminalization from simulation findings;
+- direct Pixelorama production mutation/project-edit commands, automatic spritesheet adoption/signing, or automatic Task terminalization from export evidence;
 - background Goal bootstrap or Manager scheduling/queue draining;
 - remote/multi-user cockpit hosting.
 

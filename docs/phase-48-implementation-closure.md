@@ -1,31 +1,4 @@
-name: Phase 48G documentation closure
-
-on:
-  push:
-    branches:
-      - chatgpt/phase48g-documentation-closure
-  workflow_dispatch:
-
-permissions:
-  contents: write
-
-jobs:
-  apply:
-    if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: chatgpt/phase48g-documentation-closure
-          fetch-depth: 0
-
-      - name: Apply exact Phase 48G closure
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          closure = r'''# Phase 48 — Governed Pixelorama Spritesheet Export Production Dispatch — Implementation Closure
+# Phase 48 — Governed Pixelorama Spritesheet Export Production Dispatch — Implementation Closure
 
 Status: **IMPLEMENTED / ACCEPTED — final documentation gate pending**
 
@@ -187,56 +160,3 @@ This Phase-48G documentation/operator-guide/roadmap closure branch starts from e
 The intended final net diff is exactly three documentation files: this implementation-closure record, the living operator guide, and the canonical roadmap. It may not modify production code, tests, schema, config, packaging, workflows in the final tree, immutable v0.5 release records, or runtime authority.
 
 The final immutable closure head must pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error. Only that exact green head may be transitioned out of draft and SHA-guarded merged.
-'''
-
-          Path('docs/phase-48-implementation-closure.md').write_text(closure, encoding='utf-8')
-
-          guide_path = Path('docs/operator-guide.md')
-          guide = guide_path.read_text(encoding='utf-8')
-          replacements = {
-              'contains post-release capabilities through Phase 47.': 'contains post-release capabilities through Phase 48.',
-              'Phase 47 does not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run` Tasks.': 'Phases 47–48 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run` or `media.2d.export` Tasks.',
-              'The cockpit remains a separate read-only inspection surface. It does not receive a Manager, Goal-bootstrap, or simulation mutation command.': 'The cockpit remains a separate read-only inspection surface. It does not receive a Manager, Goal-bootstrap, simulation, or Pixelorama mutation command.',
-              'The Phase-47 deterministic simulation dispatch boundary follows the same no-replay law: once simulation DISPEXEC `STARTED` is durable, a BaseException/crash or post-evidence terminalization failure requires explicit recovery rather than a second automatic simulation call.': 'The Phase-47 deterministic simulation dispatch boundary follows the same no-replay law: once simulation DISPEXEC `STARTED` is durable, a BaseException/crash or post-evidence terminalization failure requires explicit recovery rather than a second automatic simulation call.\n\nThe Phase-48 Pixelorama dispatch boundary follows that law as well: once Pixelorama DISPEXEC `STARTED` and Task `RUNNING` are durable, source validation or execution uncertainty is not repaired by an automatic second export call.',
-              '- direct simulation mutation commands or automatic Task terminalization from simulation findings;': '- direct simulation mutation commands or automatic Task terminalization from simulation findings;\n- direct Pixelorama production mutation/project-edit commands, automatic spritesheet adoption/signing, or automatic Task terminalization from export evidence;',
-          }
-          for old, new in replacements.items():
-              count = guide.count(old)
-              if count != 1:
-                  raise SystemExit(f'operator-guide marker count for {old!r}: {count}')
-              guide = guide.replace(old, new, 1)
-
-          simulation_marker = 'There is no direct `origin-forge simulation run` mutation command. Production simulation execution is reachable only through already-governed preparation/claim/dispatch authority and the existing explicit Manager invocation.\n\n'
-          if guide.count(simulation_marker) != 1:
-              raise SystemExit('simulation insertion marker drifted')
-          pixelorama_operator = '''Phase 48 also allows an **already-governed** `media.2d.export` Task with the exact `originforge.pixelorama.export → pixelorama.spritesheet-export@1` relation and exactly one current `PIXELORAMA_PROJECT` Artifact ref to execute through this same explicit Manager path. Phase-34 binding remains metadata-only. The `.pxo` source path and bytes are opened only after durable DISPEXEC `STARTED` plus Task `READY → RUNNING`, then revalidated for canonical portable path, protected-root exclusion, containment, regular-file/no-symlink status, `.pxo` type, exact hash, and exact size before any process launch.\n\nThe Pixelorama execution owner itself uses an infrastructure/operator-owned trusted Pixelorama v1.2 CLI profile and no model/runtime/resource/sandbox/Git-Workspace dependency stack. Infrastructure allocates fresh PXOP/MEDIA identities and fixed request paths, invokes the durable Pixelorama CLI export service at most once, then independently revalidates its Run, request/result/export Artifacts, structural Verification, hashes, and lineage before returning `DISPATCH_RETURNED` and consuming the claim. The production Task deliberately remains `RUNNING`.\n\nThere is no direct Pixelorama production mutation command. Phase 48 does not add project create/import/edit/save dispatch, generic bridge authority, Artifact adoption/signing, aesthetic truth, Task success/failure authority, or automatic replay after STARTED uncertainty.\n\n'''
-          guide = guide.replace(simulation_marker, simulation_marker + pixelorama_operator, 1)
-          guide_path.write_text(guide, encoding='utf-8')
-
-          roadmap_path = Path('docs/roadmap.md')
-          roadmap = roadmap_path.read_text(encoding='utf-8')
-          title = '## Phase 48 — Governed Pixelorama Spritesheet Export Production Dispatch — DONE'
-          if title in roadmap:
-              raise SystemExit('Phase 48 DONE block already exists')
-          v1_marker = '# v1.0 — Integrated Game Production'
-          if roadmap.count(v1_marker) != 1:
-              raise SystemExit('v1.0 roadmap marker drifted')
-          if '# v0.5 — Integrated Development Infrastructure — RELEASED' not in roadmap:
-              raise SystemExit('immutable v0.5 release marker missing')
-          phase48 = '''## Phase 48 — Governed Pixelorama Spritesheet Export Production Dispatch — DONE\n\nPromoted only the already-proven Pixelorama v1.2 documented headless spritesheet-export boundary into the governed production Manager path after the immutable v0.5 release:\n\n- exact authority is `media.2d.export → originforge.pixelorama.export → pixelorama.spritesheet-export@1`;\n- the WorkOrder requires exactly one project-owned `PIXELORAMA_PROJECT` Artifact ref with role `pixelorama_project`;\n- Phase-34 binding/currentness stays metadata-only, including the accepted persisted-currentness repair for this exact reviewed one-ref relation;\n- Pixelorama has a separate Phase-39 preparation owner and a zero-model Phase-36 execution owner with infrastructure-owned trusted CLI profile;\n- DISPEXEC `STARTED` and Task `READY → RUNNING` are atomic before source bytes are materialized;\n- post-STARTED materialization revalidates canonical portable path, protected-root exclusion, containment, regular-file/no-symlink status, `.pxo` type, exact hash, and exact size before process launch;\n- infrastructure allocates fresh PXOP/MEDIA identities and invokes the durable direct Pixelorama CLI export service at most once;\n- returned Run/request/result/spritesheet/Verification evidence is independently revalidated before `DISPATCH_RETURNED` / claim `CONSUMED`;\n- real Manager-path acceptance proves no fallback to a newer Task, claim-bound concurrency, and no automatic replay after durable STARTED uncertainty;\n- the production Task remains `RUNNING`; export structure is not Task PASS/FAIL, adoption/signing, aesthetic truth, merge, or release authority;\n- bounded-code and deterministic-simulation owners, code-only Goal bootstrap, exactly three packaged commands, read-only cockpit, and immutable `v0.5.0` release identity remain unchanged.\n\nSee `docs/phase-48-governed-pixelorama-spritesheet-export-production-dispatch.md` and `docs/phase-48-implementation-closure.md`.\n\n**Exit condition met:** Origin Forge can drive one already-governed Pixelorama spritesheet export through the real preparation/claim/atomic-start/execution Manager path with exact Artifact authority, post-STARTED source revalidation, durable structural evidence, bounded concurrency, and fail-closed no-replay semantics without granting project-editing, adoption/signing, Task-outcome, or release authority.\n\n'''
-          roadmap = roadmap.replace(v1_marker, phase48 + v1_marker, 1)
-          roadmap_path.write_text(roadmap, encoding='utf-8')
-
-          helper = Path('.github/workflows/phase48g-documentation-closure.yml')
-          if not helper.exists():
-              raise SystemExit('helper workflow missing before self-removal')
-          helper.unlink()
-          PY
-
-          git config user.name origin-forge-ci
-          git config user.email actions@users.noreply.github.com
-          git add docs/phase-48-implementation-closure.md docs/operator-guide.md docs/roadmap.md .github/workflows/phase48g-documentation-closure.yml
-          git diff --cached --check
-          test "$(git diff --cached --name-only | sort)" = "$(printf '%s\n' '.github/workflows/phase48g-documentation-closure.yml' 'docs/operator-guide.md' 'docs/phase-48-implementation-closure.md' 'docs/roadmap.md' | sort)"
-          git commit -m "docs: close Phase 48 Pixelorama production dispatch"
-          git push origin HEAD:chatgpt/phase48g-documentation-closure

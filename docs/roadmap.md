@@ -1043,6 +1043,26 @@ Target capabilities:
 - cryptographic provenance
 - basic 2D production
 
+## Phase 48 — Governed Pixelorama Spritesheet Export Production Dispatch — DONE
+
+Promoted only the already-proven Pixelorama v1.2 documented headless spritesheet-export boundary into the governed production Manager path after the immutable v0.5 release:
+
+- exact authority is `media.2d.export → originforge.pixelorama.export → pixelorama.spritesheet-export@1`;
+- the WorkOrder requires exactly one project-owned `PIXELORAMA_PROJECT` Artifact ref with role `pixelorama_project`;
+- Phase-34 binding/currentness stays metadata-only, including the accepted persisted-currentness repair for this exact reviewed one-ref relation;
+- Pixelorama has a separate Phase-39 preparation owner and a zero-model Phase-36 execution owner with infrastructure-owned trusted CLI profile;
+- DISPEXEC `STARTED` and Task `READY → RUNNING` are atomic before source bytes are materialized;
+- post-STARTED materialization revalidates canonical portable path, protected-root exclusion, containment, regular-file/no-symlink status, `.pxo` type, exact hash, and exact size before process launch;
+- infrastructure allocates fresh PXOP/MEDIA identities and invokes the durable direct Pixelorama CLI export service at most once;
+- returned Run/request/result/spritesheet/Verification evidence is independently revalidated before `DISPATCH_RETURNED` / claim `CONSUMED`;
+- real Manager-path acceptance proves no fallback to a newer Task, claim-bound concurrency, and no automatic replay after durable STARTED uncertainty;
+- the production Task remains `RUNNING`; export structure is not Task PASS/FAIL, adoption/signing, aesthetic truth, merge, or release authority;
+- bounded-code and deterministic-simulation owners, code-only Goal bootstrap, exactly three packaged commands, read-only cockpit, and immutable `v0.5.0` release identity remain unchanged.
+
+See `docs/phase-48-governed-pixelorama-spritesheet-export-production-dispatch.md` and `docs/phase-48-implementation-closure.md`.
+
+**Exit condition met:** Origin Forge can drive one already-governed Pixelorama spritesheet export through the real preparation/claim/atomic-start/execution Manager path with exact Artifact authority, post-STARTED source revalidation, durable structural evidence, bounded concurrency, and fail-closed no-replay semantics without granting project-editing, adoption/signing, Task-outcome, or release authority.
+
 # v1.0 — Integrated Game Production
 
 Representative Goal:
