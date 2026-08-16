@@ -364,13 +364,46 @@ def inspect_dispatch_binding_currentness_readonly(
             status = DispatchBindingCurrentnessStatus.NOT_READY
         return result(status, f"WorkOrder currentness is {work_currentness.status.value}")
 
-    if bundle.resolved_inputs:
-        return result(
-            DispatchBindingCurrentnessStatus.STALE_INPUT,
-            "current read-only v1 binding eligibility supports only the proven zero-ref dispatch contract",
-        )
     try:
         work_order = read_work_order(runtime, bundle.work_order_id, registry)
+    except ProductionWorkOrderReadError as exc:
+        return result(
+            DispatchBindingCurrentnessStatus.STALE_WORK_ORDER,
+            f"{type(exc).__name__}: {exc}",
+        )
+
+    if bundle.resolved_inputs:
+        resolved = bundle.resolved_inputs
+        if (
+            binding.selected_adapter_id != "originforge.pixelorama.export"
+            or binding.dispatch_contract_id != "pixelorama.spritesheet-export@1"
+            or binding.binder_id != "binder.pixelorama.spritesheet-export@1"
+            or len(resolved) != 1
+            or resolved[0].original_ref.ref_type.value != "ARTIFACT"
+            or resolved[0].original_ref.role != "pixelorama_project"
+            or resolved[0].source_object_type != "ARTIFACT"
+            or resolved[0].resolution_class != "CANONICAL_ARTIFACT"
+        ):
+            return result(
+                DispatchBindingCurrentnessStatus.STALE_INPUT,
+                "current read-only v1 nonzero-ref eligibility is limited to the exact Pixelorama project Artifact contract",
+            )
+        try:
+            current_inputs = resolver_registry.resolve_all(runtime, work_order.input_refs)
+        except (RuntimeError, TypeError, ValueError) as exc:
+            return result(
+                DispatchBindingCurrentnessStatus.STALE_INPUT,
+                f"{type(exc).__name__}: {exc}",
+            )
+        if tuple(value.to_dict() for value in current_inputs) != tuple(
+            value.to_dict() for value in resolved
+        ):
+            return result(
+                DispatchBindingCurrentnessStatus.STALE_INPUT,
+                "current Pixelorama Artifact resolution differs from frozen input evidence",
+            )
+
+    try:
         expected = _binding_with_id(
             bundle,
             binder,
