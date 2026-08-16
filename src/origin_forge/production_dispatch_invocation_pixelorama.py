@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .ids import IdKind, validate_id
 from .lineage import OriginForgeLineage
+from .path_policy import portable_relative_path
 from .pixelorama_cli_export import PixeloramaCliExportRequest
 from .production_dispatch_binding_models import DispatchBinding
 from .production_dispatch_binding_pixelorama import (
@@ -204,12 +205,14 @@ def _safe_source_path(
         )
 
     raw = request.source_path_or_uri
-    if "://" in raw or "\x00" in raw:
+    try:
+        portable = portable_relative_path(raw)
+    except ValueError as exc:
         raise ProductionDispatchInvocationError(
-            "Pixelorama source Artifact must be a local project file"
-        )
-    relative = Path(raw)
-    if relative.is_absolute() or relative.suffix.lower() != ".pxo":
+            "Pixelorama source Artifact must be one canonical portable project file"
+        ) from exc
+    relative = Path(portable.as_posix())
+    if relative.suffix.lower() != ".pxo":
         raise ProductionDispatchInvocationError(
             "Pixelorama source Artifact must be a relative .pxo project file"
         )
