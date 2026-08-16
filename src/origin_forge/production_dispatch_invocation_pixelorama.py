@@ -25,6 +25,9 @@ from .production_pixelorama_dispatch_output_binding_read import (
 from .production_pixelorama_dispatch_output_binding_store import (
     publish_pixelorama_dispatch_output_binding,
 )
+from .production_pixelorama_dispatch_output_currentness import (
+    require_bound_pixelorama_output_evidence,
+)
 from .service import utc_now
 
 
@@ -216,6 +219,12 @@ def recover_pixelorama_dispatch_execution_once(
         raise ProductionDispatchInvocationRecoveryRequired(
             execution_id, "STARTED_RELATION_MISMATCH"
         )
+    try:
+        require_bound_pixelorama_output_evidence(runtime, binding)
+    except Exception as exc:
+        raise ProductionDispatchInvocationRecoveryRequired(
+            execution_id, "PIXELORAMA_BOUND_RESULT_INVALID"
+        ) from exc
     if execution.status is DispatchExecutionStatus.RETURNED:
         return CompletedDispatchInvocation(execution)
     if execution.status is not DispatchExecutionStatus.STARTED:
