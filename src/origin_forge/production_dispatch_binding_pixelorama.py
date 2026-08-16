@@ -139,19 +139,14 @@ class PixeloramaSpritesheetExportInputBinder:
         projection = source.projection
         if not isinstance(projection, dict):
             raise DispatchBindingError("Pixelorama Artifact projection must be an object")
-        expected_projection_fields = {
+        required_projection_fields = {
             "id",
-            "project_id",
-            "change_id",
             "type",
             "path_or_uri",
             "content_hash",
-            "parent_artifact_id",
-            "created_by_run_id",
-            "model_id",
             "status",
         }
-        if set(projection) != expected_projection_fields:
+        if not required_projection_fields.issubset(projection):
             raise DispatchBindingError("Pixelorama Artifact projection shape drifted")
         if projection["id"] != ref.ref_id or projection["content_hash"] != ref.content_hash:
             raise DispatchBindingError("Pixelorama Artifact projection identity/hash drifted")
