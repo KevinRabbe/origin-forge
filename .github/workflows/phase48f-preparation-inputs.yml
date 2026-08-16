@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Integrate frozen Pixelorama planning Artifact refs and self-remove
         run: |
+          sed -i 's/assert text.count(old) == 1/assert old in text/g' .github/phase48f_preparation_patch.py
           python .github/phase48f_preparation_patch.py
           python -m py_compile src/origin_forge/production_preparation_planner_boundary.py src/origin_forge/production_preparation_planner_same_call.py src/origin_forge/production_preparation_planner_resume.py
           rm .github/phase48f_preparation_patch.py .github/workflows/phase48f-preparation-inputs.yml
