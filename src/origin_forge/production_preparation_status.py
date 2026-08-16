@@ -38,7 +38,11 @@ from .production_preparation_policy_store import (
 from .production_read_guard import ProductionReadGuardError, production_read_connection
 from .production_work_order_audit import WorkOrderCurrentnessStatus
 from .production_work_order_builtin import build_builtin_dispatch_validator_registry
-from .production_work_order_models import ProductionWorkOrderModelError
+from .production_work_order_models import (
+    ProductionWorkOrderModelError,
+    WorkOrderInputRef,
+    WorkOrderRefType,
+)
 from .production_work_order_read import (
     ProductionWorkOrderReadError,
     inspect_work_order_currentness_readonly,
@@ -477,10 +481,59 @@ def _parse_canonical_object(raw: object, label: str) -> dict[str, Any]:
 def _work_order_from_planner_evidence(value: object) -> ProductionWorkOrder:
     if not isinstance(value, dict) or set(value) != _WORK_ORDER_KEYS:
         raise PreparationStatusReadError("planner WorkOrder schema drifted")
-    if value["input_refs"] != [] or not isinstance(value["payload"], dict):
+    if not isinstance(value["payload"], dict):
         raise PreparationStatusReadError(
-            "Phase-39 v1 planner WorkOrder input/payload shape drifted"
+            "Phase-39 v1 planner WorkOrder payload shape drifted"
         )
+
+    raw_refs = value["input_refs"]
+    if not isinstance(raw_refs, list):
+        raise PreparationStatusReadError(
+            "Phase-39 v1 planner WorkOrder input refs are not a list"
+        )
+    if (
+        value["selected_adapter_id"] == "originforge.pixelorama.export"
+        and value["dispatch_contract_id"] == "pixelorama.spritesheet-export@1"
+    ):
+        if len(raw_refs) != 1 or not isinstance(raw_refs[0], dict):
+            raise PreparationStatusReadError(
+                "Pixelorama planner WorkOrder requires exactly one input ref"
+            )
+        raw_ref = raw_refs[0]
+        if set(raw_ref) != {"ref_type", "ref_id", "content_hash", "role", "revision"}:
+            raise PreparationStatusReadError(
+                "Pixelorama planner WorkOrder input ref schema drifted"
+            )
+        try:
+            refs = (
+                WorkOrderInputRef(
+                    ref_type=WorkOrderRefType(raw_ref["ref_type"]),
+                    ref_id=raw_ref["ref_id"],
+                    content_hash=raw_ref["content_hash"],
+                    role=raw_ref["role"],
+                    revision=raw_ref["revision"],
+                ),
+            )
+        except (ProductionWorkOrderModelError, TypeError, ValueError) as exc:
+            raise PreparationStatusReadError(
+                "Pixelorama planner WorkOrder input ref failed reconstruction"
+            ) from exc
+        ref = refs[0]
+        if (
+            ref.ref_type is not WorkOrderRefType.ARTIFACT
+            or ref.role != "pixelorama_project"
+            or ref.revision is not None
+        ):
+            raise PreparationStatusReadError(
+                "Pixelorama planner WorkOrder input ref authority drifted"
+            )
+    else:
+        if raw_refs != []:
+            raise PreparationStatusReadError(
+                "Phase-39 v1 non-Pixelorama planner WorkOrder input refs drifted"
+            )
+        refs = ()
+
     try:
         work_order = ProductionWorkOrder(
             work_order_id=value["work_order_id"],
@@ -496,7 +549,7 @@ def _work_order_from_planner_evidence(value: object) -> ProductionWorkOrder:
             dispatch_catalog_hash=value["dispatch_catalog_hash"],
             dispatch_contract_id=value["dispatch_contract_id"],
             dispatch_contract_hash=value["dispatch_contract_hash"],
-            input_refs=(),
+            input_refs=refs,
             payload_json=json.dumps(
                 value["payload"],
                 ensure_ascii=False,
@@ -593,14 +646,14 @@ def _require_planner_return_checkpoint_current(
         evidence["audited"] is not False
         or evidence["dispatched"] is not False
         or metrics["model_calls"] != 1
-        or metrics["allowed_input_refs"] != 0
     ):
         raise PreparationStatusReadError(
             "planner verification crosses or misstates one-shot authority"
         )
     work_order = _work_order_from_planner_evidence(evidence["work_order"])
     if (
-        run["id"] != receipt.planner_run_id
+        metrics["allowed_input_refs"] != len(work_order.input_refs)
+        or run["id"] != receipt.planner_run_id
         or work_order.work_order_id != receipt.work_order_id
         or work_order.content_hash != receipt.work_order_hash
         or work_order.task_id != receipt.task_id
