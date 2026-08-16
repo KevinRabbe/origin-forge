@@ -206,7 +206,7 @@ def _resume_validated_routed_preparation_planner_once(
         )
         planner_result = planner.propose(
             started.route_decision_id,
-            allowed_input_refs=(),
+            allowed_input_refs=boundary.allowed_input_refs,
         )
         returned = checkpoint_preparation_planner_returned(
             runtime,

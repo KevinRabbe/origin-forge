@@ -281,7 +281,7 @@ class Phase47ESimulationInvocationTests(unittest.TestCase):
         self.assertEqual(self.runtime.list_runs(self.task_id), [])
 
     def test_coordinator_source_is_closed_to_one_code_and_one_simulation_call_site(self) -> None:
-        source = inspect.getsource(invocation_module.dispatch_claim_once)
+        source = inspect.getsource(invocation_module._legacy_dispatch_claim_once)
         tree = ast.parse(source)
         drive_calls = [
             node

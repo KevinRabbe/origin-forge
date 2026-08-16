@@ -11,6 +11,10 @@ from .production_planning_inspection import (
 )
 from .production_preparation_admission import PreparationCandidate
 from .production_preparation_assembly import PreparationPlannerDependencyPlan
+from .production_preparation_input_authority import (
+    PreparationInputAuthorityError,
+    work_order_input_refs_within_authority,
+)
 from .production_preparation_models import (
     PreparationStage,
     PreparationStatus,
@@ -599,6 +603,17 @@ def checkpoint_preparation_planner_returned(
         raise PreparationReceiptError(
             "PREPPOL DISPCAT has no contract for returned route"
         ) from exc
+    try:
+        inputs_current = work_order_input_refs_within_authority(
+            work_order.input_refs,
+            planning_input=provenance.planning_input,
+            owner_id=policy.preparation_owner_id,
+            contract=contract,
+        )
+    except (PreparationInputAuthorityError, TypeError, ValueError) as exc:
+        raise PreparationReceiptError(
+            "planner WorkOrder input authority cannot be revalidated"
+        ) from exc
     if (
         work_order.dispatch_catalog_id != policy.dispatch_contract_catalog_id
         or work_order.dispatch_catalog_hash != policy.dispatch_contract_catalog_hash
@@ -607,7 +622,7 @@ def checkpoint_preparation_planner_returned(
         or work_order.selected_adapter_id != resolution.selected_adapter_id
         or work_order.selected_adapter_fingerprint
         != resolution.selected_adapter_fingerprint
-        or work_order.input_refs
+        or not inputs_current
     ):
         raise PreparationReceiptError(
             "planner WorkOrder exceeds exact PREPPOL route/dispatch authority"

@@ -35,6 +35,7 @@ from .production_execution_owner import (
     ProductionExecutionOwnerError,
     build_builtin_execution_owner_registry,
 )
+from .production_pixelorama_export import PixeloramaCliExportServiceResult
 from .production_work_order_builtin import (
     CodeBoundedRetryDispatchValidator,
     DispatchValidatorError,
@@ -282,6 +283,7 @@ class CompletedDispatchInvocation:
     execution: DispatchExecution
     policy_result: PolicyResult | None = None
     simulation_result: SimulationServiceResult | None = None
+    pixelorama_result: PixeloramaCliExportServiceResult | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.execution, DispatchExecution):
@@ -292,12 +294,17 @@ class CompletedDispatchInvocation:
             )
         has_policy = self.policy_result is not None
         has_simulation = self.simulation_result is not None
-        if has_policy == has_simulation:
+        has_pixelorama = self.pixelorama_result is not None
+        if sum((has_policy, has_simulation, has_pixelorama)) != 1:
             raise ProductionDispatchInvocationError(
                 "completed invocation requires exactly one reviewed owner result"
             )
         if self.execution.execution_owner_id == _BOUNDED_OWNER_ID:
-            if not isinstance(self.policy_result, PolicyResult) or has_simulation:
+            if (
+                not isinstance(self.policy_result, PolicyResult)
+                or has_simulation
+                or has_pixelorama
+            ):
                 raise ProductionDispatchInvocationError(
                     "bounded execution requires exactly one PolicyResult"
                 )
@@ -306,9 +313,22 @@ class CompletedDispatchInvocation:
                     "completed invocation Task relation drifted"
                 )
         elif self.execution.execution_owner_id == _SIMULATION_OWNER_ID:
-            if not isinstance(self.simulation_result, SimulationServiceResult) or has_policy:
+            if (
+                not isinstance(self.simulation_result, SimulationServiceResult)
+                or has_policy
+                or has_pixelorama
+            ):
                 raise ProductionDispatchInvocationError(
                     "simulation execution requires exactly one SimulationServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.pixelorama.spritesheet-export@1":
+            if (
+                not isinstance(self.pixelorama_result, PixeloramaCliExportServiceResult)
+                or has_policy
+                or has_simulation
+            ):
+                raise ProductionDispatchInvocationError(
+                    "Pixelorama execution requires exactly one PixeloramaCliExportServiceResult"
                 )
         else:
             raise ProductionDispatchInvocationError(
@@ -318,7 +338,6 @@ class CompletedDispatchInvocation:
     @property
     def execution_id(self) -> str:
         return self.execution.execution_id
-
 
 def _require_trusted_relation(
     binding: DispatchBinding,
@@ -1029,3 +1048,8 @@ def dispatch_claim_once(
         started.execution.execution_id,
         "STARTED_RELATION_MISMATCH",
     )
+
+_legacy_dispatch_claim_once = dispatch_claim_once
+from .production_dispatch_invocation_pixelorama import (
+    _dispatch_claim_once_three_owner as dispatch_claim_once,
+)

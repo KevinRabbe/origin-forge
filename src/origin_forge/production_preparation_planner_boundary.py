@@ -17,6 +17,10 @@ from .production_preparation_assembly import (
     ProductionPreparationAssemblyError,
     assemble_preparation_planner_dependencies,
 )
+from .production_preparation_input_authority import (
+    PreparationInputAuthorityError,
+    planner_allowed_input_refs,
+)
 from .production_preparation_models import (
     PreparationStage,
     TaskPreparationPolicyBinding,
@@ -36,7 +40,7 @@ from .production_preparation_receipts import (
     read_preparation_receipt,
 )
 from .production_read_guard import ProductionReadGuardError
-from .production_work_order_models import DispatchContractCatalog
+from .production_work_order_models import DispatchContractCatalog, WorkOrderInputRef
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision
 from .state import TaskStatus
@@ -53,6 +57,7 @@ class RoutedPreparationPlannerBoundary:
     route: CapabilityRouteDecision
     dependencies: PreparationPlannerDependencies
     dispatch_catalog: DispatchContractCatalog
+    allowed_input_refs: tuple[WorkOrderInputRef, ...] = ()
 
 
 def _require_policy_receipt_relation(
@@ -163,11 +168,15 @@ def resolve_routed_preparation_planner_boundary(
             or contract.contract_id != owner.supported_dispatch_contract_id
             or contract.content_hash != owner.supported_dispatch_contract_hash
             or contract.adapter_fingerprint != owner.supported_adapter_fingerprint
-            or contract.max_input_refs != 0
         ):
             raise PreparationPlannerBoundaryError(
                 "current dispatch contract exceeds exact v1 preparation-owner authority"
             )
+        allowed_input_refs = planner_allowed_input_refs(
+            provenance.planning_input,
+            owner.owner_id,
+            contract,
+        )
     except PreparationPlannerBoundaryError:
         raise
     except (
@@ -176,6 +185,7 @@ def resolve_routed_preparation_planner_boundary(
         ProductionCapabilityStoreError,
         ProductionPreparationAssemblyError,
         ProductionPreparationProvenanceError,
+        PreparationInputAuthorityError,
         ProductionReadGuardError,
         CapabilityRoutingError,
         StaleRevision,
@@ -193,4 +203,5 @@ def resolve_routed_preparation_planner_boundary(
         route=route,
         dependencies=dependencies,
         dispatch_catalog=dispatch_catalog,
+        allowed_input_refs=allowed_input_refs,
     )
