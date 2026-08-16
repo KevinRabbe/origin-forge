@@ -172,7 +172,7 @@ providers = [
         first = build_builtin_preparation_owner_registry()
         second = build_builtin_preparation_owner_registry()
         self.assertEqual(first.fingerprint, second.fingerprint)
-        self.assertEqual(len(first.descriptors), 2)
+        self.assertEqual(len(first.descriptors), 3)
         owner = first.owner("originforge.preparation.work-order-planner@1")
         self.assertEqual(owner.owner_id, "originforge.preparation.work-order-planner@1")
         self.assertEqual(owner.planner_contract_id, "BoundedProductionWorkOrderPlanner.propose@1")
@@ -199,6 +199,12 @@ providers = [
             simulation_owner.model_strategy_roles,
             (ModelRole.CODER_STRONG,),
         )
+        pixelorama_owner = first.owner(
+            "originforge.preparation.pixelorama-spritesheet-export-planner@1"
+        )
+        self.assertEqual(pixelorama_owner.supported_adapter_id, "originforge.pixelorama.export")
+        self.assertEqual(pixelorama_owner.supported_dispatch_contract_id, "pixelorama.spritesheet-export@1")
+        self.assertEqual(pixelorama_owner.model_strategy_roles, (ModelRole.CODER_STRONG,))
         forbidden = {
             "callable",
             "import_path",
@@ -214,6 +220,7 @@ providers = [
         }
         self.assertTrue(forbidden.isdisjoint(owner.to_dict()))
         self.assertTrue(forbidden.isdisjoint(simulation_owner.to_dict()))
+        self.assertTrue(forbidden.isdisjoint(pixelorama_owner.to_dict()))
 
     def test_policy_owner_fields_are_derived_and_current(self) -> None:
         owner = require_current_preparation_owner(
