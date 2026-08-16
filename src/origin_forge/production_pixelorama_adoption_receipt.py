@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from .ids import IdKind, validate_id
 from .path_policy import portable_relative_path
@@ -119,6 +121,44 @@ def _from_row(row) -> PixeloramaProductionAdoptionReceipt:
         ) from exc
 
 
+def _require_exact_binding(conn, binding: PixeloramaDispatchOutputBinding) -> None:
+    row = conn.execute(
+        "SELECT * FROM pixelorama_dispatch_output_bindings WHERE execution_id = ?",
+        (binding.execution_id,),
+    ).fetchone()
+    if row is None:
+        raise PixeloramaProductionAdoptionReceiptError(
+            "production adoption requires an exact durable dispatch-output binding"
+        )
+    expected = binding.to_dict()
+    if any(row[key] != value for key, value in expected.items()):
+        raise PixeloramaProductionAdoptionReceiptError(
+            "production adoption binding drifted from immutable durable truth"
+        )
+
+
+def _expected_evidence(
+    binding: PixeloramaDispatchOutputBinding,
+    destination_path: str,
+) -> dict[str, object]:
+    content_hash = "sha256:" + binding.output_content_hash
+    return {
+        "source_artifact_id": binding.output_artifact_id,
+        "source_content_hash": content_hash,
+        "source_byte_count": binding.output_byte_count,
+        "destination_path": destination_path,
+        "destination_content_hash": content_hash,
+        "existing_asset_overwritten": False,
+        "production_task_verified": False,
+        "production_dispatch_output_bound": True,
+        "dispatch_execution_id": binding.execution_id,
+        "dispatch_claim_id": binding.claim_id,
+        "production_run_id": binding.run_id,
+        "semantic_visual_quality_verified": False,
+        "provenance_signed": False,
+    }
+
+
 def read_pixelorama_production_adoption_receipt(
     runtime: OriginForgeRuntime,
     execution_id: str,
@@ -162,15 +202,7 @@ def reserve_pixelorama_production_adoption(
     )
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
-        relation = conn.execute(
-            """SELECT output_artifact_id FROM pixelorama_dispatch_output_bindings
-               WHERE execution_id = ?""",
-            (binding.execution_id,),
-        ).fetchone()
-        if relation is None or relation["output_artifact_id"] != binding.output_artifact_id:
-            raise PixeloramaProductionAdoptionReceiptError(
-                "production adoption reservation does not match durable dispatch-output binding"
-            )
+        _require_exact_binding(conn, binding)
         existing_row = conn.execute(
             "SELECT * FROM pixelorama_production_adoptions WHERE execution_id = ?",
             (binding.execution_id,),
@@ -236,8 +268,11 @@ def finalize_pixelorama_production_adoption(
         raise ValueError("adopted_artifact_id must be an ART ID")
     if not validate_id(verification_id, IdKind.VERIFICATION):
         raise ValueError("verification_id must be a VER ID")
+    project_id = runtime.project_id()
+    expected_artifact_path = str(runtime.project_root / Path(destination_path))
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        _require_exact_binding(conn, binding)
         row = conn.execute(
             "SELECT * FROM pixelorama_production_adoptions WHERE execution_id = ?",
             (binding.execution_id,),
@@ -265,18 +300,32 @@ def finalize_pixelorama_production_adoption(
             )
 
         artifact = conn.execute(
-            """SELECT type, parent_artifact_id, created_by_run_id, status
+            """SELECT type, path_or_uri, content_hash, parent_artifact_id,
+                      created_by_run_id, status
                FROM artifacts WHERE id = ? AND project_id = ?""",
-            (adopted_artifact_id, runtime.project_id()),
+            (adopted_artifact_id, project_id),
         ).fetchone()
         verification = conn.execute(
-            """SELECT target_type, target_id, verification_type, verifier, status, run_id
+            """SELECT target_type, target_id, verification_type, verifier, status,
+                      evidence_json, run_id
                FROM verifications WHERE id = ?""",
             (verification_id,),
         ).fetchone()
+        try:
+            evidence = (
+                json.loads(verification["evidence_json"])
+                if verification is not None
+                else None
+            )
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise PixeloramaProductionAdoptionReceiptError(
+                "production adoption Verification evidence is invalid"
+            ) from exc
         if (
             artifact is None
             or artifact["type"] != "SPRITESHEET_EXPORT"
+            or artifact["path_or_uri"] != expected_artifact_path
+            or artifact["content_hash"] != "sha256:" + binding.output_content_hash
             or artifact["parent_artifact_id"] != binding.output_artifact_id
             or artifact["created_by_run_id"] != binding.run_id
             or artifact["status"] != "ADOPTED"
@@ -287,6 +336,7 @@ def finalize_pixelorama_production_adoption(
             or verification["verifier"] != PRODUCTION_ADOPTION_VERIFIER
             or verification["status"] != "PASS"
             or verification["run_id"] != binding.run_id
+            or evidence != _expected_evidence(binding, destination_path)
         ):
             raise PixeloramaProductionAdoptionReceiptError(
                 "production adoption Artifact/Verification relation is not exact"
