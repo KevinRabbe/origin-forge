@@ -1,0 +1,15 @@
+{
+  "action_kind": "PREPARE",
+  "authority": "single-manager-action-mechanics-only",
+  "binding_audit_id": null,
+  "claim_id": null,
+  "detail": "PreparationReceiptError: planner WorkOrder exceeds exact PREPPOL route/dispatch authority",
+  "dispatch_binding_id": null,
+  "execution_id": null,
+  "lower_status": "PLANNER_RECOVERY_REQUIRED",
+  "preparation_id": "PREP-a5300931-8012-4b20-819b-0bd797b65d19",
+  "preparation_policy_id": "PREPPOL-68d09f27-205e-4cf2-94a9-2e8bd97cdc60",
+  "status": "PREPARATION_PLANNER_RECOVERY_REQUIRED",
+  "task_created_at": "2026-08-16T08:38:40.985168Z",
+  "task_id": "TASK-50e6359a-72d9-45a9-83e4-1deff732d4b9"
+}
