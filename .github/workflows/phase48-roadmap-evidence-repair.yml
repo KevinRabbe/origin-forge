@@ -1,0 +1,31 @@
+name: Phase 48 roadmap evidence repair
+
+on:
+  push:
+    branches:
+      - chatgpt/phase48-roadmap-evidence-repair
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/phase48-roadmap-evidence-repair
+          fetch-depth: 0
+      - name: Correct Phase 48 roadmap evidence
+        shell: bash
+        run: |
+          python -c "from pathlib import Path; p=Path('docs/roadmap.md'); s=p.read_text(); pairs=[('31924707175','31926045992'),('31928255035','31929383977'),('31929089584','31929132808'),('31936867196','31930898625')]; [( (_ for _ in ()).throw(SystemExit(f'marker count {a}: {s.count(a)}')) if s.count(a)!=1 else None) for a,b in pairs]; [None for a,b in pairs if not (s:=s.replace(a,b,1))]; p.write_text(s)"
+          git diff --check
+          git diff -- docs/roadmap.md
+          git config user.name origin-forge-ci
+          git config user.email actions@users.noreply.github.com
+          git rm .github/workflows/phase48-roadmap-evidence-repair.yml
+          git add docs/roadmap.md
+          git commit -m "docs: correct Phase 48 roadmap evidence"
+          git push origin HEAD:chatgpt/phase48-roadmap-evidence-repair
