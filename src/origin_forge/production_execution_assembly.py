@@ -8,6 +8,12 @@ from .model_runtime_registry import ModelRuntimeBinding, ModelRuntimeRegistry, R
 from .model_scheduler import ModelRole, ModelSelectionPolicy
 from .model_scheduler_factory import ConfiguredModelScheduling, create_model_scheduling
 from .orchestration_policy import BoundedRetryPolicy
+from .pixelorama_cli_export import PixeloramaCliProfile
+from .production_pixelorama_profile import (
+    ProductionPixeloramaProfileError,
+    load_infrastructure_pixelorama_cli_profile,
+    pixelorama_cli_profile_dependency_hash,
+)
 from .production_dispatch_claim_read import (
     DispatchClaimCurrentnessStatus,
     inspect_dispatch_claim_currentness_readonly,
@@ -28,6 +34,7 @@ from .workspaces import GitWorkspaceManager
 
 _BOUNDED_RETRY_OWNER_ID = "originforge.execution.bounded-retry@1"
 _SIMULATION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
+_PIXELORAMA_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
 _NOT_REQUIRED_RESOURCE_MODEL_HASH = content_hash(
     {"kind": "NO_MODEL_RESOURCE_CONFIG", "version": 1}
 )
@@ -69,9 +76,10 @@ class ProductionExecutionDependencyPlan:
     runtime_provider_fingerprints: tuple[tuple[str, str], ...]
     sandbox_backend: str
     sandbox_config_hash: str
+    owner_dependency_hash: str | None = None
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        value = {
             "claim_id": self.claim_id,
             "claim_revision": self.claim_revision,
             "task_id": self.task_id,
@@ -98,6 +106,9 @@ class ProductionExecutionDependencyPlan:
             "sandbox_backend": self.sandbox_backend,
             "sandbox_config_hash": self.sandbox_config_hash,
         }
+        if self.owner_dependency_hash is not None:
+            value["owner_dependency_hash"] = self.owner_dependency_hash
+        return value
 
     @property
     def plan_hash(self) -> str:
@@ -127,8 +138,25 @@ class DeterministicSimulationExecutionPayload:
             )
 
 
+@dataclass(frozen=True)
+class PixeloramaSpritesheetExportExecutionPayload:
+    profile: PixeloramaCliProfile
+    profile_dependency_hash: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.profile, PixeloramaCliProfile):
+            raise TypeError("profile must be a PixeloramaCliProfile")
+        expected = pixelorama_cli_profile_dependency_hash(self.profile)
+        if self.profile_dependency_hash != expected:
+            raise ProductionExecutionAssemblyError(
+                "Pixelorama profile dependency hash is not current"
+            )
+
+
 ExecutionDependencyPayload = (
-    BoundedRetryExecutionPayload | DeterministicSimulationExecutionPayload
+    BoundedRetryExecutionPayload
+    | DeterministicSimulationExecutionPayload
+    | PixeloramaSpritesheetExportExecutionPayload
 )
 
 
@@ -160,6 +188,11 @@ class ProductionExecutionDependencies:
             if not isinstance(self.payload, DeterministicSimulationExecutionPayload):
                 raise ProductionExecutionAssemblyError(
                     "simulation owner requires no-runtime simulation payload"
+                )
+        elif self.owner.owner_id == _PIXELORAMA_OWNER_ID:
+            if not isinstance(self.payload, PixeloramaSpritesheetExportExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "Pixelorama owner requires trusted CLI profile payload"
                 )
         else:
             raise ProductionExecutionAssemblyError(
@@ -344,6 +377,54 @@ def _assemble_simulation_dependencies(
     )
 
 
+def _assemble_pixelorama_dependencies(
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _PIXELORAMA_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "Pixelorama dependency assembler received an unexpected owner"
+        )
+    if owner.model_strategy_roles:
+        raise ProductionExecutionAssemblyError(
+            "Pixelorama export owner must not require model strategy roles"
+        )
+    if owner.requires_sandbox or owner.requires_workspace_manager:
+        raise ProductionExecutionAssemblyError(
+            "Pixelorama export owner must not require coding sandbox or Git workspace authority"
+        )
+    try:
+        profile = load_infrastructure_pixelorama_cli_profile()
+    except ProductionPixeloramaProfileError as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted Pixelorama CLI profile is unavailable"
+        ) from exc
+    profile_hash = pixelorama_cli_profile_dependency_hash(profile)
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=profile_hash,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=PixeloramaSpritesheetExportExecutionPayload(
+            profile=profile,
+            profile_dependency_hash=profile_hash,
+        ),
+    )
+
+
 def _assemble_bounded_retry_dependencies(
     runtime: OriginForgeRuntime,
     claim,
@@ -500,6 +581,13 @@ def assemble_production_execution_dependencies(
             "no trusted execution owner matches the exact current dispatch binding"
         ) from exc
 
+    if owner.owner_id == _PIXELORAMA_OWNER_ID:
+        return _assemble_pixelorama_dependencies(
+            claim,
+            binding,
+            owner,
+            owner_registry,
+        )
     if owner.owner_id == _SIMULATION_OWNER_ID:
         return _assemble_simulation_dependencies(
             claim,

@@ -31,6 +31,7 @@ from .task_readiness import (
 
 _MAX_DETAIL_CHARS = 4096
 _SIMULATION_EXECUTION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
+_PIXELORAMA_EXECUTION_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
 
 
 class ProductionDispatchExecutionError(RuntimeError):
@@ -262,6 +263,54 @@ def _transition_simulation_task_running_connection(
     return new_revision, updated_hash
 
 
+def _transition_pixelorama_task_running_connection(
+    runtime: OriginForgeRuntime,
+    conn,
+    claim: DispatchClaim,
+    execution_id: str,
+    now: str,
+) -> tuple[int, str]:
+    ensure_transition(TaskStatus.READY, TaskStatus.RUNNING, TASK_TRANSITIONS)
+    new_revision = claim.task_revision + 1
+    cursor = conn.execute(
+        """UPDATE tasks
+           SET status = ?, revision = ?, updated_at = ?
+           WHERE id = ? AND status = ? AND revision = ?""",
+        (
+            TaskStatus.RUNNING.value,
+            new_revision,
+            now,
+            claim.task_id,
+            TaskStatus.READY.value,
+            claim.task_revision,
+        ),
+    )
+    if cursor.rowcount != 1:
+        raise StaleRevision(f"task {claim.task_id} changed concurrently")
+    updated = conn.execute("SELECT * FROM tasks WHERE id = ?", (claim.task_id,)).fetchone()
+    if updated is None:
+        raise ProductionDispatchExecutionError(
+            "Pixelorama Task disappeared during execution begin"
+        )
+    try:
+        updated_status = TaskStatus(updated["status"])
+        updated_revision = int(updated["revision"])
+        updated_hash = task_routing_hash(updated)
+    except (TypeError, ValueError) as exc:
+        raise ProductionDispatchExecutionError(
+            "Pixelorama Task failed canonical validation after RUNNING transition"
+        ) from exc
+    if updated_status is not TaskStatus.RUNNING or updated_revision != new_revision:
+        raise ProductionDispatchExecutionError(
+            "Pixelorama Task did not enter exact RUNNING revision"
+        )
+    if updated_hash == claim.task_content_hash:
+        raise ProductionDispatchExecutionError(
+            "Pixelorama Task RUNNING transition did not change revision-bound content hash"
+        )
+    return new_revision, updated_hash
+
+
 def _claim_matches_execution(claim: DispatchClaim, execution: DispatchExecution) -> bool:
     return (
         claim.project_id == execution.project_id
@@ -421,15 +470,26 @@ def begin_dispatch_execution(
             ),
         )
 
-        simulation_task_transition: tuple[int, str] | None = None
+        task_transition: tuple[int, str] | None = None
+        task_transition_reason: str | None = None
         if dependencies.plan.owner_id == _SIMULATION_EXECUTION_OWNER_ID:
-            simulation_task_transition = _transition_simulation_task_running_connection(
+            task_transition = _transition_simulation_task_running_connection(
                 runtime,
                 conn,
                 claim,
                 execution_id,
                 now,
             )
+            task_transition_reason = "SIMULATION_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _PIXELORAMA_EXECUTION_OWNER_ID:
+            task_transition = _transition_pixelorama_task_running_connection(
+                runtime,
+                conn,
+                claim,
+                execution_id,
+                now,
+            )
+            task_transition_reason = "PIXELORAMA_DISPATCH_EXECUTION_STARTED"
 
         runtime.store._append_event(
             conn,
@@ -451,8 +511,8 @@ def begin_dispatch_execution(
             },
             now,
         )
-        if simulation_task_transition is not None:
-            new_task_revision, new_task_hash = simulation_task_transition
+        if task_transition is not None:
+            new_task_revision, new_task_hash = task_transition
             runtime.store._append_event(
                 conn,
                 "TASK",
@@ -464,7 +524,7 @@ def begin_dispatch_execution(
                 "SYSTEM",
                 None,
                 {
-                    "reason": "SIMULATION_DISPATCH_EXECUTION_STARTED",
+                    "reason": task_transition_reason,
                     "claim_id": claim.claim_id,
                     "execution_id": execution_id,
                     "previous_task_content_hash": claim.task_content_hash,
@@ -495,7 +555,7 @@ def begin_dispatch_execution(
             raise ProductionDispatchExecutionError(
                 "begin transaction changed ACTIVE claim authority or lifecycle"
             )
-        if simulation_task_transition is not None:
+        if task_transition is not None:
             task_after = conn.execute(
                 "SELECT status, revision FROM tasks WHERE id = ?",
                 (claim.task_id,),
@@ -506,7 +566,7 @@ def begin_dispatch_execution(
                 or int(task_after["revision"]) != claim.task_revision + 1
             ):
                 raise ProductionDispatchExecutionError(
-                    "simulation begin transaction lost atomic RUNNING Task state"
+                    "managed non-code begin transaction lost atomic RUNNING Task state"
                 )
 
     return StartedDispatchExecution(result, dependencies)

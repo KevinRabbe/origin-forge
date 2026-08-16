@@ -9,6 +9,7 @@ from origin_forge.model_scheduler import ModelRole
 from origin_forge.production_capability_builtin import builtin_trusted_production_adapters
 from origin_forge.production_dispatch_binding import CodeBoundedRetryInputBinder
 from origin_forge.production_dispatch_binding_simulation import DeterministicSimulationInputBinder
+from origin_forge.production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
 from origin_forge.production_execution_owner import (
     ProductionExecutionOwnerDescriptor,
     ProductionExecutionOwnerError,
@@ -43,8 +44,8 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_builtin_owners_exactly_match_reviewed_adapters_and_binders(self) -> None:
         owners = builtin_execution_owner_descriptors()
-        self.assertEqual(len(owners), 2)
-        code_owner, simulation_owner = owners
+        self.assertEqual(len(owners), 3)
+        code_owner, simulation_owner, pixelorama_owner = owners
         adapters = {
             value.adapter_id: value for value in builtin_trusted_production_adapters()
         }
@@ -98,6 +99,23 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
         self.assertEqual(simulation_owner.model_strategy_roles, ())
         self.assertFalse(simulation_owner.requires_sandbox)
         self.assertFalse(simulation_owner.requires_workspace_manager)
+
+        pixelorama_adapter = adapters["originforge.pixelorama.export"]
+        pixelorama_binder = PixeloramaSpritesheetExportInputBinder().descriptor
+        self.assertEqual(
+            pixelorama_owner.owner_id,
+            "originforge.execution.pixelorama.spritesheet-export@1",
+        )
+        self.assertEqual(pixelorama_owner.adapter_id, pixelorama_adapter.adapter_id)
+        self.assertEqual(pixelorama_owner.adapter_fingerprint, pixelorama_adapter.implementation_fingerprint)
+        self.assertEqual(pixelorama_owner.dispatch_contract_id, pixelorama_binder.dispatch_contract_id)
+        self.assertEqual(pixelorama_owner.binder_id, pixelorama_binder.binder_id)
+        self.assertEqual(pixelorama_owner.binder_fingerprint, pixelorama_binder.binder_fingerprint)
+        self.assertEqual(pixelorama_owner.request_type_id, pixelorama_binder.request_type_id)
+        self.assertEqual(pixelorama_owner.request_schema_hash, pixelorama_binder.request_schema_hash)
+        self.assertEqual(pixelorama_owner.model_strategy_roles, ())
+        self.assertFalse(pixelorama_owner.requires_sandbox)
+        self.assertFalse(pixelorama_owner.requires_workspace_manager)
 
     def test_owner_and_registry_fingerprints_are_deterministic(self) -> None:
         first = build_builtin_execution_owner_registry()

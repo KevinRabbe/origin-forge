@@ -10,6 +10,7 @@ from .model_scheduler import ModelRole
 from .production_capability_builtin import builtin_trusted_production_adapters
 from .production_dispatch_binding import CodeBoundedRetryInputBinder
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
+from .production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
 
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -262,7 +263,35 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         requires_sandbox=False,
         requires_workspace_manager=False,
     )
-    return (code_owner, simulation_owner)
+    try:
+        pixelorama_adapter = adapters["originforge.pixelorama.export"]
+    except KeyError as exc:
+        raise ProductionExecutionOwnerError(
+            "built-in capability inventory lacks Pixelorama export adapter"
+        ) from exc
+    pixelorama_binder = PixeloramaSpritesheetExportInputBinder().descriptor
+    if (
+        pixelorama_binder.adapter_id != pixelorama_adapter.adapter_id
+        or pixelorama_binder.dispatch_contract_id != "pixelorama.spritesheet-export@1"
+    ):
+        raise ProductionExecutionOwnerError(
+            "built-in Pixelorama export binder relation drifted"
+        )
+    pixelorama_owner = ProductionExecutionOwnerDescriptor(
+        owner_id="originforge.execution.pixelorama.spritesheet-export@1",
+        owner_version="1",
+        adapter_id=pixelorama_adapter.adapter_id,
+        adapter_fingerprint=pixelorama_adapter.implementation_fingerprint,
+        dispatch_contract_id=pixelorama_binder.dispatch_contract_id,
+        binder_id=pixelorama_binder.binder_id,
+        binder_fingerprint=pixelorama_binder.binder_fingerprint,
+        request_type_id=pixelorama_binder.request_type_id,
+        request_schema_hash=pixelorama_binder.request_schema_hash,
+        model_strategy_roles=(),
+        requires_sandbox=False,
+        requires_workspace_manager=False,
+    )
+    return (code_owner, simulation_owner, pixelorama_owner)
 
 
 def build_builtin_execution_owner_registry() -> ProductionExecutionOwnerRegistry:
