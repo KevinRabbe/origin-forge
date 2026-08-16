@@ -17,6 +17,7 @@ from origin_forge.production_dispatch_binding import (
 from origin_forge.production_dispatch_binding_models import DispatchBindingCurrentnessStatus
 from origin_forge.production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
 from origin_forge.production_dispatch_read import inspect_dispatch_binding_currentness_readonly
+from origin_forge.production_dispatch_resolvers import ArtifactInputResolver
 from origin_forge.production_dispatch_store import ProductionDispatchStore
 from origin_forge.production_task_activation import activate_dependency_ready_task
 from origin_forge.production_work_order_audit import audit_work_order_frozen
@@ -182,7 +183,9 @@ class Phase48BPixeloramaReadCurrentnessRepairTests(unittest.TestCase):
         self.assertIn('binding.dispatch_contract_id != "pixelorama.spritesheet-export@1"', source)
         self.assertIn('binding.binder_id != "binder.pixelorama.spritesheet-export@1"', source)
         self.assertIn('resolved[0].original_ref.role != "pixelorama_project"', source)
-        self.assertNotIn("read_bytes()", source)
+        artifact_resolver_source = inspect.getsource(ArtifactInputResolver)
+        self.assertNotIn("read_bytes", artifact_resolver_source)
+        self.assertNotIn("open(", artifact_resolver_source)
 
 
 if __name__ == "__main__":
