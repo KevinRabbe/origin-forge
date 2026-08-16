@@ -14,6 +14,7 @@ from origin_forge.production_capability_store import ProductionCapabilityStore
 from origin_forge.production_dispatch_binding import (
     CodeBoundedRetryInputBinder,
     DeterministicSimulationInputBinder,
+    PixeloramaSpritesheetExportInputBinder,
     audit_dispatch_binding_frozen,
     build_builtin_dispatch_binder_registry,
     create_dispatch_binding,
@@ -179,19 +180,26 @@ class Phase47BSimulationRequestBindingTests(unittest.TestCase):
         self.assertEqual(self.runtime.get_task(self.task_id), task_before)
         self.assertEqual(self.runtime.list_runs(self.task_id), runs_before)
 
-    def test_builtin_registry_is_exactly_code_plus_simulation_and_zero_ref_closed(self) -> None:
+    def test_builtin_registry_preserves_code_simulation_and_adds_pixelorama(self) -> None:
         first = build_builtin_dispatch_binder_registry()
         second = build_builtin_dispatch_binder_registry()
         self.assertEqual(first.fingerprint, second.fingerprint)
         self.assertEqual(first.descriptors, second.descriptors)
         self.assertEqual(
             tuple(value.binder_id for value in first.descriptors),
-            ("binder.code.bounded-retry@1", "binder.simulation.deterministic@1"),
+            (
+                "binder.code.bounded-retry@1",
+                "binder.pixelorama.spritesheet-export@1",
+                "binder.simulation.deterministic@1",
+            ),
         )
         code = CodeBoundedRetryInputBinder().descriptor
+        pixelorama = PixeloramaSpritesheetExportInputBinder().descriptor
         simulation = DeterministicSimulationInputBinder().descriptor
         self.assertEqual(first.descriptors[0], code)
-        self.assertEqual(first.descriptors[1], simulation)
+        self.assertEqual(first.descriptors[1], pixelorama)
+        self.assertEqual(first.descriptors[2], simulation)
+        self.assertEqual(pixelorama.accepted_input_roles, ("pixelorama_project",))
         self.assertEqual(simulation.accepted_input_roles, ())
         contract = self.dispatch_catalog.contract("simulation.deterministic@1")
         self.assertEqual(contract.allowed_input_ref_types, ())

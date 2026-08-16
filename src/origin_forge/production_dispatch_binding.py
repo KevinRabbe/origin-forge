@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-# Phase 47B keeps the accepted Phase-34 implementation byte-identical in the
-# internal core module and narrows this public compatibility surface to the one
-# authority expansion required here: one additional reviewed simulation binder.
+# Phase 48B keeps the accepted Phase-34 core implementation byte-identical and
+# expands only this public compatibility surface with the reviewed Pixelorama
+# spritesheet-export binder alongside the existing code and simulation binders.
 from .production_dispatch_binding_core import *  # noqa: F401,F403
 from .production_dispatch_binding_core import (
     CodeBoundedRetryInputBinder,
@@ -12,15 +12,17 @@ from .production_dispatch_binding_core import (
     _frozen_binding_audit_matches,
     _require_bundle_revalidates,
 )
+from .production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
 
 
 def builtin_dispatch_binders() -> tuple[DispatchInputBinder, ...]:
-    """Return exactly the two reviewed Phase-47 production input binders."""
+    """Return exactly the three reviewed production input binders through Phase 48B."""
 
     return (
         CodeBoundedRetryInputBinder(),
         DeterministicSimulationInputBinder(),
+        PixeloramaSpritesheetExportInputBinder(),
     )
 
 

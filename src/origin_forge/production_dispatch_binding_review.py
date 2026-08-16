@@ -49,9 +49,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.pixelorama.export",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_COMPLETE_TYPED_PIXELORAMA_INPUT",
-            "34C admits no exact Pixelorama project/profile resolver, so the Phase-33 dispatch contract remains intentionally absent",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase-48A exposes pixelorama.spritesheet-export@1 and Phase-48B reconstructs the exact one-Artifact metadata-only Pixelorama export request without opening bytes or selecting editor authority",
         ),
         BuiltinBindingReview(
             "originforge.blender.model3d",
@@ -110,6 +110,11 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         (phase32.adapter("originforge.simulation.deterministic"),),
     )
     simulation_dispatch_catalog = build_builtin_dispatch_catalog(simulation_phase32)
+    pixelorama_phase32 = CapabilityCatalog.create(
+        (phase32.capability("media.2d.export"),),
+        (phase32.adapter("originforge.pixelorama.export"),),
+    )
+    pixelorama_dispatch_catalog = build_builtin_dispatch_catalog(pixelorama_phase32)
     resolver_registry = build_dispatch_input_resolver_registry()
     binder_registry = build_builtin_dispatch_binder_registry()
 
@@ -125,6 +130,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
     reviewed_contracts = (
         *code_dispatch_catalog.contracts,
         *simulation_dispatch_catalog.contracts,
+        *pixelorama_dispatch_catalog.contracts,
     )
     contract_by_adapter = {value.adapter_id: value for value in reviewed_contracts}
     if len(contract_by_adapter) != len(reviewed_contracts):

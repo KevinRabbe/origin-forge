@@ -261,7 +261,7 @@ class Phase48BPixeloramaRequestBindingTests(unittest.TestCase):
 
     def test_artifact_hash_drift_fails_in_existing_resolver_before_binding(self) -> None:
         drifted = replace(self.source_ref, content_hash="d" * 64)
-        with self.assertRaisesRegex(RuntimeError, "input resolution failed"):
+        with self.assertRaisesRegex(RuntimeError, "hash drifted"):
             self._bound_chain(source_ref=drifted)
 
     def test_frozen_audit_rejects_request_projection_forgery(self) -> None:

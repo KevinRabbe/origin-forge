@@ -37,6 +37,11 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             (phase32.adapter("originforge.simulation.deterministic"),),
         )
         simulation_dispatch = build_builtin_dispatch_catalog(simulation_phase32)
+        pixelorama_phase32 = CapabilityCatalog.create(
+            (phase32.capability("media.2d.export"),),
+            (phase32.adapter("originforge.pixelorama.export"),),
+        )
+        pixelorama_dispatch = build_builtin_dispatch_catalog(pixelorama_phase32)
         binder_registry = build_builtin_dispatch_binder_registry()
         rows = builtin_binding_review()
 
@@ -49,10 +54,15 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             bindable,
             {
                 "originforge.code.bounded-retry",
+                "originforge.pixelorama.export",
                 "originforge.simulation.deterministic",
             },
         )
-        reviewed_contracts = (*code_dispatch.contracts, *simulation_dispatch.contracts)
+        reviewed_contracts = (
+            *code_dispatch.contracts,
+            *simulation_dispatch.contracts,
+            *pixelorama_dispatch.contracts,
+        )
         self.assertEqual(
             bindable,
             {value.adapter_id for value in reviewed_contracts},
@@ -76,6 +86,10 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             simulation_dispatch.contract_ids,
             ("simulation.deterministic@1",),
         )
+        self.assertEqual(
+            pixelorama_dispatch.contract_ids,
+            ("pixelorama.spritesheet-export@1",),
+        )
 
     def test_audio_profile_resolution_does_not_silently_promote_audio_backends(self) -> None:
         resolver_registry = build_dispatch_input_resolver_registry()
@@ -91,6 +105,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         ffmpeg = rows["originforge.audio.ffmpeg"]
         piper = rows["originforge.audio.piper"]
         simulation = rows["originforge.simulation.deterministic"]
+        pixelorama = rows["originforge.pixelorama.export"]
         self.assertEqual(ffmpeg.status, BuiltinBindingReviewStatus.DEFERRED)
         self.assertEqual(
             ffmpeg.blocker,
@@ -106,6 +121,9 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         self.assertEqual(simulation.status, BuiltinBindingReviewStatus.BINDABLE)
         self.assertIsNone(simulation.blocker)
         self.assertIn("zero-ref", simulation.reason)
+        self.assertEqual(pixelorama.status, BuiltinBindingReviewStatus.BINDABLE)
+        self.assertIsNone(pixelorama.blocker)
+        self.assertIn("metadata-only", pixelorama.reason)
 
     def test_every_deferred_adapter_has_one_explicit_nonempty_blocker(self) -> None:
         rows = builtin_binding_review()
@@ -114,7 +132,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             for value in rows
             if value.status is BuiltinBindingReviewStatus.DEFERRED
         ]
-        self.assertEqual(len(deferred), 8)
+        self.assertEqual(len(deferred), 7)
         self.assertTrue(all(value.blocker for value in deferred))
         self.assertEqual(
             len({value.blocker for value in deferred}),
