@@ -3,9 +3,13 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from .migrations import LATEST_SCHEMA_VERSION, MIGRATIONS
+from .migrations import MIGRATIONS as BASE_MIGRATIONS
+from .production_pixelorama_dispatch_output_binding_migration import (
+    PIXELORAMA_DISPATCH_OUTPUT_BINDING_MIGRATION,
+)
 
-SCHEMA_VERSION = LATEST_SCHEMA_VERSION
+MIGRATIONS = (*BASE_MIGRATIONS, PIXELORAMA_DISPATCH_OUTPUT_BINDING_MIGRATION)
+SCHEMA_VERSION = MIGRATIONS[-1].version
 
 
 def connect(path: str | Path) -> sqlite3.Connection:
