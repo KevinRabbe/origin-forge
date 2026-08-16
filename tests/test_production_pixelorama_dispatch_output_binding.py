@@ -6,8 +6,8 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from origin_forge.db import SCHEMA_VERSION
 from origin_forge.ids import IdKind, new_id
-from origin_forge.migrations import LATEST_SCHEMA_VERSION
 from origin_forge.production_pixelorama_dispatch_output_binding_models import (
     PIXELORAMA_DISPATCH_OUTPUT_BINDING_SCHEMA_VERSION,
     PIXELORAMA_EXECUTION_OWNER_ID,
@@ -78,8 +78,6 @@ class PixeloramaDispatchOutputBindingTests(unittest.TestCase):
             "updated_at": "2026-08-16T16:00:00Z",
             "terminal_detail_hash": None,
         }
-        # This is a persistence-boundary fixture. Parent production rows are not
-        # material to 49A, so insert the already-valid receipt with FK checks off.
         conn = sqlite3.connect(self.runtime.store.db_path)
         try:
             conn.execute(
@@ -139,7 +137,7 @@ class PixeloramaDispatchOutputBindingTests(unittest.TestCase):
         )
 
     def test_schema_13_creates_narrow_binding_table_with_unique_output_identities(self) -> None:
-        self.assertEqual(LATEST_SCHEMA_VERSION, 13)
+        self.assertEqual(SCHEMA_VERSION, 13)
         with self.runtime.store.session() as conn:
             sql = conn.execute(
                 "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
