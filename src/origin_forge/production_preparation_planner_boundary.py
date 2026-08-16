@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .ids import IdKind, validate_id
 from .production_capability_routing import (
     CapabilityRouteOutcome,
     CapabilityRoutingError,
@@ -36,7 +37,12 @@ from .production_preparation_receipts import (
     read_preparation_receipt,
 )
 from .production_read_guard import ProductionReadGuardError
-from .production_work_order_models import DispatchContractCatalog
+from .production_work_order_models import (
+    DispatchContract,
+    DispatchContractCatalog,
+    WorkOrderInputRef,
+    WorkOrderRefType,
+)
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision
 from .state import TaskStatus
@@ -46,6 +52,51 @@ class PreparationPlannerBoundaryError(RuntimeError):
     pass
 
 
+_PIXELORAMA_PREPARATION_OWNER_ID = (
+    "originforge.preparation.pixelorama-spritesheet-export-planner@1"
+)
+_PIXELORAMA_PROJECT_ROLE = "pixelorama_project"
+
+
+def _planner_allowed_input_refs(
+    planning_input,
+    owner_id: str,
+    contract: DispatchContract,
+) -> tuple[WorkOrderInputRef, ...]:
+    """Project frozen PlanningInput evidence into owner-specific WorkOrder choices."""
+
+    if owner_id == _PIXELORAMA_PREPARATION_OWNER_ID:
+        if (
+            contract.max_input_refs != 1
+            or contract.allowed_input_ref_types != (WorkOrderRefType.ARTIFACT,)
+        ):
+            raise PreparationPlannerBoundaryError(
+                "Pixelorama preparation owner contract input authority drifted"
+            )
+        refs = tuple(
+            WorkOrderInputRef(
+                ref_type=WorkOrderRefType.ARTIFACT,
+                ref_id=value.ref_id,
+                content_hash=value.content_hash,
+                role=_PIXELORAMA_PROJECT_ROLE,
+                revision=None,
+            )
+            for value in planning_input.verified_state_refs
+            if value.revision is None and validate_id(value.ref_id, IdKind.ARTIFACT)
+        )
+        return tuple(
+            sorted(
+                refs,
+                key=lambda value: (value.ref_id, value.content_hash, value.role),
+            )
+        )
+    if contract.max_input_refs != 0:
+        raise PreparationPlannerBoundaryError(
+            "current dispatch contract exceeds exact v1 preparation-owner authority"
+        )
+    return ()
+
+
 @dataclass(frozen=True)
 class RoutedPreparationPlannerBoundary:
     receipt: TaskPreparationReceipt
@@ -53,6 +104,7 @@ class RoutedPreparationPlannerBoundary:
     route: CapabilityRouteDecision
     dependencies: PreparationPlannerDependencies
     dispatch_catalog: DispatchContractCatalog
+    allowed_input_refs: tuple[WorkOrderInputRef, ...] = ()
 
 
 def _require_policy_receipt_relation(
@@ -163,11 +215,15 @@ def resolve_routed_preparation_planner_boundary(
             or contract.contract_id != owner.supported_dispatch_contract_id
             or contract.content_hash != owner.supported_dispatch_contract_hash
             or contract.adapter_fingerprint != owner.supported_adapter_fingerprint
-            or contract.max_input_refs != 0
         ):
             raise PreparationPlannerBoundaryError(
                 "current dispatch contract exceeds exact v1 preparation-owner authority"
             )
+        allowed_input_refs = _planner_allowed_input_refs(
+            provenance.planning_input,
+            owner.owner_id,
+            contract,
+        )
     except PreparationPlannerBoundaryError:
         raise
     except (
@@ -193,4 +249,5 @@ def resolve_routed_preparation_planner_boundary(
         route=route,
         dependencies=dependencies,
         dispatch_catalog=dispatch_catalog,
+        allowed_input_refs=allowed_input_refs,
     )
