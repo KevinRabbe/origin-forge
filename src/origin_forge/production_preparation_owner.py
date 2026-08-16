@@ -252,7 +252,40 @@ def builtin_preparation_owner_descriptors() -> tuple[ProductionPreparationOwnerD
         model_strategy_roles=(ModelRole.CODER_STRONG,),
     )
 
-    return (code_owner, simulation_owner)
+    pixelorama_adapter_id = "originforge.pixelorama.export"
+    try:
+        pixelorama_adapter = adapters[pixelorama_adapter_id]
+    except KeyError as exc:
+        raise ProductionPreparationOwnerError(
+            "built-in capability inventory lacks Pixelorama export adapter"
+        ) from exc
+    pixelorama_phase32_catalog = CapabilityCatalog.create(
+        (phase32_catalog.capability("media.2d.export"),),
+        (phase32_catalog.adapter(pixelorama_adapter_id),),
+    )
+    pixelorama_catalog = build_builtin_dispatch_catalog(pixelorama_phase32_catalog)
+    try:
+        pixelorama_contract = pixelorama_catalog.contract_for_adapter(pixelorama_adapter_id)
+    except KeyError as exc:
+        raise ProductionPreparationOwnerError(
+            "built-in dispatch inventory lacks Pixelorama spritesheet-export contract"
+        ) from exc
+    if pixelorama_contract.adapter_fingerprint != pixelorama_adapter.implementation_fingerprint:
+        raise ProductionPreparationOwnerError(
+            "built-in Pixelorama preparation adapter/dispatch-contract relation drifted"
+        )
+    pixelorama_owner = ProductionPreparationOwnerDescriptor(
+        owner_id="originforge.preparation.pixelorama-spritesheet-export-planner@1",
+        owner_version="1",
+        planner_request_version="1",
+        planner_contract_id="BoundedProductionWorkOrderPlanner.propose@1",
+        supported_adapter_id=pixelorama_adapter.adapter_id,
+        supported_adapter_fingerprint=pixelorama_adapter.implementation_fingerprint,
+        supported_dispatch_contract_id=pixelorama_contract.contract_id,
+        supported_dispatch_contract_hash=pixelorama_contract.content_hash,
+        model_strategy_roles=(ModelRole.CODER_STRONG,),
+    )
+    return (code_owner, simulation_owner, pixelorama_owner)
 
 
 def build_builtin_preparation_owner_registry() -> ProductionPreparationOwnerRegistry:
