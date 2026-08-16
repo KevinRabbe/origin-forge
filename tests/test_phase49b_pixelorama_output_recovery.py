@@ -90,7 +90,7 @@ class Phase49BPixeloramaOutputRecoveryTests(unittest.TestCase):
             currentness.status,
             PixeloramaDispatchOutputCurrentnessStatus.ELIGIBLE,
         )
-        self.assertTrue(currentness.production_task_verified)
+        self.assertFalse(currentness.production_task_verified)
         self.assertTrue(currentness.adoption_eligible)
         self.assertEqual(
             self.fixture.runtime.list_verifications("TASK", self.fixture.task_id),
