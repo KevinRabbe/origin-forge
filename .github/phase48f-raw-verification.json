@@ -1,0 +1,29 @@
+{
+  "first": {
+    "action_kind": "PREPARE",
+    "authority": "single-manager-action-mechanics-only",
+    "binding_audit_id": null,
+    "claim_id": null,
+    "detail": null,
+    "dispatch_binding_id": null,
+    "execution_id": null,
+    "lower_status": "PLANNER_RETURNED",
+    "preparation_id": "PREP-47a5c6fe-2410-4846-b1af-db20fb740edf",
+    "preparation_policy_id": "PREPPOL-522dc6c0-99d7-47ec-8bbc-cd3757775d3e",
+    "status": "PREPARATION_PLANNER_RETURNED",
+    "task_created_at": "2026-08-16T11:32:50.958278Z",
+    "task_id": "TASK-cb4f7ea0-20af-4df8-bd1d-d7291f6661c4"
+  },
+  "rows": [
+    {
+      "evidence_json": "{\"audited\":false,\"dispatch_catalog_hash\":\"ce64d32e428c68b5a50ba39397c2ffc877b8581a3a5c09c10bc0803f78d49f25\",\"dispatch_catalog_id\":\"DISPCAT-36df6896-06d1-43b9-b162-6076d2aa3607\",\"dispatch_contract_hash\":\"7d58dbc8f1e64ce3e6464c86ecd23259ce9835101330dad1709d2260d7b85cb1\",\"dispatch_contract_id\":\"pixelorama.spritesheet-export@1\",\"dispatched\":false,\"model_hash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"model_id\":\"test-model\",\"payload_schema_hash\":\"eb33dfd244f46ce17b388498fe87cd33c47395ad0971722b7641d3360ab6e57b\",\"payload_schema_id\":\"schema.pixelorama.spritesheet-export@1\",\"proposal\":{\"contract_id\":\"pixelorama.spritesheet-export@1\",\"input_refs\":[{\"content_hash\":\"a2642a494d88f049a2b84c67eb431e5f06d9cf48d7a2c095442f7fafd2ef6ff9\",\"ref_id\":\"ART-cdb4838f-aa1d-4fe9-a1f0-79c2b0e4d754\",\"ref_type\":\"ARTIFACT\",\"revision\":null,\"role\":\"pixelorama_project\"}],\"payload\":{}},\"proposal_hash\":\"d9af22ffcca277a8725e11d4e6b76a5cf5988dd4aee356241738ea93cf6ae00f\",\"request_hash\":\"312d35dd33555152c3f7bfe8e0ca21d1fb120b24f8ef9181274de115ef33d855\",\"response_hash\":\"d9af22ffcca277a8725e11d4e6b76a5cf5988dd4aee356241738ea93cf6ae00f\",\"route_decision_hash\":\"ecfb43f3f54dac374fbc921e3883e577e3f26607ce6ed749c70f28096550ae6e\",\"route_decision_id\":\"CAPROUTE-87679b7b-8226-4f71-ace9-e7bd14338cd6\",\"task_content_hash\":\"4692ae9d2cc6bf5bb7616f89a88ae5781e25e1bb0bb01930036b9cfc52601ab5\",\"task_id\":\"TASK-cb4f7ea0-20af-4df8-bd1d-d7291f6661c4\",\"task_revision\":1,\"validator_fingerprint\":\"6c67b7c5c9f8fe598dfab2933fc000965aabaf767ac5c2043f5b86497b3be160\",\"validator_id\":\"validator.pixelorama.spritesheet-export@1\",\"work_order\":{\"dispatch_catalog_hash\":\"ce64d32e428c68b5a50ba39397c2ffc877b8581a3a5c09c10bc0803f78d49f25\",\"dispatch_catalog_id\":\"DISPCAT-36df6896-06d1-43b9-b162-6076d2aa3607\",\"dispatch_contract_hash\":\"7d58dbc8f1e64ce3e6464c86ecd23259ce9835101330dad1709d2260d7b85cb1\",\"dispatch_contract_id\":\"pixelorama.spritesheet-export@1\",\"flow_id\":\"FLOW-b56d76c7-813c-4803-b83d-b309baa37491\",\"input_refs\":[{\"content_hash\":\"a2642a494d88f049a2b84c67eb431e5f06d9cf48d7a2c095442f7fafd2ef6ff9\",\"ref_id\":\"ART-cdb4838f-aa1d-4fe9-a1f0-79c2b0e4d754\",\"ref_type\":\"ARTIFACT\",\"revision\":null,\"role\":\"pixelorama_project\"}],\"payload\":{},\"route_decision_hash\":\"ecfb43f3f54dac374fbc921e3883e577e3f26607ce6ed749c70f28096550ae6e\",\"route_decision_id\":\"CAPROUTE-87679b7b-8226-4f71-ace9-e7bd14338cd6\",\"selected_adapter_fingerprint\":\"492a89774fcecdcdcd649bef14be6a5fc21b1f5c0b0a511fbf0578abe4575d65\",\"selected_adapter_id\":\"originforge.pixelorama.export\",\"task_content_hash\":\"4692ae9d2cc6bf5bb7616f89a88ae5781e25e1bb0bb01930036b9cfc52601ab5\",\"task_id\":\"TASK-cb4f7ea0-20af-4df8-bd1d-d7291f6661c4\",\"task_revision\":1,\"work_order_id\":\"WORKORD-47a38d25-de3a-4d37-872a-b3f460e0594b\"},\"work_order_hash\":\"6028d885ce47e4078e04fb6b63e08d88439c3f266d4c068bb28b5db6d80e3d17\",\"work_order_id\":\"WORKORD-47a38d25-de3a-4d37-872a-b3f460e0594b\"}",
+      "id": "VERIFY-fce876ec-f21f-456d-8240-12e6a537b03c",
+      "metrics_json": "{\"allowed_input_refs\":1,\"input_tokens\":10,\"model_calls\":1,\"output_tokens\":5,\"response_bytes\":279}",
+      "run_id": "RUN-4572e2e7-072b-492c-94ab-0c102a7bee76",
+      "status": "PASS",
+      "target_id": "RUN-4572e2e7-072b-492c-94ab-0c102a7bee76",
+      "verification_type": "work-order-planner-generation",
+      "verifier": "OriginForge.BoundedProductionWorkOrderPlanner"
+    }
+  ]
+}
