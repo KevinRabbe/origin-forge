@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from .lineage import OriginForgeLineage
 from .pixelorama_cli_export import (
@@ -11,6 +12,7 @@ from .pixelorama_cli_export import (
     PixeloramaCliExportResult,
 )
 from .pixelorama_models import BridgeOperation
+from .pixelorama_png import PngError, inspect_rgba8_png
 from .production_dispatch_execution_models import DispatchExecutionStatus
 from .production_dispatch_execution_read import (
     DispatchExecutionCurrentnessStatus,
@@ -105,12 +107,17 @@ def _prefixed_output_hash(binding: PixeloramaDispatchOutputBinding) -> str:
     return "sha256:" + binding.output_content_hash
 
 
+def _valid_prefixed_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and value.startswith("sha256:")
+        and len(value) == 71
+        and all(ch in "0123456789abcdef" for ch in value[7:])
+    )
+
+
 def _bounded_stream_length(value: object, label: str) -> int:
-    if (
-        type(value) is not int
-        or value < 0
-        or value > _MAX_RECOVERED_STREAM_BYTES
-    ):
+    if type(value) is not int or value < 0 or value > _MAX_RECOVERED_STREAM_BYTES:
         raise RuntimeError(f"bound Pixelorama {label} length is invalid")
     return value
 
@@ -143,9 +150,7 @@ def _materialize_result_payloads(
     try:
         operation = PixeloramaCliExportResult(
             request=request,
-            workspace_path=(
-                runtime.state_dir / "media-workspaces" / request.workspace_id
-            ),
+            workspace_path=runtime.state_dir / "media-workspaces" / request.workspace_id,
             pixelorama_version=result_payload["pixelorama_version"],
             process_exit_code=result_payload["process_exit_code"],
             output_hash=result_payload["output_hash"],
@@ -162,13 +167,20 @@ def _materialize_result_payloads(
     if operation.to_dict() != result_payload:
         raise RuntimeError("bound Pixelorama result payload is not canonical")
     if (
-        operation.process_exit_code != 0
+        type(operation.process_exit_code) is not int
+        or operation.process_exit_code != 0
         or operation.output_hash != _prefixed_output_hash(binding)
+        or type(operation.output_byte_count) is not int
         or operation.output_byte_count != binding.output_byte_count
+        or type(operation.width) is not int
         or operation.width <= 0
+        or type(operation.height) is not int
         or operation.height <= 0
+        or type(operation.stdout_truncated) is not bool
+        or type(operation.stderr_truncated) is not bool
         or not isinstance(operation.pixelorama_version, str)
         or not operation.pixelorama_version
+        or len(operation.pixelorama_version) > 256
     ):
         raise RuntimeError("bound Pixelorama result payload drifted from immutable binding")
 
@@ -181,6 +193,32 @@ def _materialize_result_payloads(
         run_verification_id=binding.run_verification_id,
         operation=operation,
     )
+
+
+def _safe_exact_output_path(
+    runtime: OriginForgeRuntime,
+    artifact: dict[str, object],
+    request: PixeloramaCliExportRequest,
+) -> Path:
+    expected_location = (
+        f".origin-forge/media-workspaces/{request.workspace_id}/"
+        f"{request.output_relative_path}"
+    )
+    if artifact["path_or_uri"] != expected_location:
+        raise RuntimeError("bound Pixelorama output Artifact location drifted")
+    current = runtime.project_root
+    for part in Path(expected_location).parts:
+        current = current / part
+        if current.is_symlink():
+            raise RuntimeError("bound Pixelorama output path contains a symlink")
+    try:
+        resolved = current.resolve(strict=True)
+        resolved.relative_to(runtime.project_root.resolve())
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise RuntimeError("bound Pixelorama output escaped protected project state") from exc
+    if not resolved.is_file():
+        raise RuntimeError("bound Pixelorama output is not a regular file")
+    return resolved
 
 
 def require_bound_pixelorama_output_evidence(
@@ -220,9 +258,20 @@ def require_bound_pixelorama_output_evidence(
     result_artifact, result_payload = _artifact_json(
         lineage, binding.result_artifact_id, "result"
     )
+    materialized = _materialize_result_payloads(
+        runtime, binding, request_payload, result_payload
+    )
+    request = materialized.operation.request
+    operation = materialized.operation
+    expected_request_location = (
+        f".origin-forge/pixelorama-production-export-evidence/{binding.run_id}/request.json"
+    )
+    expected_result_location = (
+        f".origin-forge/pixelorama-production-export-evidence/{binding.run_id}/result.json"
+    )
     try:
         output_artifact = lineage.get_artifact(binding.output_artifact_id)
-        output_path = lineage.local_artifact_path(binding.output_artifact_id)
+        output_path = _safe_exact_output_path(runtime, output_artifact, request)
         output_bytes = output_path.read_bytes()
     except (KeyError, OSError, RuntimeError) as exc:
         raise RuntimeError("bound Pixelorama output Artifact cannot be reread") from exc
@@ -232,10 +281,12 @@ def require_bound_pixelorama_output_evidence(
         or request_artifact["created_by_run_id"] != binding.run_id
         or request_artifact["parent_artifact_id"] is not None
         or request_artifact["status"] != "CAPTURED"
+        or request_artifact["path_or_uri"] != expected_request_location
         or result_artifact["type"] != "PIXELORAMA_CLI_EXPORT_RESULT"
         or result_artifact["created_by_run_id"] != binding.run_id
         or result_artifact["parent_artifact_id"] != binding.request_artifact_id
         or result_artifact["status"] != "CAPTURED"
+        or result_artifact["path_or_uri"] != expected_result_location
         or output_artifact["type"] != "SPRITESHEET_EXPORT"
         or output_artifact["created_by_run_id"] != binding.run_id
         or output_artifact["parent_artifact_id"] != binding.result_artifact_id
@@ -245,12 +296,16 @@ def require_bound_pixelorama_output_evidence(
         or "sha256:" + hashlib.sha256(output_bytes).hexdigest() != prefixed_hash
     ):
         raise RuntimeError("bound Pixelorama Artifact lineage is not exact")
-
-    materialized = _materialize_result_payloads(
-        runtime, binding, request_payload, result_payload
-    )
-    if materialized.operation.output_hash != prefixed_hash:
-        raise RuntimeError("bound Pixelorama result materialization drifted")
+    try:
+        inspection = inspect_rgba8_png(output_bytes)
+    except PngError as exc:
+        raise RuntimeError("bound Pixelorama output failed structural PNG validation") from exc
+    if (
+        inspection.width != operation.width
+        or inspection.height != operation.height
+        or inspection.byte_count != binding.output_byte_count
+    ):
+        raise RuntimeError("bound Pixelorama PNG structure drifted from durable result")
 
     output_matches = [
         item
@@ -261,17 +316,33 @@ def require_bound_pixelorama_output_evidence(
         raise RuntimeError("bound Pixelorama output Verification is missing or ambiguous")
     output_verification = output_matches[0]
     output_evidence = _json_evidence(output_verification["evidence_json"], "output Verification")
+    executable_fingerprint = output_evidence.get("pixelorama_executable_fingerprint")
+    if not _valid_prefixed_sha256(executable_fingerprint):
+        raise RuntimeError("bound Pixelorama executable fingerprint evidence is invalid")
+    expected_output_evidence = {
+        "source_hash": request.source_hash,
+        "source_byte_count": request.source_byte_count,
+        "request_hash": request.content_hash,
+        "request_artifact_id": binding.request_artifact_id,
+        "result_artifact_id": binding.result_artifact_id,
+        "operation_id": request.operation_id,
+        "workspace_id": request.workspace_id,
+        "output_relative_path": request.output_relative_path,
+        "output_hash": prefixed_hash,
+        "output_byte_count": binding.output_byte_count,
+        "pixelorama_version": operation.pixelorama_version,
+        "pixelorama_executable_fingerprint": executable_fingerprint,
+        "png_inspection": inspection.to_dict(),
+        "semantic_visual_quality_verified": False,
+        "production_task_verified": False,
+        "canonical_asset_adopted": False,
+    }
     if (
         output_verification["verification_type"] != "pixelorama-cli-export-integrity"
         or output_verification["verifier"] != PixeloramaCliExportService.VERIFIER
         or output_verification["status"] != "PASS"
         or output_verification["run_id"] != binding.run_id
-        or output_evidence.get("request_artifact_id") != binding.request_artifact_id
-        or output_evidence.get("result_artifact_id") != binding.result_artifact_id
-        or output_evidence.get("output_hash") != prefixed_hash
-        or output_evidence.get("output_byte_count") != binding.output_byte_count
-        or output_evidence.get("production_task_verified") is not False
-        or output_evidence.get("canonical_asset_adopted") is not False
+        or output_evidence != expected_output_evidence
     ):
         raise RuntimeError("bound Pixelorama output Verification drifted")
 
@@ -284,20 +355,30 @@ def require_bound_pixelorama_output_evidence(
         raise RuntimeError("bound Pixelorama Run Verification is missing or ambiguous")
     run_verification = run_matches[0]
     run_evidence = _json_evidence(run_verification["evidence_json"], "Run Verification")
+    expected_run_evidence = {
+        "source_hash": request.source_hash,
+        "source_byte_count": request.source_byte_count,
+        "request_hash": request.content_hash,
+        "request_artifact_id": binding.request_artifact_id,
+        "result_artifact_id": binding.result_artifact_id,
+        "output_artifact_id": binding.output_artifact_id,
+        "output_verification_id": binding.output_verification_id,
+        "output_hash": prefixed_hash,
+        "output_byte_count": binding.output_byte_count,
+        "width": operation.width,
+        "height": operation.height,
+        "pixelorama_version": operation.pixelorama_version,
+        "pixelorama_executable_fingerprint": executable_fingerprint,
+        "production_task_verified": False,
+        "canonical_asset_adopted": False,
+        "provenance_signed": False,
+    }
     if (
         run_verification["verification_type"] != "pixelorama-cli-export"
         or run_verification["verifier"] != PixeloramaCliExportService.VERIFIER
         or run_verification["status"] != "PASS"
         or run_verification["run_id"] != binding.run_id
-        or run_evidence.get("request_artifact_id") != binding.request_artifact_id
-        or run_evidence.get("result_artifact_id") != binding.result_artifact_id
-        or run_evidence.get("output_artifact_id") != binding.output_artifact_id
-        or run_evidence.get("output_verification_id") != binding.output_verification_id
-        or run_evidence.get("output_hash") != prefixed_hash
-        or run_evidence.get("output_byte_count") != binding.output_byte_count
-        or run_evidence.get("production_task_verified") is not False
-        or run_evidence.get("canonical_asset_adopted") is not False
-        or run_evidence.get("provenance_signed") is not False
+        or run_evidence != expected_run_evidence
     ):
         raise RuntimeError("bound Pixelorama Run Verification drifted")
 
