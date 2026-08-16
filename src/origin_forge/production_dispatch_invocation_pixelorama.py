@@ -4,13 +4,10 @@ from . import _production_dispatch_invocation_pixelorama_core as core
 from .ids import IdKind, validate_id
 from .lineage import OriginForgeLineage
 from .production_dispatch_claim_models import DispatchClaimStatus
+from .production_dispatch_claim_read import read_dispatch_claim
 from .production_dispatch_execution import mark_dispatch_execution_returned
 from .production_dispatch_execution_models import DispatchExecutionStatus
-from .production_dispatch_execution_read import (
-    DispatchExecutionCurrentnessStatus,
-    inspect_dispatch_execution_currentness_readonly,
-    read_dispatch_execution,
-)
+from .production_dispatch_execution_read import read_dispatch_execution
 from .production_dispatch_invocation import (
     CompletedDispatchInvocation,
     ProductionDispatchInvocationError,
@@ -35,6 +32,7 @@ from .production_pixelorama_dispatch_output_currentness import (
     materialize_bound_pixelorama_result,
 )
 from .service import utc_now
+from .state import TaskStatus
 
 
 PixeloramaInvocationRequest = core.PixeloramaInvocationRequest
@@ -47,6 +45,43 @@ _PIXELORAMA_RETURNED_DETAIL = core._PIXELORAMA_RETURNED_DETAIL
 _MAX_OUTPUT_BYTES = core._MAX_OUTPUT_BYTES
 
 
+def _require_started_binding_authority(runtime, execution) -> None:
+    """Require the exact ACTIVE-claim/RUNNING-Task relation after Pixelorama STARTED."""
+    durable_execution = read_dispatch_execution(runtime, execution.execution_id)
+    claim = read_dispatch_claim(runtime, execution.claim_id)
+    task = runtime.get_task(execution.task_id)
+    if (
+        durable_execution != execution
+        or execution.status is not DispatchExecutionStatus.STARTED
+        or execution.execution_owner_id != PIXELORAMA_EXECUTION_OWNER_ID
+        or claim.status is not DispatchClaimStatus.ACTIVE
+        or claim.revision != execution.claim_revision_at_start
+        or claim.terminal_reason is not None
+        or claim.project_id != execution.project_id
+        or claim.claim_id != execution.claim_id
+        or claim.task_id != execution.task_id
+        or claim.task_revision != execution.task_revision
+        or claim.task_content_hash != execution.task_content_hash
+        or claim.work_order_id != execution.work_order_id
+        or claim.work_order_hash != execution.work_order_hash
+        or claim.input_resolution_id != execution.input_resolution_id
+        or claim.input_resolution_hash != execution.input_resolution_hash
+        or claim.dispatch_binding_id != execution.dispatch_binding_id
+        or claim.dispatch_binding_hash != execution.dispatch_binding_hash
+        or claim.binding_audit_id != execution.binding_audit_id
+        or claim.binding_audit_hash != execution.binding_audit_hash
+        or claim.selected_adapter_id != execution.selected_adapter_id
+        or claim.selected_adapter_fingerprint != execution.selected_adapter_fingerprint
+        or claim.dispatch_contract_id != execution.dispatch_contract_id
+        or claim.dispatch_contract_hash != execution.dispatch_contract_hash
+        or claim.binder_id != execution.binder_id
+        or claim.binder_fingerprint != execution.binder_fingerprint
+        or task["status"] != TaskStatus.RUNNING.value
+        or int(task["revision"]) != execution.task_revision + 1
+    ):
+        raise RuntimeError("Pixelorama STARTED execution authority drifted")
+
+
 def _publish_result_binding(
     runtime,
     execution,
@@ -57,17 +92,7 @@ def _publish_result_binding(
 ) -> PixeloramaDispatchOutputBinding:
     """Revalidate and publish the exact Phase-48 result before RETURNED terminalization."""
     try:
-        durable_execution = read_dispatch_execution(runtime, execution.execution_id)
-        execution_currentness = inspect_dispatch_execution_currentness_readonly(
-            runtime, execution.execution_id
-        )
-        if (
-            durable_execution != execution
-            or durable_execution.status is not DispatchExecutionStatus.STARTED
-            or execution_currentness.status
-            is not DispatchExecutionCurrentnessStatus.CURRENT_STARTED
-        ):
-            raise RuntimeError("Pixelorama STARTED execution authority drifted")
+        _require_started_binding_authority(runtime, execution)
         core._require_pixelorama_result_durable(
             runtime,
             frozen_request,
@@ -284,10 +309,10 @@ def recover_pixelorama_dispatch_execution_once(
             execution_id, "OWNER_RETURN_CONTRACT_MISMATCH"
         ) from exc
 
-    currentness = inspect_pixelorama_dispatch_output_currentness_readonly(
-        runtime, execution_id
-    )
     if execution.status is DispatchExecutionStatus.RETURNED:
+        currentness = inspect_pixelorama_dispatch_output_currentness_readonly(
+            runtime, execution_id
+        )
         if currentness.status is not PixeloramaDispatchOutputCurrentnessStatus.ELIGIBLE:
             raise ProductionDispatchInvocationRecoveryRequired(
                 execution_id, "OWNER_RETURN_CONTRACT_MISMATCH"
@@ -296,15 +321,12 @@ def recover_pixelorama_dispatch_execution_once(
             execution,
             pixelorama_result=pixelorama_result,
         )
-    if (
-        execution.status is not DispatchExecutionStatus.STARTED
-        or currentness.status
-        is not PixeloramaDispatchOutputCurrentnessStatus.EXECUTION_NOT_RETURNED
-    ):
+    if execution.status is not DispatchExecutionStatus.STARTED:
         raise ProductionDispatchInvocationRecoveryRequired(
             execution_id, "STARTED_RELATION_MISMATCH"
         )
     try:
+        _require_started_binding_authority(runtime, execution)
         returned = mark_dispatch_execution_returned(
             runtime,
             execution.execution_id,
@@ -312,6 +334,8 @@ def recover_pixelorama_dispatch_execution_once(
             execution.claim_revision_at_start,
             _PIXELORAMA_RETURNED_DETAIL,
         )
+    except ProductionDispatchInvocationRecoveryRequired:
+        raise
     except Exception as exc:
         raise ProductionDispatchInvocationRecoveryRequired(
             execution_id, "RETURNED_TERMINALIZATION_FAILED"
