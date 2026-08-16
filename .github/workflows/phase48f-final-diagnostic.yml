@@ -1,0 +1,38 @@
+name: Phase 48F final bounded diagnostic
+
+on:
+  push:
+    branches:
+      - chatgpt/phase48f-pixelorama-invocation
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Capture exact current Phase 48F failures and self-remove
+        env:
+          PYTHONPATH: src
+        run: |
+          set +e
+          python -W error::ResourceWarning -m unittest -v \
+            tests.test_phase48f_pixelorama_cross_phase_acceptance \
+            tests.test_phase48f_pixelorama_materializer_security \
+            tests.test_phase48f_pixelorama_invocation \
+            > .github/phase48f-final-diagnostic.txt 2>&1
+          status=$?
+          set -e
+          printf '\nEXIT_STATUS=%s\n' "$status" >> .github/phase48f-final-diagnostic.txt
+          rm .github/workflows/phase48f-final-diagnostic.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/phase48f-final-diagnostic.txt .github/workflows/phase48f-final-diagnostic.yml
+          git commit -m "Phase 48F: capture final bounded diagnostic evidence"
+          git push
