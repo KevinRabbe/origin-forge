@@ -6,7 +6,11 @@ from .lineage import OriginForgeLineage
 from .production_dispatch_claim_models import DispatchClaimStatus
 from .production_dispatch_execution import mark_dispatch_execution_returned
 from .production_dispatch_execution_models import DispatchExecutionStatus
-from .production_dispatch_execution_read import read_dispatch_execution
+from .production_dispatch_execution_read import (
+    DispatchExecutionCurrentnessStatus,
+    inspect_dispatch_execution_currentness_readonly,
+    read_dispatch_execution,
+)
 from .production_dispatch_invocation import (
     CompletedDispatchInvocation,
     ProductionDispatchInvocationError,
@@ -43,8 +47,40 @@ _PIXELORAMA_RETURNED_DETAIL = core._PIXELORAMA_RETURNED_DETAIL
 _MAX_OUTPUT_BYTES = core._MAX_OUTPUT_BYTES
 
 
-def _publish_result_binding(runtime, execution, pixelorama_result) -> PixeloramaDispatchOutputBinding:
-    """Publish the exact Phase-48 result relation before RETURNED terminalization."""
+def _publish_result_binding(
+    runtime,
+    execution,
+    frozen_request,
+    concrete_request,
+    pixelorama_result,
+    payload,
+) -> PixeloramaDispatchOutputBinding:
+    """Revalidate and publish the exact Phase-48 result before RETURNED terminalization."""
+    try:
+        durable_execution = read_dispatch_execution(runtime, execution.execution_id)
+        execution_currentness = inspect_dispatch_execution_currentness_readonly(
+            runtime, execution.execution_id
+        )
+        if (
+            durable_execution != execution
+            or durable_execution.status is not DispatchExecutionStatus.STARTED
+            or execution_currentness.status
+            is not DispatchExecutionCurrentnessStatus.CURRENT_STARTED
+        ):
+            raise RuntimeError("Pixelorama STARTED execution authority drifted")
+        core._require_pixelorama_result_durable(
+            runtime,
+            frozen_request,
+            concrete_request,
+            pixelorama_result,
+            payload,
+        )
+    except Exception as exc:
+        raise ProductionDispatchInvocationRecoveryRequired(
+            execution.execution_id,
+            "OWNER_RETURN_CONTRACT_MISMATCH",
+        ) from exc
+
     try:
         existing = read_pixelorama_dispatch_output_binding(runtime, execution.execution_id)
     except PixeloramaDispatchOutputBindingReadError:
@@ -201,7 +237,14 @@ def _dispatch_claim_once_three_owner(
             execution.execution_id, "OWNER_RETURN_CONTRACT_MISMATCH"
         ) from exc
 
-    _publish_result_binding(runtime, execution, pixelorama_result)
+    _publish_result_binding(
+        runtime,
+        execution,
+        request,
+        concrete_request,
+        pixelorama_result,
+        payload,
+    )
     returned = legacy._record_returned_or_recovery(
         runtime, started, frozen_claim, detail=_PIXELORAMA_RETURNED_DETAIL
     )
