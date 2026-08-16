@@ -1,0 +1,57 @@
+name: Phase 48F bounded integration
+
+on:
+  push:
+    branches:
+      - chatgpt/phase48f-pixelorama-invocation
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact Phase 48F integration patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/origin_forge/production_dispatch_invocation.py')
+          text = path.read_text(encoding='utf-8')
+
+          import_anchor = '''from .production_execution_owner import (\n    ProductionExecutionOwnerError,\n    build_builtin_execution_owner_registry,\n)\n'''
+          import_replacement = import_anchor + '''from .production_pixelorama_export import PixeloramaCliExportServiceResult\n'''
+          if text.count(import_anchor) != 1:
+              raise SystemExit('unexpected production invocation import anchor')
+          text = text.replace(import_anchor, import_replacement, 1)
+
+          start = text.index('@dataclass(frozen=True)\nclass CompletedDispatchInvocation:')
+          end = text.index('\ndef _require_trusted_relation(', start)
+          replacement = '''@dataclass(frozen=True)\nclass CompletedDispatchInvocation:\n    \"\"\"Synchronous non-canonical wrapper around exactly one reviewed owner return.\"\"\"\n\n    execution: DispatchExecution\n    policy_result: PolicyResult | None = None\n    simulation_result: SimulationServiceResult | None = None\n    pixelorama_result: PixeloramaCliExportServiceResult | None = None\n\n    def __post_init__(self) -> None:\n        if not isinstance(self.execution, DispatchExecution):\n            raise TypeError(\"execution must be a DispatchExecution\")\n        if self.execution.status is not DispatchExecutionStatus.RETURNED:\n            raise ProductionDispatchInvocationError(\n                \"completed invocation wrapper requires RETURNED execution\"\n            )\n        has_policy = self.policy_result is not None\n        has_simulation = self.simulation_result is not None\n        has_pixelorama = self.pixelorama_result is not None\n        if sum((has_policy, has_simulation, has_pixelorama)) != 1:\n            raise ProductionDispatchInvocationError(\n                \"completed invocation requires exactly one reviewed owner result\"\n            )\n        if self.execution.execution_owner_id == _BOUNDED_OWNER_ID:\n            if (\n                not isinstance(self.policy_result, PolicyResult)\n                or has_simulation\n                or has_pixelorama\n            ):\n                raise ProductionDispatchInvocationError(\n                    \"bounded execution requires exactly one PolicyResult\"\n                )\n            if self.execution.task_id != self.policy_result.task_id:\n                raise ProductionDispatchInvocationError(\n                    \"completed invocation Task relation drifted\"\n                )\n        elif self.execution.execution_owner_id == _SIMULATION_OWNER_ID:\n            if (\n                not isinstance(self.simulation_result, SimulationServiceResult)\n                or has_policy\n                or has_pixelorama\n            ):\n                raise ProductionDispatchInvocationError(\n                    \"simulation execution requires exactly one SimulationServiceResult\"\n                )\n        elif self.execution.execution_owner_id == \"originforge.execution.pixelorama.spritesheet-export@1\":\n            if (\n                not isinstance(self.pixelorama_result, PixeloramaCliExportServiceResult)\n                or has_policy\n                or has_simulation\n            ):\n                raise ProductionDispatchInvocationError(\n                    \"Pixelorama execution requires exactly one PixeloramaCliExportServiceResult\"\n                )\n        else:\n            raise ProductionDispatchInvocationError(\n                \"completed invocation has an unsupported execution owner\"\n            )\n\n    @property\n    def execution_id(self) -> str:\n        return self.execution.execution_id\n\n'''
+          text = text[:start] + replacement + text[end + 1:]
+
+          alias = '''\n\n_legacy_dispatch_claim_once = dispatch_claim_once\nfrom .production_dispatch_invocation_pixelorama import (\n    _dispatch_claim_once_three_owner as dispatch_claim_once,\n)\n'''
+          if '_legacy_dispatch_claim_once = dispatch_claim_once' in text:
+              raise SystemExit('Phase 48F alias already present')
+          text = text.rstrip() + alias
+          path.write_text(text, encoding='utf-8')
+
+          test_path = Path('tests/test_phase47e_simulation_invocation.py')
+          test_text = test_path.read_text(encoding='utf-8')
+          old = 'source = inspect.getsource(invocation_module.dispatch_claim_once)'
+          new = 'source = inspect.getsource(invocation_module._legacy_dispatch_claim_once)'
+          if test_text.count(old) != 1:
+              raise SystemExit('unexpected Phase 47E call-site anchor')
+          test_path.write_text(test_text.replace(old, new, 1), encoding='utf-8')
+          PY
+          rm .github/workflows/phase48f-apply.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/origin_forge/production_dispatch_invocation.py tests/test_phase47e_simulation_invocation.py .github/workflows/phase48f-apply.yml
+          git commit -m "Phase 48F: integrate third dispatch owner"
+          git push
