@@ -468,6 +468,6 @@ def inspect_pixelorama_dispatch_output_currentness_readonly(
         execution.task_id,
         binding.output_artifact_id,
         PixeloramaDispatchOutputCurrentnessStatus.ELIGIBLE,
-        True,
+        False,
         None,
     )
