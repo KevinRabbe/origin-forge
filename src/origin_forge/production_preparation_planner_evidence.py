@@ -23,6 +23,8 @@ from .production_preparation_receipts import (
 )
 from .production_work_order_models import (
     ProductionWorkOrderModelError,
+    WorkOrderInputRef,
+    WorkOrderRefType,
     content_hash,
 )
 from .production_work_order_planner import WorkOrderPlannerResult
@@ -178,13 +180,56 @@ def _digest(value: object, label: str, *, nullable: bool = False) -> str | None:
 def _work_order_from_evidence(value: object) -> ProductionWorkOrder:
     if not isinstance(value, dict) or set(value) != _WORK_ORDER_KEYS:
         raise PreparationPlannerEvidenceError("planner WorkOrder schema drifted")
-    if value["input_refs"] != []:
-        raise PreparationPlannerEvidenceError(
-            "Phase-39 v1 planner evidence may not contain WorkOrder input refs"
-        )
     payload = value["payload"]
     if not isinstance(payload, dict):
         raise PreparationPlannerEvidenceError("planner WorkOrder payload is invalid")
+
+    raw_refs = value["input_refs"]
+    if not isinstance(raw_refs, list):
+        raise PreparationPlannerEvidenceError("planner WorkOrder input refs are not a list")
+    if (
+        value["selected_adapter_id"] == "originforge.pixelorama.export"
+        and value["dispatch_contract_id"] == "pixelorama.spritesheet-export@1"
+    ):
+        if len(raw_refs) != 1 or not isinstance(raw_refs[0], dict):
+            raise PreparationPlannerEvidenceError(
+                "Pixelorama planner WorkOrder requires exactly one input ref"
+            )
+        raw_ref = raw_refs[0]
+        if set(raw_ref) != {"ref_type", "ref_id", "content_hash", "role", "revision"}:
+            raise PreparationPlannerEvidenceError(
+                "Pixelorama planner WorkOrder input ref schema drifted"
+            )
+        try:
+            refs = (
+                WorkOrderInputRef(
+                    ref_type=WorkOrderRefType(raw_ref["ref_type"]),
+                    ref_id=raw_ref["ref_id"],
+                    content_hash=raw_ref["content_hash"],
+                    role=raw_ref["role"],
+                    revision=raw_ref["revision"],
+                ),
+            )
+        except (ProductionWorkOrderModelError, TypeError, ValueError) as exc:
+            raise PreparationPlannerEvidenceError(
+                "Pixelorama planner WorkOrder input ref failed reconstruction"
+            ) from exc
+        ref = refs[0]
+        if (
+            ref.ref_type is not WorkOrderRefType.ARTIFACT
+            or ref.role != "pixelorama_project"
+            or ref.revision is not None
+        ):
+            raise PreparationPlannerEvidenceError(
+                "Pixelorama planner WorkOrder input ref authority drifted"
+            )
+    else:
+        if raw_refs != []:
+            raise PreparationPlannerEvidenceError(
+                "non-Pixelorama planner evidence may not contain WorkOrder input refs"
+            )
+        refs = ()
+
     try:
         payload_json = json.dumps(
             payload,
@@ -207,7 +252,7 @@ def _work_order_from_evidence(value: object) -> ProductionWorkOrder:
             dispatch_catalog_hash=value["dispatch_catalog_hash"],
             dispatch_contract_id=value["dispatch_contract_id"],
             dispatch_contract_hash=value["dispatch_contract_hash"],
-            input_refs=(),
+            input_refs=refs,
             payload_json=payload_json,
         )
     except (
@@ -255,7 +300,6 @@ def _row_to_result(
         evidence["audited"] is not False
         or evidence["dispatched"] is not False
         or metrics["model_calls"] != 1
-        or metrics["allowed_input_refs"] != 0
         or type(metrics["response_bytes"]) is not int
         or metrics["response_bytes"] < 0
     ):
@@ -291,7 +335,8 @@ def _row_to_result(
 
     work_order = _work_order_from_evidence(evidence["work_order"])
     if (
-        work_order.work_order_id != evidence["work_order_id"]
+        metrics["allowed_input_refs"] != len(work_order.input_refs)
+        or work_order.work_order_id != evidence["work_order_id"]
         or work_order.content_hash != evidence["work_order_hash"]
         or work_order.task_id != evidence["task_id"]
         or work_order.task_revision != evidence["task_revision"]
