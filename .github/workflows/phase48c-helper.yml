@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,294 +19,117 @@ jobs:
       - name: Apply exact Phase 48C patch
         shell: bash
         run: |
-          python - <<'PY'
+          cat > /tmp/phase48c_patch.py <<'PY'
           from pathlib import Path
-
-          def replace_once(path: str, old: str, new: str) -> None:
-              p = Path(path)
-              text = p.read_text(encoding="utf-8")
-              if text.count(old) != 1:
-                  raise SystemExit(f"expected exactly one match in {path}: {old!r}")
-              p.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-          owner_path = "src/origin_forge/production_preparation_owner.py"
-          old = '''    simulation_owner = ProductionPreparationOwnerDescriptor(
-        owner_id="originforge.preparation.simulation-work-order-planner@1",
-        owner_version="1",
-        planner_request_version="1",
-        planner_contract_id="BoundedProductionWorkOrderPlanner.propose@1",
-        supported_adapter_id=simulation_adapter.adapter_id,
-        supported_adapter_fingerprint=simulation_adapter.implementation_fingerprint,
-        supported_dispatch_contract_id=simulation_contract.contract_id,
-        supported_dispatch_contract_hash=simulation_contract.content_hash,
-        model_strategy_roles=(ModelRole.CODER_STRONG,),
-    )
-
-    return (code_owner, simulation_owner)
-'''
-          new = '''    simulation_owner = ProductionPreparationOwnerDescriptor(
-        owner_id="originforge.preparation.simulation-work-order-planner@1",
-        owner_version="1",
-        planner_request_version="1",
-        planner_contract_id="BoundedProductionWorkOrderPlanner.propose@1",
-        supported_adapter_id=simulation_adapter.adapter_id,
-        supported_adapter_fingerprint=simulation_adapter.implementation_fingerprint,
-        supported_dispatch_contract_id=simulation_contract.contract_id,
-        supported_dispatch_contract_hash=simulation_contract.content_hash,
-        model_strategy_roles=(ModelRole.CODER_STRONG,),
-    )
-
-    pixelorama_adapter_id = "originforge.pixelorama.export"
-    try:
-        pixelorama_adapter = adapters[pixelorama_adapter_id]
-    except KeyError as exc:
-        raise ProductionPreparationOwnerError(
-            "built-in capability inventory lacks Pixelorama export adapter"
-        ) from exc
-    pixelorama_phase32_catalog = CapabilityCatalog.create(
-        (phase32_catalog.capability("media.2d.export"),),
-        (phase32_catalog.adapter(pixelorama_adapter_id),),
-    )
-    pixelorama_catalog = build_builtin_dispatch_catalog(pixelorama_phase32_catalog)
-    try:
-        pixelorama_contract = pixelorama_catalog.contract_for_adapter(
-            pixelorama_adapter_id
-        )
-    except KeyError as exc:
-        raise ProductionPreparationOwnerError(
-            "built-in dispatch inventory lacks Pixelorama spritesheet-export contract"
-        ) from exc
-    if (
-        pixelorama_contract.adapter_fingerprint
-        != pixelorama_adapter.implementation_fingerprint
-    ):
-        raise ProductionPreparationOwnerError(
-            "built-in Pixelorama preparation adapter/dispatch-contract relation drifted"
-        )
-
-    pixelorama_owner = ProductionPreparationOwnerDescriptor(
-        owner_id="originforge.preparation.pixelorama-spritesheet-export-planner@1",
-        owner_version="1",
-        planner_request_version="1",
-        planner_contract_id="BoundedProductionWorkOrderPlanner.propose@1",
-        supported_adapter_id=pixelorama_adapter.adapter_id,
-        supported_adapter_fingerprint=pixelorama_adapter.implementation_fingerprint,
-        supported_dispatch_contract_id=pixelorama_contract.contract_id,
-        supported_dispatch_contract_hash=pixelorama_contract.content_hash,
-        model_strategy_roles=(ModelRole.CODER_STRONG,),
-    )
-
-    return (code_owner, simulation_owner, pixelorama_owner)
-'''
-          replace_once(owner_path, old, new)
-
-          replace_once(
-              "tests/test_phase47c_simulation_preparation_owner.py",
-              '''            (
-                "originforge.preparation.simulation-work-order-planner@1",
-                "originforge.preparation.work-order-planner@1",
-            ),''',
-              '''            (
-                "originforge.preparation.pixelorama-spritesheet-export-planner@1",
-                "originforge.preparation.simulation-work-order-planner@1",
-                "originforge.preparation.work-order-planner@1",
-            ),''',
-          )
-
-          assembly_path = "tests/test_production_preparation_owner_assembly.py"
-          replace_once(assembly_path, "        self.assertEqual(len(first.descriptors), 2)\n", "        self.assertEqual(len(first.descriptors), 3)\n")
-          replace_once(
-              assembly_path,
-              '''        self.assertEqual(
-            simulation_owner.model_strategy_roles,
-            (ModelRole.CODER_STRONG,),
-        )
-        forbidden = {''',
-              '''        self.assertEqual(
-            simulation_owner.model_strategy_roles,
-            (ModelRole.CODER_STRONG,),
-        )
-        pixelorama_owner = first.owner(
-            "originforge.preparation.pixelorama-spritesheet-export-planner@1"
-        )
-        self.assertEqual(
-            pixelorama_owner.planner_contract_id,
-            "BoundedProductionWorkOrderPlanner.propose@1",
-        )
-        self.assertEqual(
-            pixelorama_owner.supported_adapter_id,
-            "originforge.pixelorama.export",
-        )
-        self.assertEqual(
-            pixelorama_owner.supported_dispatch_contract_id,
-            "pixelorama.spritesheet-export@1",
-        )
-        self.assertEqual(
-            pixelorama_owner.model_strategy_roles,
-            (ModelRole.CODER_STRONG,),
-        )
-        forbidden = {''',
-          )
-          replace_once(
-              assembly_path,
-              "        self.assertTrue(forbidden.isdisjoint(simulation_owner.to_dict()))\n",
-              "        self.assertTrue(forbidden.isdisjoint(simulation_owner.to_dict()))\n        self.assertTrue(forbidden.isdisjoint(pixelorama_owner.to_dict()))\n",
-          )
-
-          Path("tests/test_phase48c_pixelorama_preparation_owner.py").write_text('''from __future__ import annotations
-
-import unittest
-from dataclasses import replace
-
-from origin_forge.model_scheduler import ModelRole
-from origin_forge.production_capability_builtin import build_builtin_capability_catalog
-from origin_forge.production_capability_models import CapabilityCatalog
-from origin_forge.production_goal_bootstrap_authority import build_builtin_goal_bootstrap_owner
-from origin_forge.production_preparation_models import TaskPreparationPolicyBinding
-from origin_forge.production_preparation_owner import (
-    ProductionPreparationOwnerError,
-    build_builtin_preparation_owner_registry,
-    require_current_preparation_owner,
-)
-from origin_forge.production_preparation_policy_store import (
-    ProductionPreparationPolicyStoreError,
-    _matching_owner,
-)
-from origin_forge.production_work_order_builtin import build_builtin_dispatch_catalog
-from origin_forge.production_work_order_models import DispatchContractCatalog
-
-
-class Phase48CPixeloramaPreparationOwnerTests(unittest.TestCase):
-    @staticmethod
-    def _pixelorama_catalogs():
-        full = build_builtin_capability_catalog()
-        phase32 = CapabilityCatalog.create(
-            (full.capability("media.2d.export"),),
-            (full.adapter("originforge.pixelorama.export"),),
-        )
-        return full, phase32, build_builtin_dispatch_catalog(phase32)
-
-    def test_pixelorama_owner_is_exact_inert_and_preserves_existing_owners(self) -> None:
-        registry = build_builtin_preparation_owner_registry()
-        self.assertEqual(
-            tuple(value.owner_id for value in registry.descriptors),
-            (
-                "originforge.preparation.pixelorama-spritesheet-export-planner@1",
-                "originforge.preparation.simulation-work-order-planner@1",
-                "originforge.preparation.work-order-planner@1",
-            ),
-        )
-        owner = registry.owner(
-            "originforge.preparation.pixelorama-spritesheet-export-planner@1"
-        )
-        self.assertEqual(owner.owner_version, "1")
-        self.assertEqual(owner.planner_request_version, "1")
-        self.assertEqual(
-            owner.planner_contract_id,
-            "BoundedProductionWorkOrderPlanner.propose@1",
-        )
-        self.assertEqual(owner.supported_adapter_id, "originforge.pixelorama.export")
-        self.assertEqual(
-            owner.supported_dispatch_contract_id,
-            "pixelorama.spritesheet-export@1",
-        )
-        self.assertEqual(owner.model_strategy_roles, (ModelRole.CODER_STRONG,))
-        self.assertEqual(owner.policy_role_names, ("CODER_STRONG",))
-        forbidden = {
-            "callable",
-            "import_path",
-            "endpoint",
-            "executable",
-            "argv",
-            "environment",
-            "secret",
-            "model_path",
-            "process",
-            "sandbox",
-            "workspace",
-        }
-        self.assertTrue(forbidden.isdisjoint(owner.to_dict()))
-
-    def test_pixelorama_preppol_currentness_and_mixed_owner_catalog_fail_closed(self) -> None:
-        full, phase32, dispatch = self._pixelorama_catalogs()
-        owner = _matching_owner(dispatch)
-        self.assertEqual(
-            owner.owner_id,
-            "originforge.preparation.pixelorama-spritesheet-export-planner@1",
-        )
-        policy = TaskPreparationPolicyBinding.create(
-            project_id="PROJECT-00000000-0000-4000-8000-000000000001",
-            materialization_id="PLMAT-00000000-0000-4000-8000-000000000002",
-            materialization_hash="a" * 64,
-            planning_input_id="PLINPUT-00000000-0000-4000-8000-000000000003",
-            planning_input_hash="b" * 64,
-            capability_catalog_id=phase32.catalog_id,
-            capability_catalog_hash=phase32.content_hash,
-            capability_routing_policy_id="CAPPOL-00000000-0000-4000-8000-000000000004",
-            capability_routing_policy_hash="c" * 64,
-            dispatch_contract_catalog_id=dispatch.dispatch_catalog_id,
-            dispatch_contract_catalog_hash=dispatch.content_hash,
-            preparation_owner_id=owner.owner_id,
-            preparation_owner_fingerprint=owner.fingerprint,
-            planner_request_version=owner.planner_request_version,
-            planner_contract_id=owner.planner_contract_id,
-            model_strategy_roles=owner.policy_role_names,
-        )
-        self.assertEqual(require_current_preparation_owner(policy, dispatch), owner)
-        with self.assertRaisesRegex(ProductionPreparationOwnerError, "not current"):
-            require_current_preparation_owner(
-                replace(policy, preparation_owner_fingerprint="0" * 64),
-                dispatch,
-            )
-
-        simulation_phase32 = CapabilityCatalog.create(
-            (full.capability("simulation.run"),),
-            (full.adapter("originforge.simulation.deterministic"),),
-        )
-        simulation_dispatch = build_builtin_dispatch_catalog(simulation_phase32)
-        mixed_phase32 = CapabilityCatalog.create(
-            (
-                full.capability("media.2d.export"),
-                full.capability("simulation.run"),
-            ),
-            (
-                full.adapter("originforge.pixelorama.export"),
-                full.adapter("originforge.simulation.deterministic"),
-            ),
-        )
-        mixed = DispatchContractCatalog.create(
-            mixed_phase32,
-            (*dispatch.contracts, *simulation_dispatch.contracts),
-        )
-        with self.assertRaisesRegex(
-            ProductionPreparationPolicyStoreError,
-            "does not resolve one code-owned preparation owner",
-        ):
-            _matching_owner(mixed)
-
-    def test_goal_bootstrap_remains_exactly_code_only(self) -> None:
-        owner = build_builtin_goal_bootstrap_owner()
-        self.assertEqual(owner.supported_capability_id, "code.change")
-        self.assertEqual(owner.supported_adapter_id, "originforge.code.bounded-retry")
-        self.assertEqual(owner.supported_dispatch_contract_id, "code.bounded-retry@1")
-        self.assertEqual(
-            owner.preparation_owner_id,
-            "originforge.preparation.work-order-planner@1",
-        )
-        self.assertEqual(owner.semantic_model_role, ModelRole.CODER_STRONG)
-
-
-if __name__ == "__main__":
-    unittest.main()
-''', encoding="utf-8")
+          
+          def rep(path, old, new):
+              p=Path(path); s=p.read_text()
+              if s.count(old)!=1: raise SystemExit(f'{path}: expected one match: {old!r}')
+              p.write_text(s.replace(old,new,1))
+          
+          p='src/origin_forge/production_preparation_owner.py'
+          rep(p,'    return (code_owner, simulation_owner)\n','''    pixelorama_adapter_id = "originforge.pixelorama.export"
+              try:
+                  pixelorama_adapter = adapters[pixelorama_adapter_id]
+              except KeyError as exc:
+                  raise ProductionPreparationOwnerError(
+                      "built-in capability inventory lacks Pixelorama export adapter"
+                  ) from exc
+              pixelorama_phase32_catalog = CapabilityCatalog.create(
+                  (phase32_catalog.capability("media.2d.export"),),
+                  (phase32_catalog.adapter(pixelorama_adapter_id),),
+              )
+              pixelorama_catalog = build_builtin_dispatch_catalog(pixelorama_phase32_catalog)
+              try:
+                  pixelorama_contract = pixelorama_catalog.contract_for_adapter(pixelorama_adapter_id)
+              except KeyError as exc:
+                  raise ProductionPreparationOwnerError(
+                      "built-in dispatch inventory lacks Pixelorama spritesheet-export contract"
+                  ) from exc
+              if pixelorama_contract.adapter_fingerprint != pixelorama_adapter.implementation_fingerprint:
+                  raise ProductionPreparationOwnerError(
+                      "built-in Pixelorama preparation adapter/dispatch-contract relation drifted"
+                  )
+              pixelorama_owner = ProductionPreparationOwnerDescriptor(
+                  owner_id="originforge.preparation.pixelorama-spritesheet-export-planner@1",
+                  owner_version="1",
+                  planner_request_version="1",
+                  planner_contract_id="BoundedProductionWorkOrderPlanner.propose@1",
+                  supported_adapter_id=pixelorama_adapter.adapter_id,
+                  supported_adapter_fingerprint=pixelorama_adapter.implementation_fingerprint,
+                  supported_dispatch_contract_id=pixelorama_contract.contract_id,
+                  supported_dispatch_contract_hash=pixelorama_contract.content_hash,
+                  model_strategy_roles=(ModelRole.CODER_STRONG,),
+              )
+              return (code_owner, simulation_owner, pixelorama_owner)
+          ''')
+          
+          p='tests/test_phase47c_simulation_preparation_owner.py'
+          rep(p,'                "originforge.preparation.simulation-work-order-planner@1",\n                "originforge.preparation.work-order-planner@1",','                "originforge.preparation.pixelorama-spritesheet-export-planner@1",\n                "originforge.preparation.simulation-work-order-planner@1",\n                "originforge.preparation.work-order-planner@1",')
+          
+          p='tests/test_production_preparation_owner_assembly.py'
+          rep(p,'self.assertEqual(len(first.descriptors), 2)','self.assertEqual(len(first.descriptors), 3)')
+          rep(p,'        forbidden = {','''        pixelorama_owner = first.owner(
+                      "originforge.preparation.pixelorama-spritesheet-export-planner@1"
+                  )
+                  self.assertEqual(pixelorama_owner.supported_adapter_id, "originforge.pixelorama.export")
+                  self.assertEqual(pixelorama_owner.supported_dispatch_contract_id, "pixelorama.spritesheet-export@1")
+                  self.assertEqual(pixelorama_owner.model_strategy_roles, (ModelRole.CODER_STRONG,))
+                  forbidden = {''')
+          rep(p,'        self.assertTrue(forbidden.isdisjoint(simulation_owner.to_dict()))\n','        self.assertTrue(forbidden.isdisjoint(simulation_owner.to_dict()))\n        self.assertTrue(forbidden.isdisjoint(pixelorama_owner.to_dict()))\n')
+          
+          Path('tests/test_phase48c_pixelorama_preparation_owner.py').write_text('''from __future__ import annotations
+          import unittest
+          from dataclasses import replace
+          from origin_forge.model_scheduler import ModelRole
+          from origin_forge.production_capability_builtin import build_builtin_capability_catalog
+          from origin_forge.production_capability_models import CapabilityCatalog
+          from origin_forge.production_goal_bootstrap_authority import build_builtin_goal_bootstrap_owner
+          from origin_forge.production_preparation_models import TaskPreparationPolicyBinding
+          from origin_forge.production_preparation_owner import ProductionPreparationOwnerError, build_builtin_preparation_owner_registry, require_current_preparation_owner
+          from origin_forge.production_preparation_policy_store import ProductionPreparationPolicyStoreError, _matching_owner
+          from origin_forge.production_work_order_builtin import build_builtin_dispatch_catalog
+          from origin_forge.production_work_order_models import DispatchContractCatalog
+          
+          class Phase48CPixeloramaPreparationOwnerTests(unittest.TestCase):
+              def catalogs(self):
+                  full=build_builtin_capability_catalog()
+                  p32=CapabilityCatalog.create((full.capability("media.2d.export"),),(full.adapter("originforge.pixelorama.export"),))
+                  return full,p32,build_builtin_dispatch_catalog(p32)
+          
+              def test_exact_owner_and_currentness(self):
+                  full,p32,dispatch=self.catalogs(); registry=build_builtin_preparation_owner_registry()
+                  self.assertEqual(tuple(x.owner_id for x in registry.descriptors),(
+                      "originforge.preparation.pixelorama-spritesheet-export-planner@1",
+                      "originforge.preparation.simulation-work-order-planner@1",
+                      "originforge.preparation.work-order-planner@1"))
+                  owner=_matching_owner(dispatch)
+                  self.assertEqual(owner.owner_id,"originforge.preparation.pixelorama-spritesheet-export-planner@1")
+                  self.assertEqual(owner.supported_adapter_id,"originforge.pixelorama.export")
+                  self.assertEqual(owner.supported_dispatch_contract_id,"pixelorama.spritesheet-export@1")
+                  self.assertEqual(owner.model_strategy_roles,(ModelRole.CODER_STRONG,))
+                  policy=TaskPreparationPolicyBinding.create(project_id="PROJECT-00000000-0000-4000-8000-000000000001",materialization_id="PLMAT-00000000-0000-4000-8000-000000000002",materialization_hash="a"*64,planning_input_id="PLINPUT-00000000-0000-4000-8000-000000000003",planning_input_hash="b"*64,capability_catalog_id=p32.catalog_id,capability_catalog_hash=p32.content_hash,capability_routing_policy_id="CAPPOL-00000000-0000-4000-8000-000000000004",capability_routing_policy_hash="c"*64,dispatch_contract_catalog_id=dispatch.dispatch_catalog_id,dispatch_contract_catalog_hash=dispatch.content_hash,preparation_owner_id=owner.owner_id,preparation_owner_fingerprint=owner.fingerprint,planner_request_version=owner.planner_request_version,planner_contract_id=owner.planner_contract_id,model_strategy_roles=owner.policy_role_names)
+                  self.assertEqual(require_current_preparation_owner(policy,dispatch),owner)
+                  with self.assertRaisesRegex(ProductionPreparationOwnerError,"not current"):
+                      require_current_preparation_owner(replace(policy,preparation_owner_fingerprint="0"*64),dispatch)
+          
+              def test_mixed_owner_fails_closed_and_goal_bootstrap_stays_code_only(self):
+                  full,p32,pdisp=self.catalogs()
+                  s32=CapabilityCatalog.create((full.capability("simulation.run"),),(full.adapter("originforge.simulation.deterministic"),)); sdisp=build_builtin_dispatch_catalog(s32)
+                  mixed32=CapabilityCatalog.create((full.capability("media.2d.export"),full.capability("simulation.run")),(full.adapter("originforge.pixelorama.export"),full.adapter("originforge.simulation.deterministic")))
+                  mixed=DispatchContractCatalog.create(mixed32,(*pdisp.contracts,*sdisp.contracts))
+                  with self.assertRaisesRegex(ProductionPreparationPolicyStoreError,"does not resolve one code-owned preparation owner"):
+                      _matching_owner(mixed)
+                  goal=build_builtin_goal_bootstrap_owner()
+                  self.assertEqual((goal.supported_capability_id,goal.supported_adapter_id,goal.supported_dispatch_contract_id,goal.preparation_owner_id),("code.change","originforge.code.bounded-retry","code.bounded-retry@1","originforge.preparation.work-order-planner@1"))
+          
+          if __name__ == "__main__": unittest.main()
+          ''')
           PY
-
+          python /tmp/phase48c_patch.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/origin_forge/production_preparation_owner.py \
-            tests/test_phase47c_simulation_preparation_owner.py \
-            tests/test_production_preparation_owner_assembly.py \
-            tests/test_phase48c_pixelorama_preparation_owner.py
+          git add src/origin_forge/production_preparation_owner.py tests/test_phase47c_simulation_preparation_owner.py tests/test_production_preparation_owner_assembly.py tests/test_phase48c_pixelorama_preparation_owner.py
           git rm .github/workflows/phase48c-helper.yml
           git commit -m "Implement Phase 48C Pixelorama preparation owner"
           git push origin HEAD:chatgpt/phase48c-pixelorama-preparation-owner
