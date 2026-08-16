@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -226,19 +227,45 @@ class GovernedPixeloramaOutputAdopter:
             ) from exc
         return destination, relative.as_posix()
 
-    def adopt_new(
+    def _publish_verified_new(
         self,
+        *,
         source_artifact_id: str,
-        destination_relative_path: str,
+        artifact: dict[str, object],
+        source: Path,
+        content_hash: str,
+        byte_count: int,
+        destination: Path,
+        portable_destination: str,
+        verification_type: str,
+        verifier: str,
+        extra_evidence: dict[str, object] | None = None,
+        pre_publish_check: Callable[[], None] | None = None,
     ) -> GovernedPixeloramaAdoptionResult:
-        if not validate_id(source_artifact_id, IdKind.ARTIFACT):
-            raise ValueError("source_artifact_id must be an ART ID")
-        artifact, source, content_hash, byte_count = self._verified_source(
-            source_artifact_id
-        )
-        destination, portable_destination = self._destination(
-            destination_relative_path
-        )
+        """Internal create-only publisher for already-authorized Pixelorama sources."""
+        created_by_run_id = artifact.get("created_by_run_id")
+        if created_by_run_id is not None and (
+            not isinstance(created_by_run_id, str)
+            or not validate_id(created_by_run_id, IdKind.RUN)
+        ):
+            raise PixeloramaAdoptionError("source Artifact creating Run ID is invalid")
+        tool_versions = self._tool_versions(artifact)
+        evidence = {
+            "source_artifact_id": source_artifact_id,
+            "source_content_hash": content_hash,
+            "source_byte_count": byte_count,
+            "destination_path": portable_destination,
+            "destination_content_hash": content_hash,
+            "existing_asset_overwritten": False,
+            "production_task_verified": False,
+        }
+        if extra_evidence:
+            overlap = set(evidence).intersection(extra_evidence)
+            if overlap:
+                raise PixeloramaAdoptionError(
+                    "extra adoption evidence may not override core publication evidence"
+                )
+            evidence.update(extra_evidence)
 
         temp = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
         try:
@@ -263,6 +290,8 @@ class GovernedPixeloramaOutputAdopter:
                 raise PixeloramaAdoptionError(
                     "source Artifact changed while adoption copy was being created"
                 )
+            if pre_publish_check is not None:
+                pre_publish_check()
             try:
                 os.link(temp, destination)
             except FileExistsError as exc:
@@ -272,34 +301,20 @@ class GovernedPixeloramaOutputAdopter:
         finally:
             temp.unlink(missing_ok=True)
 
-        created_by_run_id = artifact.get("created_by_run_id")
-        if created_by_run_id is not None and (
-            not isinstance(created_by_run_id, str)
-            or not validate_id(created_by_run_id, IdKind.RUN)
-        ):
-            raise PixeloramaAdoptionError("source Artifact creating Run ID is invalid")
         adopted_artifact_id = self.lineage.create_artifact(
             artifact_type=str(artifact["type"]),
             path_or_uri=str(destination),
             parent_artifact_id=source_artifact_id,
             created_by_run_id=created_by_run_id,
-            tool_versions=self._tool_versions(artifact),
+            tool_versions=tool_versions,
             status="ADOPTED",
         )
         verification_id = self.lineage.record_artifact_verification(
             adopted_artifact_id,
-            verification_type="pixelorama-adoption-integrity",
-            verifier="OriginForge.GovernedPixeloramaOutputAdopter",
+            verification_type=verification_type,
+            verifier=verifier,
             status="PASS",
-            evidence={
-                "source_artifact_id": source_artifact_id,
-                "source_content_hash": content_hash,
-                "source_byte_count": byte_count,
-                "destination_path": portable_destination,
-                "destination_content_hash": content_hash,
-                "existing_asset_overwritten": False,
-                "production_task_verified": False,
-            },
+            evidence=evidence,
             run_id=created_by_run_id,
         )
         return GovernedPixeloramaAdoptionResult(
@@ -309,4 +324,29 @@ class GovernedPixeloramaOutputAdopter:
             destination_path=portable_destination,
             content_hash=content_hash,
             byte_count=byte_count,
+        )
+
+    def adopt_new(
+        self,
+        source_artifact_id: str,
+        destination_relative_path: str,
+    ) -> GovernedPixeloramaAdoptionResult:
+        if not validate_id(source_artifact_id, IdKind.ARTIFACT):
+            raise ValueError("source_artifact_id must be an ART ID")
+        artifact, source, content_hash, byte_count = self._verified_source(
+            source_artifact_id
+        )
+        destination, portable_destination = self._destination(
+            destination_relative_path
+        )
+        return self._publish_verified_new(
+            source_artifact_id=source_artifact_id,
+            artifact=artifact,
+            source=source,
+            content_hash=content_hash,
+            byte_count=byte_count,
+            destination=destination,
+            portable_destination=portable_destination,
+            verification_type="pixelorama-adoption-integrity",
+            verifier="OriginForge.GovernedPixeloramaOutputAdopter",
         )
