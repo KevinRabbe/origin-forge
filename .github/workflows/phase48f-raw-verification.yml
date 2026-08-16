@@ -1,0 +1,53 @@
+name: Phase 48F raw planner verification diagnostic
+
+on:
+  push:
+    branches:
+      - chatgpt/phase48f-pixelorama-invocation
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Capture raw planner verification and self-remove
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          import json
+          from unittest.mock import patch
+          from origin_forge.production_manager_advance_once import advance_production_manager_once
+          from origin_forge.scheduled_model_adapter import ScheduledModelAdapter
+          from tests.test_phase48f_pixelorama_cross_phase_acceptance import Phase48FPixeloramaCrossPhaseAcceptanceTests
+
+          case = Phase48FPixeloramaCrossPhaseAcceptanceTests(methodName='runTest')
+          scenario = case._scenario(steps=1)
+          try:
+              with patch.object(ScheduledModelAdapter, 'generate', return_value=case._planner_response(scenario)):
+                  first = advance_production_manager_once(scenario.runtime)
+              with scenario.runtime.store.session() as conn:
+                  rows = conn.execute(
+                      "SELECT id, target_id, run_id, verification_type, verifier, status, evidence_json, metrics_json FROM verifications WHERE verification_type = 'work-order-planner-generation' ORDER BY created_at, rowid"
+                  ).fetchall()
+              payload = {
+                  'first': first.to_dict(),
+                  'rows': [dict(row) for row in rows],
+              }
+              open('.github/phase48f-raw-verification.json', 'w', encoding='utf-8').write(json.dumps(payload, indent=2, sort_keys=True))
+          finally:
+              case.doCleanups()
+          PY
+          rm .github/workflows/phase48f-raw-verification.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/phase48f-raw-verification.json .github/workflows/phase48f-raw-verification.yml
+          git commit -m "Phase 48F: capture raw planner verification"
+          git push
