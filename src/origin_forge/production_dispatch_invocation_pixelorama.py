@@ -26,7 +26,9 @@ from .production_pixelorama_dispatch_output_binding_store import (
     publish_pixelorama_dispatch_output_binding,
 )
 from .production_pixelorama_dispatch_output_currentness import (
-    require_bound_pixelorama_output_evidence,
+    PixeloramaDispatchOutputCurrentnessStatus,
+    inspect_pixelorama_dispatch_output_currentness_readonly,
+    materialize_bound_pixelorama_result,
 )
 from .service import utc_now
 
@@ -53,11 +55,24 @@ def _publish_result_binding(runtime, execution, pixelorama_result) -> Pixelorama
         output_artifact = lineage.get_artifact(pixelorama_result.output_artifact_id)
         output_path = lineage.local_artifact_path(pixelorama_result.output_artifact_id)
         output_byte_count = output_path.stat().st_size
+        stored_output_hash = output_artifact["content_hash"]
     except (KeyError, OSError, RuntimeError) as exc:
         raise ProductionDispatchInvocationRecoveryRequired(
             execution.execution_id,
-            "PIXELORAMA_BINDING_PERSISTENCE_FAILED",
+            "RETURNED_TERMINALIZATION_FAILED",
         ) from exc
+    if (
+        not isinstance(stored_output_hash, str)
+        or not stored_output_hash.startswith("sha256:")
+        or len(stored_output_hash) != 71
+        or any(ch not in "0123456789abcdef" for ch in stored_output_hash[7:])
+        or stored_output_hash != pixelorama_result.operation.output_hash
+        or output_byte_count != pixelorama_result.operation.output_byte_count
+    ):
+        raise ProductionDispatchInvocationRecoveryRequired(
+            execution.execution_id,
+            "OWNER_RETURN_CONTRACT_MISMATCH",
+        )
 
     candidate = PixeloramaDispatchOutputBinding(
         execution_id=execution.execution_id,
@@ -76,7 +91,7 @@ def _publish_result_binding(runtime, execution, pixelorama_result) -> Pixelorama
         output_artifact_id=pixelorama_result.output_artifact_id,
         output_verification_id=pixelorama_result.output_verification_id,
         run_verification_id=pixelorama_result.run_verification_id,
-        output_content_hash=output_artifact["content_hash"],
+        output_content_hash=stored_output_hash[7:],
         output_byte_count=output_byte_count,
         schema_version=PIXELORAMA_DISPATCH_OUTPUT_BINDING_SCHEMA_VERSION,
         created_at=existing.created_at if existing is not None else utc_now(),
@@ -87,12 +102,12 @@ def _publish_result_binding(runtime, execution, pixelorama_result) -> Pixelorama
     except Exception as exc:
         raise ProductionDispatchInvocationRecoveryRequired(
             execution.execution_id,
-            "PIXELORAMA_BINDING_PERSISTENCE_FAILED",
+            "RETURNED_TERMINALIZATION_FAILED",
         ) from exc
     if published != candidate or reread != candidate:
         raise ProductionDispatchInvocationRecoveryRequired(
             execution.execution_id,
-            "PIXELORAMA_BINDING_PERSISTENCE_FAILED",
+            "RETURNED_TERMINALIZATION_FAILED",
         )
     return reread
 
@@ -197,7 +212,7 @@ def recover_pixelorama_dispatch_execution_once(
     runtime,
     execution_id: str,
 ) -> CompletedDispatchInvocation:
-    """Repair STARTED+bound Pixelorama execution without invoking Pixelorama again."""
+    """Repair or reread one bound Pixelorama execution without invoking Pixelorama again."""
     if not isinstance(execution_id, str) or not validate_id(
         execution_id, IdKind.DISPATCH_EXECUTION
     ):
@@ -209,7 +224,7 @@ def recover_pixelorama_dispatch_execution_once(
         binding = read_pixelorama_dispatch_output_binding(runtime, execution_id)
     except Exception as exc:
         raise ProductionDispatchInvocationRecoveryRequired(
-            execution_id, "PIXELORAMA_BOUND_RESULT_UNAVAILABLE"
+            execution_id, "OWNER_RETURN_CONTRACT_MISMATCH"
         ) from exc
     if (
         execution.execution_owner_id != PIXELORAMA_EXECUTION_OWNER_ID
@@ -220,14 +235,29 @@ def recover_pixelorama_dispatch_execution_once(
             execution_id, "STARTED_RELATION_MISMATCH"
         )
     try:
-        require_bound_pixelorama_output_evidence(runtime, binding)
+        pixelorama_result = materialize_bound_pixelorama_result(runtime, binding)
     except Exception as exc:
         raise ProductionDispatchInvocationRecoveryRequired(
-            execution_id, "PIXELORAMA_BOUND_RESULT_INVALID"
+            execution_id, "OWNER_RETURN_CONTRACT_MISMATCH"
         ) from exc
+
+    currentness = inspect_pixelorama_dispatch_output_currentness_readonly(
+        runtime, execution_id
+    )
     if execution.status is DispatchExecutionStatus.RETURNED:
-        return CompletedDispatchInvocation(execution)
-    if execution.status is not DispatchExecutionStatus.STARTED:
+        if currentness.status is not PixeloramaDispatchOutputCurrentnessStatus.ELIGIBLE:
+            raise ProductionDispatchInvocationRecoveryRequired(
+                execution_id, "OWNER_RETURN_CONTRACT_MISMATCH"
+            )
+        return CompletedDispatchInvocation(
+            execution,
+            pixelorama_result=pixelorama_result,
+        )
+    if (
+        execution.status is not DispatchExecutionStatus.STARTED
+        or currentness.status
+        is not PixeloramaDispatchOutputCurrentnessStatus.EXECUTION_NOT_RETURNED
+    ):
         raise ProductionDispatchInvocationRecoveryRequired(
             execution_id, "STARTED_RELATION_MISMATCH"
         )
@@ -243,4 +273,7 @@ def recover_pixelorama_dispatch_execution_once(
         raise ProductionDispatchInvocationRecoveryRequired(
             execution_id, "RETURNED_TERMINALIZATION_FAILED"
         ) from exc
-    return CompletedDispatchInvocation(returned)
+    return CompletedDispatchInvocation(
+        returned,
+        pixelorama_result=pixelorama_result,
+    )
