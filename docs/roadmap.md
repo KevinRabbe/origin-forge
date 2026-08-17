@@ -470,7 +470,7 @@ Core rule:
 proposal → independent plan → trusted evidence → audit → promotion eligibility → STOP
 ```
 
-See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules and exclusions.
+See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules, decision-time authority checks and exclusions.
 
 **Exit condition met:** Origin Forge can turn exact verified evidence into bounded independently evaluated improvement candidates, preserve stronger upstream Skill evidence, fail closed when no governed evaluator exists, record audited promotion eligibility without activating the candidate, and keep production truth/authority outside the Workshop.
 
@@ -869,7 +869,7 @@ See `docs/phase-40-governed-manager-production-advance.md` for the frozen archit
 
 **Exit condition met in implementation:** exact code/test acceptance head `2184aaa9998fd8c6030047eae0639dc1091bbc82` passed normal run `31660742401` on Python 3.12 and Python 3.13 after all authority-expanding slices were independently gated.
 
-**Merge gate:** the immutable documentation/roadmap closure head created after that proof must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 41 — Governed Preparation Recovery & Pre-Planner Resumption — DONE
 
