@@ -470,7 +470,7 @@ Core rule:
 proposal → independent plan → trusted evidence → audit → promotion eligibility → STOP
 ```
 
-See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules, decision-time authority checks and exclusions.
+See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules and exclusions.
 
 **Exit condition met:** Origin Forge can turn exact verified evidence into bounded independently evaluated improvement candidates, preserve stronger upstream Skill evidence, fail closed when no governed evaluator exists, record audited promotion eligibility without activating the candidate, and keep production truth/authority outside the Workshop.
 
@@ -869,7 +869,7 @@ See `docs/phase-40-governed-manager-production-advance.md` for the frozen archit
 
 **Exit condition met in implementation:** exact code/test acceptance head `2184aaa9998fd8c6030047eae0639dc1091bbc82` passed normal run `31660742401` on Python 3.12 and Python 3.13 after all authority-expanding slices were independently gated.
 
-**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** the immutable documentation/roadmap closure head created after that proof must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 41 — Governed Preparation Recovery & Pre-Planner Resumption — DONE
 
@@ -1062,6 +1062,27 @@ Completed as the first separately gated **post-v0.5 v1.0 production-integration 
 See `docs/phase-48-governed-pixelorama-spritesheet-export-production-dispatch.md` for the frozen architecture and `docs/phase-48-implementation-closure.md` for the accepted 48A–48F implementation, integration repairs, cross-phase adversarial acceptance, authority exclusions, and exact CI evidence.
 
 **Exit condition met in implementation:** planning head `52411df4` / run `31915469094`, 48A head `c6e32857` / run `31915910291`, 48B head `78e86b4da53be894be2223ee807ba208d42f618a` / run `31922527176`, 48C head `12e10bcbbba5a19d286dbd924ef1270ef929b900` / run `31926045992`, 48D head `66d8c52d4d8f57eed43ddb376a06981ea0bf71e1` / run `31929383977`, the persisted-currentness repair head `4e3bafee120232f607c6405c1dfee6acb33b8845` / run `31929132808`, 48E head `2e1131c85adf3039cd2685c7380300ebfdc6b7ea` / run `31930898625`, and 48F accepted head `68315a50526ac00634ce03d26e669a7053c8ace1` / run `31945142450` all passed Python 3.12 and Python 3.13. Accepted Phase-48 implementation/acceptance is merged to `main` as `16eb0cd631ec572d07605209cb8ca29a1c5f3db9`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
+## Phase 49 — Governed Pixelorama Production Output Adoption — DONE
+
+Completed as the next separately gated **post-v0.5 v1.0 acceptance slice** after Phase 48, without changing immutable v0.5 release records:
+
+- one immutable database-enforced `DISPEXEC → claim / Run / request / result / output / Verification` relation binds the exact reviewed Pixelorama execution to the exact already-revalidated exported bytes;
+- normal Pixelorama invocation publishes or reuses that exact binding after durable Phase-48 result validation and before DISPEXEC `RETURNED` / claim `CONSUMED` terminalization;
+- a stranded exact binding beside `STARTED` is recovery evidence only and can complete terminalization without a second Pixelorama invocation; it never authorizes adoption while nonterminal;
+- production-adoption eligibility requires the exact binding, `RETURNED`, `CONSUMED`, the frozen production Task still `RUNNING`, exact bound PIXELORAMA Run/Artifact/Verification lineage, and exact current protected output bytes/PNG structure;
+- `GovernedPixeloramaProductionOutputAdopter` accepts only an exact `DISPEXEC-*` plus a new destination and derives the source solely from durable authority rather than caller/model Artifact/path/Run selection;
+- the coordinator reuses the Phase-19 create-only publication primitive and adds a database-backed PREPARED/PUBLISHED production-adoption receipt so one execution/output cannot fan out or be adopted twice;
+- successful adoption creates one child `SPRITESHEET_EXPORT` Artifact with status `ADOPTED` and production-bound PASS evidence while preserving `production_task_verified=false`, semantic-quality false, provenance unsigned, and Task `RUNNING`;
+- ambiguous post-publication crash state fails closed for explicit operator recovery; automatic retry never deletes or overwrites an existing destination;
+- the human-operated module command `adopt-production-new DISPEXEC-* destination` exposes the exact boundary without adding a fourth installed package script, background loop, editor replay, Task outcome, semantic-quality, signing, overwrite, Manager, or cockpit mutation authority;
+- legacy Phase-19 `adopt-new`, bounded-code and deterministic-simulation owners, Phase-45/46 code-only Goal bootstrap, the bounded Manager, and immutable v0.5 release identity remain unchanged.
+
+See `docs/phase-49-governed-pixelorama-production-output-adoption.md` for the frozen architecture and `docs/phase-49-implementation-closure.md` for the accepted 49A–49D implementation, recovery/adoption semantics, operator boundary, adversarial acceptance, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `e0ffb62a209c2d3e056b4d6438ec71050729a401` / run `31960330673` / #1442, 49A head `1596535cb032d32d95a3ace0cc8adee28ec9a6c7` / run `31961083674` / #1444, 49B head `5c6915f798cb51b71ba44a163739ece8468cf0de` / run `31969954756` / #1453, 49C head `e735c0282241a7c5b973805645566b330a37930a` / run `32008755709` / #1458, and 49D head `eed300f40374b2b0213caf461d2cdf7ce596d70d` / run `32011087914` / #1464 all passed Python 3.12 and Python 3.13. Accepted Phase-49 implementation/acceptance is merged through `bb77eac4af6ddbc885050b993ffd1af811a70fdc`.
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
