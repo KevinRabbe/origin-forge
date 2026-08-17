@@ -166,7 +166,10 @@ class Phase49DPixeloramaOperatorAcceptanceTests(unittest.TestCase):
             "4",
         )
         self.assertEqual(code, 2)
-        self.assertIn("byte limit", str(payload["detail"]))
+        self.assertEqual(
+            payload["detail"],
+            "bound Pixelorama production source cannot be prepared for adoption",
+        )
         self.assertFalse((runtime.project_root / "assets/too-large.png").exists())
         with runtime.store.session() as conn:
             self.assertEqual(
