@@ -4,7 +4,6 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
 
 from .ids import IdKind, validate_id
 from .path_policy import portable_relative_path
@@ -269,7 +268,7 @@ def finalize_pixelorama_production_adoption(
     if not validate_id(verification_id, IdKind.VERIFICATION):
         raise ValueError("verification_id must be a VER ID")
     project_id = runtime.project_id()
-    expected_artifact_path = str(runtime.project_root / Path(destination_path))
+    expected_artifact_path = destination_path
     with runtime.store.session() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _require_exact_binding(conn, binding)
