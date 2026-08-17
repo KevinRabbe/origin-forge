@@ -1065,6 +1065,27 @@ See `docs/phase-48-governed-pixelorama-spritesheet-export-production-dispatch.md
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
+## Phase 49 — Governed Pixelorama Production Output Adoption — DONE
+
+Completed as the next separately gated **post-v0.5 v1.0 acceptance slice** after Phase 48, without changing immutable v0.5 release records:
+
+- one immutable database-enforced `DISPEXEC → claim / Run / request / result / output / Verification` relation binds the exact reviewed Pixelorama execution to the exact already-revalidated exported bytes;
+- normal Pixelorama invocation publishes or reuses that exact binding after durable Phase-48 result validation and before DISPEXEC `RETURNED` / claim `CONSUMED` terminalization;
+- a stranded exact binding beside `STARTED` is recovery evidence only and can complete terminalization without a second Pixelorama invocation; it never authorizes adoption while nonterminal;
+- production-adoption eligibility requires the exact binding, `RETURNED`, `CONSUMED`, the frozen production Task still `RUNNING`, exact bound PIXELORAMA Run/Artifact/Verification lineage, and exact current protected output bytes/PNG structure;
+- `GovernedPixeloramaProductionOutputAdopter` accepts only an exact `DISPEXEC-*` plus a new destination and derives the source solely from durable authority rather than caller/model Artifact/path/Run selection;
+- the coordinator reuses the Phase-19 create-only publication primitive and adds a database-backed PREPARED/PUBLISHED production-adoption receipt so one execution/output cannot fan out or be adopted twice;
+- successful adoption creates one child `SPRITESHEET_EXPORT` Artifact with status `ADOPTED` and production-bound PASS evidence while preserving `production_task_verified=false`, semantic-quality false, provenance unsigned, and Task `RUNNING`;
+- ambiguous post-publication crash state fails closed for explicit operator recovery; automatic retry never deletes or overwrites an existing destination;
+- the human-operated module command `adopt-production-new DISPEXEC-* destination` exposes the exact boundary without adding a fourth installed package script, background loop, editor replay, Task outcome, semantic-quality, signing, overwrite, Manager, or cockpit mutation authority;
+- legacy Phase-19 `adopt-new`, bounded-code and deterministic-simulation owners, Phase-45/46 code-only Goal bootstrap, the bounded Manager, and immutable v0.5 release identity remain unchanged.
+
+See `docs/phase-49-governed-pixelorama-production-output-adoption.md` for the frozen architecture and `docs/phase-49-implementation-closure.md` for the accepted 49A–49D implementation, recovery/adoption semantics, operator boundary, adversarial acceptance, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `e0ffb62a209c2d3e056b4d6438ec71050729a401` / run `31960330673` / #1442, 49A head `1596535cb032d32d95a3ace0cc8adee28ec9a6c7` / run `31961083674` / #1444, 49B head `5c6915f798cb51b71ba44a163739ece8468cf0de` / run `31969954756` / #1453, 49C head `e735c0282241a7c5b973805645566b330a37930a` / run `32008755709` / #1458, and 49D head `eed300f40374b2b0213caf461d2cdf7ce596d70d` / run `32011087914` / #1464 all passed Python 3.12 and Python 3.13. Accepted Phase-49 implementation/acceptance is merged through `bb77eac4af6ddbc885050b993ffd1af811a70fdc`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 # v1.0 — Integrated Game Production
 
 Representative Goal:
