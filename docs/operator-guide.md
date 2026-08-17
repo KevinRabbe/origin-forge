@@ -2,7 +2,7 @@
 
 Status: **POST-v0.5 DEVELOPMENT MAINLINE**
 
-This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch integration. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
+This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch and Phase-49 production-output-adoption integrations. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
 
 ## Install
 
@@ -20,7 +20,7 @@ origin-forge-attempt  exactly one bounded coding attempt
 origin-forge-cockpit  read-only local inspection
 ```
 
-Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
+Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
 
 ## Initialize a project
 
@@ -113,7 +113,7 @@ from origin_forge.production_goal_bootstrap_operator import (
 
 A successful bootstrap or recovery stops at GOALBOOT `READY` after exact PREPPOL publication/revalidation. It does **not** invoke Manager. Production advancement remains a separate explicit `origin-forge manager advance` authorization.
 
-Phases 47 and 48 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run` or `media.2d.export` Tasks.
+Phases 47, 48, and 49 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run` or `media.2d.export` Tasks.
 
 ## Inspect or explicitly advance governed Manager work
 
@@ -140,9 +140,43 @@ Phase 48 likewise allows an **already-governed** `media.2d.export` Task using th
 
 The Pixelorama execution owner uses the infrastructure-owned trusted Pixelorama CLI profile, not caller/model-selected executable or process settings. After STARTED it revalidates the exact local `.pxo` source path, containment, regular-file/no-symlink status, hash, and bounded byte count; allocates fresh `PXOP-*` and `MEDIA-*` identities; and invokes the durable direct CLI spritesheet-export service at most once. A trustworthy return creates one PIXELORAMA Run plus exact request/result/export/Verification evidence, consumes the claim, records DISPEXEC `RETURNED`, and leaves the production Task `RUNNING`.
 
-Pixelorama export evidence is structural only. Manager does not infer aesthetic quality or Task acceptance, does not adopt the exported PNG into a canonical project path, does not sign it, and does not complete/fail the Task. Project creation/import/edit/save, arbitrary extensions/plugins/GDScript, caller-selected source/output paths, and automatic replay after STARTED remain outside the production boundary. There is no direct mutating Pixelorama production command.
+Pixelorama export evidence is structural only. Manager does not infer aesthetic quality or Task acceptance, does not adopt the exported PNG into a canonical project path, does not sign it, and does not complete/fail the Task. Project creation/import/edit/save, arbitrary extensions/plugins/GDScript, caller-selected source/output paths, and automatic replay after STARTED remain outside the production execution boundary. There is no direct Pixelorama production **execution** command; production execution remains reachable only through the governed Manager path.
 
-The cockpit remains a separate read-only inspection surface. It does not receive a Manager, Goal-bootstrap, simulation, or Pixelorama mutation command.
+## Explicitly adopt one terminal Pixelorama production output
+
+Phase 49 adds one explicit human-operated module command for adopting an already-terminal, durably bound Phase-48 Pixelorama output into one new project-relative PNG path:
+
+```bash
+python -m origin_forge.pixelorama_admin_cli \
+  --project-root /path/to/project \
+  adopt-production-new \
+  <DISPEXEC-ID> \
+  assets/path/new-spritesheet.png
+```
+
+This is an adoption command, not a Pixelorama execution command. It does not launch Pixelorama, dispatch a claim, repair/replay a nonterminal execution, choose a source by Task/Run/path scan, or infer a destination. The operator supplies exactly one canonical `DISPEXEC-*` identity plus one new project-relative `.png` destination; the bound source Artifact, Run, claim, digest, and byte count are derived from durable Phase-49 evidence.
+
+Before publication, Origin Forge requires the exact Pixelorama owner, immutable dispatch-output binding, durable PIXELORAMA Run/Artifact/Verification evidence, DISPEXEC `RETURNED`, originating claim `CONSUMED`, and the exact current RUNNING production Task relation. Missing, STARTED/ACTIVE, stale, tampered, or otherwise non-current evidence is non-authorizing and does not trigger editor replay.
+
+Publication reuses the existing Phase-19 create-only Pixelorama adopter. Existing/protected/symlink-escaped destinations are refused; there is no overwrite or edit mode. Phase 49 records an adopted child Artifact plus production adoption Verification and durable receipt, but explicitly leaves `production_task_verified=false`, semantic/aesthetic quality unverified, provenance unsigned, and the production Task `RUNNING`.
+
+A crash after the create-only filesystem link but before durable adoption finalization is deliberately ambiguous. The PREPARED receipt remains visible and retry fails closed rather than deleting, replacing, or claiming the existing destination. Recovery of that ambiguity is not automatic.
+
+The older module command:
+
+```bash
+python -m origin_forge.pixelorama_admin_cli \
+  --project-root /path/to/project \
+  adopt-new \
+  <ARTIFACT-ID> \
+  assets/path/new-image.png
+```
+
+remains the separate Phase-19 verified-media adoption surface and retains its original `pixelorama-output-integrity` verifier gate. Phase-48 production output does not silently gain eligibility through that legacy command.
+
+Neither Pixelorama admin command is a fourth installed package script. Packaging remains exactly `origin-forge`, `origin-forge-attempt`, and `origin-forge-cockpit`.
+
+The cockpit remains a separate read-only inspection surface. It does not receive a Manager, Goal-bootstrap, simulation, Pixelorama execution, or Pixelorama adoption mutation command.
 
 ## Run exactly one bounded coding attempt
 
@@ -224,6 +258,8 @@ The Phase-45/46 Goal-bootstrap boundary is independently explicit and bounded: a
 
 The Phase-47 deterministic simulation and Phase-48 Pixelorama dispatch boundaries follow the same no-replay law: once owner-specific DISPEXEC `STARTED` is durable, a BaseException/crash or post-evidence terminalization failure requires explicit recovery rather than a second automatic backend/editor call.
 
+Phase 49 preserves that law at adoption time: adoption never invokes Pixelorama, and a nonterminal/stale dispatch or ambiguous PREPARED-plus-existing-destination state is refused rather than repaired by replay, overwrite, or inference.
+
 ## Current-development boundary
 
 Current `main` does not grant:
@@ -234,9 +270,10 @@ Current `main` does not grant:
 - automatic Artifact adoption/signing;
 - automatic Dream promotion;
 - production checkpoint/model activation;
-- direct simulation or Pixelorama production mutation commands, or automatic Task terminalization from simulation/export evidence;
+- direct simulation or Pixelorama production execution commands, or automatic Task terminalization from simulation/export/adoption evidence;
 - generic Pixelorama project creation/import/edit/save, arbitrary editor scripts/plugins, or automatic output adoption/signing;
-- background Goal bootstrap or Manager scheduling/queue draining;
+- automatic destination selection, overwrite, or Task/signing authority from the explicit Pixelorama production-adoption command;
+- background Goal bootstrap, Manager scheduling/queue draining, or adoption workers;
 - remote/multi-user cockpit hosting.
 
-Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phase 48 is explicitly post-v0.5 development.
+Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48 and 49 are explicitly post-v0.5 development.
