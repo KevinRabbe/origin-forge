@@ -41,6 +41,10 @@ class Phase49DPixeloramaOperatorAcceptanceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.fixture.tearDown()
 
+    @property
+    def runtime(self):
+        return self.fixture.fixture.runtime
+
     def _invoke_successfully(self):
         return self.fixture._invoke_successfully()
 
@@ -48,7 +52,7 @@ class Phase49DPixeloramaOperatorAcceptanceTests(unittest.TestCase):
         output = StringIO()
         with redirect_stdout(output):
             code = pixelorama_admin_main(
-                ["--project-root", str(self.fixture.runtime.project_root), *args]
+                ["--project-root", str(self.runtime.project_root), *args]
             )
         return code, json.loads(output.getvalue())
 
@@ -64,7 +68,7 @@ class Phase49DPixeloramaOperatorAcceptanceTests(unittest.TestCase):
 
     def test_real_dispatch_to_explicit_cli_adoption_has_no_replay_task_or_signing_authority(self) -> None:
         completed = self._invoke_successfully()
-        runtime = self.fixture.runtime
+        runtime = self.runtime
         binding = read_pixelorama_dispatch_output_binding(runtime, completed.execution_id)
         lineage = OriginForgeLineage(runtime)
         source_bytes = lineage.local_artifact_path(binding.output_artifact_id).read_bytes()
@@ -110,7 +114,7 @@ class Phase49DPixeloramaOperatorAcceptanceTests(unittest.TestCase):
         self.assertEqual(self._tree_bytes(provenance_root), provenance_before)
 
     def test_cli_fails_closed_on_missing_binding_protected_path_symlink_and_byte_limit(self) -> None:
-        runtime = self.fixture.runtime
+        runtime = self.runtime
         missing_execution = new_id(IdKind.DISPATCH_EXECUTION)
         with patch.object(
             PixeloramaCliExportService,
@@ -138,7 +142,7 @@ class Phase49DPixeloramaOperatorAcceptanceTests(unittest.TestCase):
                 self.assertEqual(code, 2)
                 self.assertFalse((runtime.project_root / destination).exists())
 
-        outside = runtime.project_root.parent / "phase49d-outside"
+        outside = runtime.project_root / "outside-target"
         outside.mkdir(exist_ok=True)
         alias = runtime.project_root / "asset-alias"
         try:
@@ -174,7 +178,7 @@ class Phase49DPixeloramaOperatorAcceptanceTests(unittest.TestCase):
 
     def test_cli_revalidates_binding_and_verification_durable_truth_before_publication(self) -> None:
         completed = self._invoke_successfully()
-        runtime = self.fixture.runtime
+        runtime = self.runtime
         binding = read_pixelorama_dispatch_output_binding(runtime, completed.execution_id)
         conn = sqlite3.connect(runtime.store.db_path)
         try:
@@ -212,7 +216,7 @@ class Phase49DPixeloramaOperatorAcceptanceTests(unittest.TestCase):
 
     def test_concurrent_same_execution_destination_race_publishes_at_most_once(self) -> None:
         completed = self._invoke_successfully()
-        runtime = self.fixture.runtime
+        runtime = self.runtime
         binding = read_pixelorama_dispatch_output_binding(runtime, completed.execution_id)
         destination = "assets/concurrent.png"
 
@@ -258,7 +262,7 @@ class Phase49DPixeloramaOperatorAcceptanceTests(unittest.TestCase):
 
     def test_post_link_crash_is_ambiguous_and_retry_never_overwrites_or_replays(self) -> None:
         completed = self._invoke_successfully()
-        runtime = self.fixture.runtime
+        runtime = self.runtime
         binding = read_pixelorama_dispatch_output_binding(runtime, completed.execution_id)
         source_bytes = OriginForgeLineage(runtime).local_artifact_path(
             binding.output_artifact_id
