@@ -84,7 +84,7 @@ class Phase49DPixeloramaLifecycleAcceptanceTests(unittest.TestCase):
             code, payload = self._cli(execution_id)
         self.assertEqual(replay.call_count, 0)
         self.assertEqual(code, 2)
-        self.assertIn("EXECUTION_NOT_RETURNED", str(payload["detail"]))
+        self.assertIn("not adoption eligible", str(payload["detail"]))
         self.assertFalse((fixture.runtime.project_root / "assets/nonterminal.png").exists())
         with self.assertRaises(PixeloramaProductionAdoptionReceiptError):
             read_pixelorama_production_adoption_receipt(fixture.runtime, execution_id)
