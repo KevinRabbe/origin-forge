@@ -329,7 +329,7 @@ def _require_terminal_transition_event(
         if row["event_type"] == "TASK_STATUS_CHANGED"
         and row["old_state"] == TaskStatus.RUNNING.value
         and row["new_state"] == TaskStatus.SUCCEEDED.value
-        and int(row["aggregate_revision"]) == task_revision
+        and int(row["revision"]) == task_revision
     ]
     if len(matches) != 1:
         raise RuntimeError("canonical Phase-50 Task SUCCEEDED transition event is not exact")
