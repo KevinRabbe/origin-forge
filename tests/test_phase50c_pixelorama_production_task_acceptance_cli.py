@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import io
 import json
+import tempfile
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-
-import pytest
+from unittest.mock import patch
 
 from origin_forge import pixelorama_admin_cli
 
@@ -20,112 +23,138 @@ class _AcceptanceResult:
         }
 
 
-def test_accept_production_task_delegates_only_execution_identity_and_prints_json(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    runtime = object()
-    observed: dict[str, object] = {}
+class Phase50CPixeloramaProductionTaskAcceptanceCliTests(unittest.TestCase):
+    def test_accept_production_task_delegates_only_execution_identity_and_prints_json(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            runtime = object()
+            observed: dict[str, object] = {}
 
-    def open_runtime(project_root: Path) -> object:
-        observed["project_root"] = project_root
-        return runtime
+            def open_runtime(project_root: Path) -> object:
+                observed["project_root"] = project_root
+                return runtime
 
-    class FakeAcceptor:
-        def __init__(self, supplied_runtime: object):
-            observed["runtime"] = supplied_runtime
+            class FakeAcceptor:
+                def __init__(self, supplied_runtime: object):
+                    observed["runtime"] = supplied_runtime
 
-        def accept(self, execution_id: str) -> _AcceptanceResult:
-            observed["execution_id"] = execution_id
-            return _AcceptanceResult()
+                def accept(self, execution_id: str) -> _AcceptanceResult:
+                    observed["execution_id"] = execution_id
+                    return _AcceptanceResult()
 
-    monkeypatch.setattr(pixelorama_admin_cli, "OriginForgeRuntime", open_runtime)
-    monkeypatch.setattr(
-        pixelorama_admin_cli,
-        "GovernedPixeloramaProductionTaskAcceptor",
-        FakeAcceptor,
-    )
+            output = io.StringIO()
+            with (
+                patch.object(pixelorama_admin_cli, "OriginForgeRuntime", open_runtime),
+                patch.object(
+                    pixelorama_admin_cli,
+                    "GovernedPixeloramaProductionTaskAcceptor",
+                    FakeAcceptor,
+                ),
+                redirect_stdout(output),
+            ):
+                return_code = pixelorama_admin_cli.main(
+                    [
+                        "--project-root",
+                        str(root),
+                        "accept-production-task",
+                        "DISPEXEC-TEST",
+                    ]
+                )
 
-    return_code = pixelorama_admin_cli.main(
-        [
-            "--project-root",
-            str(tmp_path),
-            "accept-production-task",
-            "DISPEXEC-TEST",
-        ]
-    )
-
-    assert return_code == 0
-    assert observed == {
-        "project_root": tmp_path,
-        "runtime": runtime,
-        "execution_id": "DISPEXEC-TEST",
-    }
-    assert json.loads(capsys.readouterr().out) == _AcceptanceResult().to_dict()
-
-
-def test_accept_production_task_fails_closed_on_acceptor_error(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    runtime = object()
-
-    monkeypatch.setattr(pixelorama_admin_cli, "OriginForgeRuntime", lambda _root: runtime)
-
-    class FailingAcceptor:
-        def __init__(self, supplied_runtime: object):
-            assert supplied_runtime is runtime
-
-        def accept(self, execution_id: str) -> _AcceptanceResult:
-            assert execution_id == "DISPEXEC-STALE"
-            raise pixelorama_admin_cli.PixeloramaProductionTaskAcceptorError(
-                "production task acceptance is stale"
+            self.assertEqual(return_code, 0)
+            self.assertEqual(
+                observed,
+                {
+                    "project_root": root,
+                    "runtime": runtime,
+                    "execution_id": "DISPEXEC-TEST",
+                },
+            )
+            self.assertEqual(
+                json.loads(output.getvalue()),
+                _AcceptanceResult().to_dict(),
             )
 
-    monkeypatch.setattr(
-        pixelorama_admin_cli,
-        "GovernedPixeloramaProductionTaskAcceptor",
-        FailingAcceptor,
-    )
+    def test_accept_production_task_fails_closed_on_acceptor_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            runtime = object()
 
-    return_code = pixelorama_admin_cli.main(
-        [
-            "--project-root",
-            str(tmp_path),
-            "accept-production-task",
-            "DISPEXEC-STALE",
-        ]
-    )
+            class FailingAcceptor:
+                def __init__(self, supplied_runtime: object):
+                    self.assert_runtime(supplied_runtime)
 
-    assert return_code == 2
-    assert json.loads(capsys.readouterr().out) == {
-        "error": "PixeloramaProductionTaskAcceptorError",
-        "detail": "production task acceptance is stale",
-    }
+                @staticmethod
+                def assert_runtime(supplied_runtime: object) -> None:
+                    if supplied_runtime is not runtime:
+                        raise AssertionError("unexpected runtime")
 
+                def accept(self, execution_id: str) -> _AcceptanceResult:
+                    if execution_id != "DISPEXEC-STALE":
+                        raise AssertionError("unexpected execution id")
+                    raise pixelorama_admin_cli.PixeloramaProductionTaskAcceptorError(
+                        "production task acceptance is stale"
+                    )
 
-@pytest.mark.parametrize(
-    "extra_arguments",
-    [
-        ["--task-id", "TASK-OPERATOR"],
-        ["--run-id", "RUN-OPERATOR"],
-        ["--artifact-id", "ART-OPERATOR"],
-        ["--path", "artifacts/operator.png"],
-        ["--verification", "VER-OPERATOR"],
-        ["--model", "operator-model"],
-        ["--force"],
-    ],
-)
-def test_accept_production_task_rejects_extra_authority_inputs(
-    extra_arguments: list[str],
-) -> None:
-    parser = pixelorama_admin_cli.build_parser()
+            output = io.StringIO()
+            with (
+                patch.object(
+                    pixelorama_admin_cli,
+                    "OriginForgeRuntime",
+                    lambda _root: runtime,
+                ),
+                patch.object(
+                    pixelorama_admin_cli,
+                    "GovernedPixeloramaProductionTaskAcceptor",
+                    FailingAcceptor,
+                ),
+                redirect_stdout(output),
+            ):
+                return_code = pixelorama_admin_cli.main(
+                    [
+                        "--project-root",
+                        str(root),
+                        "accept-production-task",
+                        "DISPEXEC-STALE",
+                    ]
+                )
 
-    with pytest.raises(SystemExit) as exc_info:
-        parser.parse_args(
-            ["accept-production-task", "DISPEXEC-TEST", *extra_arguments]
+            self.assertEqual(return_code, 2)
+            self.assertEqual(
+                json.loads(output.getvalue()),
+                {
+                    "error": "PixeloramaProductionTaskAcceptorError",
+                    "detail": "production task acceptance is stale",
+                },
+            )
+
+    def test_accept_production_task_rejects_extra_authority_inputs(self) -> None:
+        parser = pixelorama_admin_cli.build_parser()
+        forbidden_arguments = (
+            ("--task-id", "TASK-OPERATOR"),
+            ("--run-id", "RUN-OPERATOR"),
+            ("--artifact-id", "ART-OPERATOR"),
+            ("--path", "artifacts/operator.png"),
+            ("--verification", "VER-OPERATOR"),
+            ("--model", "operator-model"),
+            ("--force",),
         )
 
-    assert exc_info.value.code == 2
+        for extra_arguments in forbidden_arguments:
+            with self.subTest(extra_arguments=extra_arguments):
+                with redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit) as exc_info:
+                        parser.parse_args(
+                            [
+                                "accept-production-task",
+                                "DISPEXEC-TEST",
+                                *extra_arguments,
+                            ]
+                        )
+                self.assertEqual(exc_info.exception.code, 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
