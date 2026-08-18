@@ -34,7 +34,7 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 14)
+            self.assertEqual(SCHEMA_VERSION, 15)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -385,7 +385,7 @@ class MigrationTests(unittest.TestCase):
                     (claim_id,),
                 ).fetchone()
 
-            self.assertEqual(version, 14)
+            self.assertEqual(version, 15)
             self.assertEqual(after, before)
             self.assertEqual(consumed["status"], "CONSUMED")
             self.assertEqual(consumed["revision"], 1)
