@@ -51,7 +51,7 @@ class PixeloramaAdminCliTests(unittest.TestCase):
             code = main(["--project-root", str(self.root), *args])
         return code, json.loads(output.getvalue())
 
-    def test_surface_contains_only_explicit_create_only_adoption(self) -> None:
+    def test_surface_contains_only_explicit_governed_commands(self) -> None:
         parser = build_parser()
         subparsers = [
             action
@@ -61,7 +61,7 @@ class PixeloramaAdminCliTests(unittest.TestCase):
         self.assertEqual(len(subparsers), 1)
         self.assertEqual(
             set(subparsers[0].choices),
-            {"adopt-new", "adopt-production-new"},
+            {"adopt-new", "adopt-production-new", "accept-production-task"},
         )
         production = subparsers[0].choices["adopt-production-new"]
         positional_names = {
@@ -73,6 +73,13 @@ class PixeloramaAdminCliTests(unittest.TestCase):
             positional_names,
             {"execution_id", "destination_relative_path"},
         )
+        acceptance = subparsers[0].choices["accept-production-task"]
+        acceptance_argument_names = {
+            action.dest
+            for action in acceptance._actions
+            if action.dest != "help"
+        }
+        self.assertEqual(acceptance_argument_names, {"execution_id"})
         for forbidden in (
             "run",
             "create",
