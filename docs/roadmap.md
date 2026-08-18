@@ -1086,6 +1086,27 @@ See `docs/phase-49-governed-pixelorama-production-output-adoption.md` for the fr
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
+## Phase 50 — Governed Pixelorama Production Task Acceptance — DONE
+
+Completed as the next separately gated **post-v0.5 v1.0 acceptance slice** after Phase 49, closing the exact human semantic-acceptance boundary without changing immutable v0.5 release records:
+
+- schema v15 adds one immutable database-enforced acceptance relation binding exactly one DISPEXEC, production Task, adopted Artifact, Phase-49 adoption Verification, and Phase-50 Task PASS;
+- acceptance publication atomically creates/reuses exactly one fixed `pixelorama-production-task-acceptance` PASS plus its immutable acceptance row, with conflicting durable identity/content/revision relations failing closed;
+- `GovernedPixeloramaProductionTaskAcceptor` derives all production identities from one explicit `DISPEXEC-*`, independently revalidates the complete Phase-48/49 RETURNED/CONSUMED/PUBLISHED Run/Artifact/Verification lineage, the exact canonical adopted path, and current regular non-symlinked RGBA8 PNG bytes before first acceptance or pending-transition recovery;
+- the human operator is the only semantic acceptance authority; favorable vision/specialist evidence and unrelated Task PASS evidence remain advisory/non-authorizing and cannot synthesize Phase-50 acceptance;
+- after the exact acceptance PASS/receipt is durable, the coordinator invokes the existing `OriginForgeRuntime` / store Task transition law for `RUNNING → SUCCEEDED`, preserving child-Task completeness and optimistic revision checks rather than mutating Task state directly;
+- durable PASS+receipt beside a still-RUNNING Task is an explicit recoverable crash boundary; retry revalidates current truth, reuses the same PASS/receipt, and never invokes Pixelorama or rewrites the canonical asset;
+- exact already-SUCCEEDED replay is idempotent only through the same historical Phase-50 acceptance; later asset drift does not rewrite accepted Task history;
+- the human-operated module command `accept-production-task DISPEXEC-*` exposes only the explicit execution identity and adds no Task/Run/Artifact/path/verifier/model/signing/release/force/bypass inputs or fourth installed package script;
+- cross-phase adversarial acceptance proves fail-closed wrong/missing execution, claim, Run, output, adoption, Artifact, Verification, Task-revision, symlink/currentness, immutable-receipt, and concurrent-transition behavior plus one canonical acceptance under concurrency;
+- acceptance does not replay Pixelorama, mutate the adopted asset, invoke vision/specialists/Manager, sign provenance, authorize release, transition the parent Flow/Goal, widen code/simulation acceptance authority, mutate cockpit/HTTP surfaces, add background work, or change Goal-bootstrap semantics.
+
+See `docs/phase-50-governed-pixelorama-production-task-acceptance.md` for the frozen architecture and `docs/phase-50-implementation-closure.md` for the accepted 50A–50D implementation, currentness/terminalization/recovery semantics, operator boundary, adversarial acceptance, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `eef3d4c3c8ee57607754dc2b7b7d9aad3f074bc6` / run `32033866391` / #1468, 50A head `4dd69dac806350ed9512d7b4121faf5f951103e1` / run `32086705921` / #1471, 50B head `c23fcd1de41c0711e92a86a3d70088f7648ea743` / run `32145375055` / #1474, 50C head `06f931622ab01d66051ff69bde3d0aa53f281871` / run `32153162973` / #1478, and 50D accepted head `abe96a01a15877a4bca08462dafca222e384f5dd` / run `32192102875` / #1481 all passed Python 3.12 and Python 3.13. Accepted Phase-50 implementation/acceptance is merged through `6375fb7e00de21d402d933370b1a7ee5a024409a`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 # v1.0 — Integrated Game Production
 
 Representative Goal:
