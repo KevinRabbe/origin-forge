@@ -15,6 +15,10 @@ from .production_pixelorama_adoption import (
 from .production_pixelorama_dispatch_output_binding_read import (
     PixeloramaDispatchOutputBindingReadError,
 )
+from .production_pixelorama_task_acceptor import (
+    GovernedPixeloramaProductionTaskAcceptor,
+    PixeloramaProductionTaskAcceptorError,
+)
 from .runtime import OriginForgeRuntime
 
 
@@ -52,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=512 * 1024 * 1024,
     )
+
+    production_accept = commands.add_parser(
+        "accept-production-task",
+        help="accept one current governed Pixelorama production task",
+    )
+    production_accept.add_argument("execution_id")
     return parser
 
 
@@ -79,6 +89,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.execution_id,
                 args.destination_relative_path,
             )
+        elif args.command == "accept-production-task":
+            result = GovernedPixeloramaProductionTaskAcceptor(runtime).accept(
+                args.execution_id
+            )
         else:  # pragma: no cover - argparse owns the closed command set.
             raise ValueError("unsupported Pixelorama admin command")
         _print(result.to_dict())
@@ -90,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         PixeloramaAdoptionError,
         PixeloramaProductionAdoptionError,
         PixeloramaDispatchOutputBindingReadError,
+        PixeloramaProductionTaskAcceptorError,
         OSError,
         ValueError,
     ) as exc:
