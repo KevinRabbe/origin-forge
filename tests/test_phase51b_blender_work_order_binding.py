@@ -47,9 +47,6 @@ from origin_forge.production_work_orders import ProductionWorkOrder
 from origin_forge.runtime import OriginForgeRuntime
 
 
-_HEX = "a" * 64
-
-
 class Phase51BBlenderWorkOrderBindingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
@@ -244,10 +241,10 @@ class Phase51BBlenderWorkOrderBindingTests(unittest.TestCase):
             BuiltinDispatchReviewStatus.SUPPORTED,
         )
         self.assertEqual(len(build_builtin_dispatch_binder_registry().descriptors), 4)
-        validator_ids = {
-            value.validator_id for value in build_builtin_dispatch_validator_registry().validators
-        }
-        self.assertIn("validator.blender.export-glb@1", validator_ids)
+        validator = build_builtin_dispatch_validator_registry().validator(
+            "validator.blender.export-glb@1"
+        )
+        self.assertEqual(validator.validator_id, "validator.blender.export-glb@1")
 
     def test_blender_only_catalog_gets_exact_contract_and_mixed_non_code_fails_closed(self) -> None:
         capabilities = {
