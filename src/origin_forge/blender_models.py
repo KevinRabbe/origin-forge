@@ -63,8 +63,10 @@ def _bounded_line(value: str, field: str) -> str:
     return value
 
 
-def _validate_v0_project(project: BlockbenchProjectSpec) -> None:
-    """Require only the geometry semantics implemented by runner schema v1."""
+def validate_blender_v1_project(project: BlockbenchProjectSpec) -> None:
+    """Pure compatibility check for the geometry semantics implemented by runner v1."""
+    if not isinstance(project, BlockbenchProjectSpec):
+        raise BlenderModelError("project must be the canonical v1 3D project spec")
     if project.bones:
         raise BlenderModelError("Blender runner v1 does not accept bones")
     if project.textures:
@@ -93,6 +95,11 @@ def _validate_v0_project(project: BlockbenchProjectSpec) -> None:
             )
 
 
+# Preserve the Phase-20C private name for internal/backward compatibility while
+# exposing the exact same pure validator to the governed production pipeline.
+_validate_v0_project = validate_blender_v1_project
+
+
 @dataclass(frozen=True)
 class BlenderJobRequest:
     operation_id: str
@@ -114,7 +121,7 @@ class BlenderJobRequest:
             raise BlenderModelError("operation must be a BlenderOperation")
         if not isinstance(self.project, BlockbenchProjectSpec):
             raise BlenderModelError("project must be the canonical v1 3D project spec")
-        _validate_v0_project(self.project)
+        validate_blender_v1_project(self.project)
         try:
             output = workspace_relative_path(
                 self.output_relative_path, "output_relative_path"
