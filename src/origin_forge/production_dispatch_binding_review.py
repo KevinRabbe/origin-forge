@@ -35,9 +35,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
     """Return the reviewed Phase-34 built-in binding boundary.
 
     This inventory is evidence-driven. A Phase-32 adapter is bindable only when
-    a reviewed Phase-33 dispatch view and the current Phase-34 binder registry
-    both contain the exact adapter/contract relation and every native request
-    input can be reconstructed without invention or backend invocation.
+    a reviewed dispatch view and the current binder registry both contain the
+    exact adapter/contract relation and every native request input can be
+    reconstructed without invention or backend invocation.
     """
 
     rows = (
@@ -55,9 +55,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.blender.model3d",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_DIRECT_MODEL3D_REQUEST_READER",
-            "34C found 3D request/project evidence workspace-bound without a direct protected ID-addressed reader",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase-51B exposes blender.export-glb@1 and reconstructs the exact protected MODEL3D_REQUEST semantic projection without runtime IDs, paths, process authority, or backend invocation",
         ),
         BuiltinBindingReview(
             "originforge.image.generate",
@@ -115,6 +115,11 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         (phase32.adapter("originforge.pixelorama.export"),),
     )
     pixelorama_dispatch_catalog = build_builtin_dispatch_catalog(pixelorama_phase32)
+    blender_phase32 = CapabilityCatalog.create(
+        (phase32.capability("media.3d.blender"),),
+        (phase32.adapter("originforge.blender.model3d"),),
+    )
+    blender_dispatch_catalog = build_builtin_dispatch_catalog(blender_phase32)
     resolver_registry = build_dispatch_input_resolver_registry()
     binder_registry = build_builtin_dispatch_binder_registry()
 
@@ -131,6 +136,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         *code_dispatch_catalog.contracts,
         *simulation_dispatch_catalog.contracts,
         *pixelorama_dispatch_catalog.contracts,
+        *blender_dispatch_catalog.contracts,
     )
     contract_by_adapter = {value.adapter_id: value for value in reviewed_contracts}
     if len(contract_by_adapter) != len(reviewed_contracts):
@@ -143,7 +149,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
     for descriptor in binder_registry.descriptors:
         contract = contract_by_adapter.get(descriptor.adapter_id)
         if contract is None or descriptor.dispatch_contract_id != contract.contract_id:
-            raise RuntimeError("Phase-34 binder contract drifted from reviewed Phase-33 dispatch views")
+            raise RuntimeError("Phase-34 binder contract drifted from reviewed dispatch views")
 
     resolved_ref_types = {
         claim.ref_type

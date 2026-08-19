@@ -42,6 +42,11 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             (phase32.adapter("originforge.pixelorama.export"),),
         )
         pixelorama_dispatch = build_builtin_dispatch_catalog(pixelorama_phase32)
+        blender_phase32 = CapabilityCatalog.create(
+            (phase32.capability("media.3d.blender"),),
+            (phase32.adapter("originforge.blender.model3d"),),
+        )
+        blender_dispatch = build_builtin_dispatch_catalog(blender_phase32)
         binder_registry = build_builtin_dispatch_binder_registry()
         rows = builtin_binding_review()
 
@@ -53,6 +58,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         self.assertEqual(
             bindable,
             {
+                "originforge.blender.model3d",
                 "originforge.code.bounded-retry",
                 "originforge.pixelorama.export",
                 "originforge.simulation.deterministic",
@@ -62,6 +68,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             *code_dispatch.contracts,
             *simulation_dispatch.contracts,
             *pixelorama_dispatch.contracts,
+            *blender_dispatch.contracts,
         )
         self.assertEqual(
             bindable,
@@ -89,6 +96,10 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         self.assertEqual(
             pixelorama_dispatch.contract_ids,
             ("pixelorama.spritesheet-export@1",),
+        )
+        self.assertEqual(
+            blender_dispatch.contract_ids,
+            ("blender.export-glb@1",),
         )
 
     def test_audio_profile_resolution_does_not_silently_promote_audio_backends(self) -> None:
@@ -132,7 +143,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             for value in rows
             if value.status is BuiltinBindingReviewStatus.DEFERRED
         ]
-        self.assertEqual(len(deferred), 7)
+        self.assertEqual(len(deferred), 6)
         self.assertTrue(all(value.blocker for value in deferred))
         self.assertEqual(
             len({value.blocker for value in deferred}),

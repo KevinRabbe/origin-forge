@@ -180,7 +180,7 @@ class Phase47BSimulationRequestBindingTests(unittest.TestCase):
         self.assertEqual(self.runtime.get_task(self.task_id), task_before)
         self.assertEqual(self.runtime.list_runs(self.task_id), runs_before)
 
-    def test_builtin_registry_preserves_code_simulation_and_adds_pixelorama(self) -> None:
+    def test_builtin_registry_preserves_code_simulation_pixelorama_and_blender(self) -> None:
         first = build_builtin_dispatch_binder_registry()
         second = build_builtin_dispatch_binder_registry()
         self.assertEqual(first.fingerprint, second.fingerprint)
@@ -188,6 +188,7 @@ class Phase47BSimulationRequestBindingTests(unittest.TestCase):
         self.assertEqual(
             tuple(value.binder_id for value in first.descriptors),
             (
+                "binder.blender.export-glb@1",
                 "binder.code.bounded-retry@1",
                 "binder.pixelorama.spritesheet-export@1",
                 "binder.simulation.deterministic@1",
@@ -196,9 +197,9 @@ class Phase47BSimulationRequestBindingTests(unittest.TestCase):
         code = CodeBoundedRetryInputBinder().descriptor
         pixelorama = PixeloramaSpritesheetExportInputBinder().descriptor
         simulation = DeterministicSimulationInputBinder().descriptor
-        self.assertEqual(first.descriptors[0], code)
-        self.assertEqual(first.descriptors[1], pixelorama)
-        self.assertEqual(first.descriptors[2], simulation)
+        self.assertEqual(first.descriptors[1], code)
+        self.assertEqual(first.descriptors[2], pixelorama)
+        self.assertEqual(first.descriptors[3], simulation)
         self.assertEqual(pixelorama.accepted_input_roles, ("pixelorama_project",))
         self.assertEqual(simulation.accepted_input_roles, ())
         contract = self.dispatch_catalog.contract("simulation.deterministic@1")

@@ -198,7 +198,7 @@ class Phase48BPixeloramaRequestBindingTests(unittest.TestCase):
         self.assertEqual(self.runtime.get_task(self.task_id), task_before)
         self.assertEqual(self.runtime.list_runs(self.task_id), runs_before)
 
-    def test_builtin_registry_adds_only_pixelorama_to_code_and_simulation(self) -> None:
+    def test_builtin_registry_preserves_pixelorama_with_blender_addition(self) -> None:
         first = build_builtin_dispatch_binder_registry()
         second = build_builtin_dispatch_binder_registry()
         self.assertEqual(first.fingerprint, second.fingerprint)
@@ -206,22 +206,23 @@ class Phase48BPixeloramaRequestBindingTests(unittest.TestCase):
         self.assertEqual(
             tuple(value.binder_id for value in first.descriptors),
             (
+                "binder.blender.export-glb@1",
                 "binder.code.bounded-retry@1",
                 PIXELORAMA_BINDER_ID,
                 "binder.simulation.deterministic@1",
             ),
         )
-        self.assertEqual(first.descriptors[0], CodeBoundedRetryInputBinder().descriptor)
+        self.assertEqual(first.descriptors[1], CodeBoundedRetryInputBinder().descriptor)
         self.assertEqual(
-            first.descriptors[1],
+            first.descriptors[2],
             PixeloramaSpritesheetExportInputBinder().descriptor,
         )
         self.assertEqual(
-            first.descriptors[2],
+            first.descriptors[3],
             DeterministicSimulationInputBinder().descriptor,
         )
-        self.assertEqual(first.descriptors[1].accepted_input_roles, (PIXELORAMA_SOURCE_ROLE,))
-        self.assertEqual(first.descriptors[1].dispatch_contract_id, PIXELORAMA_CONTRACT_ID)
+        self.assertEqual(first.descriptors[2].accepted_input_roles, (PIXELORAMA_SOURCE_ROLE,))
+        self.assertEqual(first.descriptors[2].dispatch_contract_id, PIXELORAMA_CONTRACT_ID)
 
     def test_wrong_artifact_type_or_status_fails_before_binding(self) -> None:
         wrong_type_id = create_artifact(

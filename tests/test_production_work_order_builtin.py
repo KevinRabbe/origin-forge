@@ -25,19 +25,19 @@ from origin_forge.runtime import OriginForgeRuntime
 
 
 class BuiltinProductionWorkOrderTests(unittest.TestCase):
-    def test_review_supports_code_and_simulation_and_records_deferred_boundary(self) -> None:
+    def test_review_supports_reviewed_dispatch_and_records_deferred_boundary(self) -> None:
         rows = {value.adapter_id: value for value in builtin_dispatch_review()}
         for adapter_id in (
             "originforge.code.bounded-retry",
             "originforge.simulation.deterministic",
             "originforge.pixelorama.export",
+            "originforge.blender.model3d",
         ):
             self.assertEqual(
                 rows[adapter_id].status,
                 BuiltinDispatchReviewStatus.SUPPORTED,
             )
         for adapter_id in (
-            "originforge.blender.model3d",
             "originforge.image.generate",
             "originforge.vision.inspect",
             "originforge.audio.ffmpeg",
