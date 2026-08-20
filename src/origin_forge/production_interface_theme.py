@@ -289,7 +289,8 @@ def _decorate_shell(page: str) -> str:
         page,
         "</body></html>",
         '</main><footer class="app-footer"><div class="app-footer-inner">'
-        'Local inspection surface · no production mutation authority'</n        '</div></footer></body></html>',
+        'Local inspection surface · no production mutation authority'
+        '</div></footer></body></html>',
     )
 
 
@@ -301,7 +302,7 @@ def _wrap_tables(page: str) -> str:
 def _metric(label: str, value: int) -> str:
     return (
         '<div class="metric"><span class="metric-value">'
-        f"{value}</span><span class=\"metric-label\">{_e(label)}</span></div>"
+        f'{value}</span><span class="metric-label">{_e(label)}</span></div>'
     )
 
 
