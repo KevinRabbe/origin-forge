@@ -285,7 +285,41 @@ def builtin_preparation_owner_descriptors() -> tuple[ProductionPreparationOwnerD
         supported_dispatch_contract_hash=pixelorama_contract.content_hash,
         model_strategy_roles=(ModelRole.CODER_STRONG,),
     )
-    return (code_owner, simulation_owner, pixelorama_owner)
+
+    blender_adapter_id = "originforge.blender.model3d"
+    try:
+        blender_adapter = adapters[blender_adapter_id]
+    except KeyError as exc:
+        raise ProductionPreparationOwnerError(
+            "built-in capability inventory lacks Blender model3d adapter"
+        ) from exc
+    blender_phase32_catalog = CapabilityCatalog.create(
+        (phase32_catalog.capability("media.3d.blender"),),
+        (phase32_catalog.adapter(blender_adapter_id),),
+    )
+    blender_catalog = build_builtin_dispatch_catalog(blender_phase32_catalog)
+    try:
+        blender_contract = blender_catalog.contract_for_adapter(blender_adapter_id)
+    except KeyError as exc:
+        raise ProductionPreparationOwnerError(
+            "built-in dispatch inventory lacks Blender export-glb contract"
+        ) from exc
+    if blender_contract.adapter_fingerprint != blender_adapter.implementation_fingerprint:
+        raise ProductionPreparationOwnerError(
+            "built-in Blender preparation adapter/dispatch-contract relation drifted"
+        )
+    blender_owner = ProductionPreparationOwnerDescriptor(
+        owner_id="originforge.preparation.blender-export-glb@1",
+        owner_version="1",
+        planner_request_version="1",
+        planner_contract_id="BoundedProductionWorkOrderPlanner.propose@1",
+        supported_adapter_id=blender_adapter.adapter_id,
+        supported_adapter_fingerprint=blender_adapter.implementation_fingerprint,
+        supported_dispatch_contract_id=blender_contract.contract_id,
+        supported_dispatch_contract_hash=blender_contract.content_hash,
+        model_strategy_roles=(ModelRole.CODER_STRONG,),
+    )
+    return (code_owner, simulation_owner, pixelorama_owner, blender_owner)
 
 
 def build_builtin_preparation_owner_registry() -> ProductionPreparationOwnerRegistry:
