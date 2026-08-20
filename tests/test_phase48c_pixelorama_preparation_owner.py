@@ -20,6 +20,7 @@ class Phase48CPixeloramaPreparationOwnerTests(unittest.TestCase):
     def test_exact_owner_and_currentness(self):
         full,p32,dispatch=self.catalogs(); registry=build_builtin_preparation_owner_registry()
         self.assertEqual(tuple(x.owner_id for x in registry.descriptors),(
+            "originforge.preparation.blender-export-glb@1",
             "originforge.preparation.pixelorama-spritesheet-export-planner@1",
             "originforge.preparation.simulation-work-order-planner@1",
             "originforge.preparation.work-order-planner@1"))
