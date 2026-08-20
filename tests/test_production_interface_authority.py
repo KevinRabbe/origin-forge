@@ -3,10 +3,12 @@ from __future__ import annotations
 import inspect
 import unittest
 
+import origin_forge.production_interface_classic as classic_module
 import origin_forge.production_interface_cli as cli_module
 import origin_forge.production_interface_html as html_module
 import origin_forge.production_interface_server as server_module
 import origin_forge.production_interface_snapshot as snapshot_module
+import origin_forge.production_interface_theme as theme_module
 
 
 class ProductionInterfaceAuthorityTests(unittest.TestCase):
@@ -15,7 +17,9 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
             inspect.getsource(module)
             for module in (
                 snapshot_module,
+                classic_module,
                 html_module,
+                theme_module,
                 server_module,
                 cli_module,
             )
