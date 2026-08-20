@@ -9,11 +9,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import origin_forge.production_dispatch_invocation as invocation_module
 from origin_forge.blender_adapter import BlenderExecution
 from origin_forge.blender_models import BlenderJobRequest
 from origin_forge.blockbench_glb import inspect_glb
 from origin_forge.blockbench_models import BlockbenchProjectSpec, CuboidSpec, Vec3
+from origin_forge.lineage import OriginForgeLineage
 from origin_forge.model3d_requests import Model3DProductionRequest, Model3DRequestStore
+from origin_forge.production_blender_dispatch_output_binding import (
+    read_blender_dispatch_output_binding,
+)
 from origin_forge.production_blender_export import BlenderExportService
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
 from origin_forge.production_capability_models import CapabilityCatalog, CapabilityRoutingPolicy
@@ -30,9 +35,13 @@ from origin_forge.production_dispatch_claims import acquire_dispatch_claim
 from origin_forge.production_dispatch_execution_models import DispatchExecutionStatus
 from origin_forge.production_dispatch_invocation import (
     ProductionDispatchInvocationError,
+    ProductionDispatchInvocationRecoveryRequired,
     dispatch_claim_once,
 )
 from origin_forge.production_dispatch_invocation_blender import CompletedBlenderDispatchInvocation
+from origin_forge.production_dispatch_invocation_blender_recovery import (
+    recover_blender_dispatch_execution_once,
+)
 from origin_forge.production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
 from origin_forge.production_dispatch_store import ProductionDispatchStore
 from origin_forge.production_task_activation import activate_dependency_ready_task
@@ -231,6 +240,44 @@ class Phase51FBlenderAdversarialAcceptanceTests(unittest.TestCase):
                 ).fetchall()
             ]
 
+    def _execute_with_fake_adapter(self, service, task_id, request):
+        service.adapter = _FakeBlenderAdapter(self.runtime, service.profile)
+        return self._original_service_execute(service, task_id, request)
+
+    def _leave_durable_output_before_terminalization(self) -> str:
+        self._original_service_execute = BlenderExportService.execute
+        with (
+            patch.dict(os.environ, self.env, clear=False),
+            patch.object(
+                BlenderExportService,
+                "execute",
+                autospec=True,
+                side_effect=self._execute_with_fake_adapter,
+            ) as execute,
+            patch.object(
+                invocation_module,
+                "mark_dispatch_execution_returned",
+                side_effect=RuntimeError("injected dispatch finalization failure"),
+            ),
+        ):
+            with self.assertRaises(ProductionDispatchInvocationRecoveryRequired) as caught:
+                dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+        self.assertEqual(execute.call_count, 1)
+        self.assertEqual(caught.exception.reason_code, "RETURNED_TERMINALIZATION_FAILED")
+        rows = self._execution_rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["status"], DispatchExecutionStatus.STARTED.value)
+        execution_id = rows[0]["execution_id"]
+        read_blender_dispatch_output_binding(self.runtime, execution_id)
+        self.assertEqual(
+            read_dispatch_claim(self.runtime, self.claim.claim_id).status,
+            DispatchClaimStatus.ACTIVE,
+        )
+        runs = self.runtime.list_runs(self.task_id)
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], RunStatus.SUCCEEDED.value)
+        return execution_id
+
     def test_two_workers_race_same_claim_and_only_one_reaches_blender(self) -> None:
         original_execute = BlenderExportService.execute
         service_entered = threading.Event()
@@ -315,6 +362,55 @@ class Phase51FBlenderAdversarialAcceptanceTests(unittest.TestCase):
         self.assertEqual(len(runs), 1)
         self.assertEqual(runs[0]["role"], BlenderExportService.RUN_ROLE)
         self.assertEqual(runs[0]["status"], RunStatus.SUCCEEDED.value)
+
+    def test_durable_output_recovers_terminalization_without_blender_replay(self) -> None:
+        execution_id = self._leave_durable_output_before_terminalization()
+        with patch.object(
+            BlenderExportService,
+            "execute",
+            autospec=True,
+            side_effect=AssertionError("recovery must not replay Blender"),
+        ) as replay:
+            recovered = recover_blender_dispatch_execution_once(
+                self.runtime,
+                execution_id,
+            )
+        self.assertEqual(replay.call_count, 0)
+        self.assertIsInstance(recovered, CompletedBlenderDispatchInvocation)
+        self.assertEqual(recovered.execution.status, DispatchExecutionStatus.RETURNED)
+        claim = read_dispatch_claim(self.runtime, self.claim.claim_id)
+        self.assertEqual(claim.status, DispatchClaimStatus.CONSUMED)
+        self.assertEqual(claim.revision, 1)
+        task = self.runtime.get_task(self.task_id)
+        self.assertEqual(task["status"], TaskStatus.RUNNING.value)
+        self.assertEqual(int(task["revision"]), 2)
+        self.assertEqual(len(self.runtime.list_runs(self.task_id)), 1)
+
+    def test_recovery_rejects_bound_glb_drift_without_blender_replay(self) -> None:
+        execution_id = self._leave_durable_output_before_terminalization()
+        binding = read_blender_dispatch_output_binding(self.runtime, execution_id)
+        lineage = OriginForgeLineage(self.runtime)
+        output_path = lineage.local_artifact_path(binding.output_artifact_id)
+        output_path.write_bytes(b"not-a-glb")
+
+        with patch.object(
+            BlenderExportService,
+            "execute",
+            autospec=True,
+            side_effect=AssertionError("drift recovery must not replay Blender"),
+        ) as replay:
+            with self.assertRaises(ProductionDispatchInvocationRecoveryRequired) as caught:
+                recover_blender_dispatch_execution_once(self.runtime, execution_id)
+        self.assertEqual(replay.call_count, 0)
+        self.assertEqual(caught.exception.reason_code, "OWNER_RETURN_CONTRACT_MISMATCH")
+        self.assertEqual(
+            self._execution_rows()[0]["status"],
+            DispatchExecutionStatus.STARTED.value,
+        )
+        self.assertEqual(
+            read_dispatch_claim(self.runtime, self.claim.claim_id).status,
+            DispatchClaimStatus.ACTIVE,
+        )
 
 
 if __name__ == "__main__":
