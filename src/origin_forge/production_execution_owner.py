@@ -9,6 +9,7 @@ from typing import Sequence
 from .model_scheduler import ModelRole
 from .production_capability_builtin import builtin_trusted_production_adapters
 from .production_dispatch_binding import CodeBoundedRetryInputBinder
+from .production_dispatch_binding_blender import BlenderExportGLBInputBinder
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
 from .production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
 
@@ -291,7 +292,35 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         requires_sandbox=False,
         requires_workspace_manager=False,
     )
-    return (code_owner, simulation_owner, pixelorama_owner)
+    try:
+        blender_adapter = adapters["originforge.blender.model3d"]
+    except KeyError as exc:
+        raise ProductionExecutionOwnerError(
+            "built-in capability inventory lacks Blender model3d adapter"
+        ) from exc
+    blender_binder = BlenderExportGLBInputBinder().descriptor
+    if (
+        blender_binder.adapter_id != blender_adapter.adapter_id
+        or blender_binder.dispatch_contract_id != "blender.export-glb@1"
+    ):
+        raise ProductionExecutionOwnerError(
+            "built-in Blender export-glb binder relation drifted"
+        )
+    blender_owner = ProductionExecutionOwnerDescriptor(
+        owner_id="originforge.execution.blender.export-glb@1",
+        owner_version="1",
+        adapter_id=blender_adapter.adapter_id,
+        adapter_fingerprint=blender_adapter.implementation_fingerprint,
+        dispatch_contract_id=blender_binder.dispatch_contract_id,
+        binder_id=blender_binder.binder_id,
+        binder_fingerprint=blender_binder.binder_fingerprint,
+        request_type_id=blender_binder.request_type_id,
+        request_schema_hash=blender_binder.request_schema_hash,
+        model_strategy_roles=(),
+        requires_sandbox=False,
+        requires_workspace_manager=False,
+    )
+    return (code_owner, simulation_owner, pixelorama_owner, blender_owner)
 
 
 def build_builtin_execution_owner_registry() -> ProductionExecutionOwnerRegistry:
