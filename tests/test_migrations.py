@@ -34,7 +34,7 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 15)
+            self.assertEqual(SCHEMA_VERSION, 16)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -121,6 +121,7 @@ class MigrationTests(unittest.TestCase):
                 "goal_bootstraps",
                 "pixelorama_dispatch_output_bindings",
                 "pixelorama_production_adoptions",
+                "blender_dispatch_output_bindings",
             ):
                 self.assertIn(table, tables)
             self.assertIn("idx_entity_relations_active_unique", relation_indexes)
@@ -280,7 +281,7 @@ class MigrationTests(unittest.TestCase):
             conn = sqlite3.connect(path)
             conn.row_factory = sqlite3.Row
             try:
-                for migration in MIGRATIONS[:-2]:
+                for migration in MIGRATIONS[:-3]:
                     conn.executescript(migration.sql)
                     conn.execute(
                         "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
@@ -385,7 +386,7 @@ class MigrationTests(unittest.TestCase):
                     (claim_id,),
                 ).fetchone()
 
-            self.assertEqual(version, 15)
+            self.assertEqual(version, 16)
             self.assertEqual(after, before)
             self.assertEqual(consumed["status"], "CONSUMED")
             self.assertEqual(consumed["revision"], 1)
