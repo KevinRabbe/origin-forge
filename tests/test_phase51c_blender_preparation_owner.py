@@ -244,7 +244,7 @@ class Phase51CBlenderPreparationOwnerTests(unittest.TestCase):
         self.assertEqual(
             Model3DRequestReader(self.runtime).get(
                 allowed[0].ref_id,
-                allowed[0].content_hash,
+                f"sha256:{allowed[0].content_hash}",
             ),
             first,
         )
