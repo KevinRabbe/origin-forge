@@ -2,7 +2,7 @@
 
 Status: **POST-v0.5 DEVELOPMENT MAINLINE**
 
-This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch integration, Phase-49 governed production-output adoption, and Phase-50 governed production Task acceptance. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
+This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch integration, Phase-49 governed production-output adoption, Phase-50 governed production Task acceptance, and Phase-51 governed Blender 3D production dispatch. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
 
 ## Install
 
@@ -20,7 +20,7 @@ origin-forge-attempt  exactly one bounded coding attempt
 origin-forge-cockpit  read-only local inspection
 ```
 
-Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
+Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
 
 ## Initialize a project
 
@@ -113,7 +113,7 @@ from origin_forge.production_goal_bootstrap_operator import (
 
 A successful bootstrap or recovery stops at GOALBOOT `READY` after exact PREPPOL publication/revalidation. It does **not** invoke Manager. Production advancement remains a separate explicit `origin-forge manager advance` authorization.
 
-Phases 47, 48, 49, and 50 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run` or `media.2d.export` Tasks.
+Phases 47, 48, 49, 50, and 51 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run`, `media.2d.export`, or `media.3d.blender` Tasks.
 
 ## Inspect or explicitly advance governed Manager work
 
@@ -141,6 +141,12 @@ Phase 48 likewise allows an **already-governed** `media.2d.export` Task using th
 The Pixelorama execution owner uses the infrastructure-owned trusted Pixelorama CLI profile, not caller/model-selected executable or process settings. After STARTED it revalidates the exact local `.pxo` source path, containment, regular-file/no-symlink status, hash, and bounded byte count; allocates fresh `PXOP-*` and `MEDIA-*` identities; and invokes the durable direct CLI spritesheet-export service at most once. A trustworthy return creates one PIXELORAMA Run plus exact request/result/export/Verification evidence, consumes the claim, records DISPEXEC `RETURNED`, and leaves the production Task `RUNNING`.
 
 Pixelorama export evidence is structural only. Manager does not infer aesthetic quality or Task acceptance, does not adopt the exported PNG into a canonical project path, does not sign it, and does not complete/fail the Task. Project creation/import/edit/save, arbitrary extensions/plugins/GDScript, caller-selected source/output paths, and automatic replay after STARTED remain outside the production boundary. There is no direct command that executes a production Pixelorama editor operation; editor execution remains reachable only through governed Manager dispatch.
+
+Phase 51 adds one equally narrow **already-governed** `media.3d.blender` path using `originforge.blender.model3d / blender.export-glb@1`. Preparation may select exactly one pre-existing protected `MODEL3DREQ-*` semantic request through the infrastructure-owned Blender planner allow-list. The WorkOrder contains exactly one `MODEL3D_REQUEST` ref with role `model3d_request` and inert `{}` payload; caller/model runtime paths, profile, Blender version, runner, process settings, budgets, operation IDs, workspace IDs, adoption, and Task authority are not WorkOrder inputs.
+
+The Blender execution owner requires only the infrastructure-owned trusted Blender profile and atomically records DISPEXEC `STARTED + Task READY → RUNNING` before allocating any `BLOP-*` operation or `MODEL3D-*` workspace identity. Only after STARTED does infrastructure construct the strict runtime request with fixed `exports/model.glb`, trusted profile hashes/version, and code-owned budget, then invoke the existing governed Blender adapter exactly once. A trustworthy return persists and independently revalidates request/result/GLB Artifact and Run/Verification lineage, consumes the claim, records DISPEXEC `RETURNED`, and leaves the production Task `RUNNING`.
+
+There is no direct `origin-forge blender run` mutation command, no caller-selected output/adoption destination, and no automatic GLB adoption, Task acceptance, signing, merge, or release. If durable Blender output exists but dispatch terminalization is interrupted, explicit infrastructure recovery may revalidate and consume that exact bound output without replaying Blender; drift fails closed.
 
 ## Explicitly adopt one terminal Pixelorama production output
 
@@ -196,7 +202,7 @@ If the acceptance PASS/receipt becomes durable but the Task transition is interr
 
 Phase 50 acceptance never invokes Pixelorama, rewrites or republishes the canonical asset, runs vision or a specialist, signs provenance, authorizes release, or transitions the parent Flow or Goal. The accepted Task history remains append-only; later asset drift does not retroactively rewrite a successfully terminalized acceptance.
 
-The cockpit remains a separate read-only inspection surface. It does not receive a Manager, Goal-bootstrap, simulation, Pixelorama execution, production-adoption, or production-acceptance mutation command.
+The cockpit remains a separate read-only inspection surface. It does not receive a Manager, Goal-bootstrap, simulation, Pixelorama execution, Blender execution, production-adoption, or production-acceptance mutation command.
 
 ## Run exactly one bounded coding attempt
 
@@ -276,9 +282,9 @@ The Phase-44 Manager command is similarly bounded: one explicit `manager advance
 
 The Phase-45/46 Goal-bootstrap boundary is independently explicit and bounded: a fresh bootstrap starts only from `ELIGIBLE`, uncertain Planner execution is not automatically replayed, recovery must be requested separately, and READY stops before Manager invocation.
 
-The Phase-47 deterministic simulation and Phase-48 Pixelorama dispatch boundaries follow the same no-replay law: once owner-specific DISPEXEC `STARTED` is durable, a BaseException/crash or post-evidence terminalization failure requires explicit recovery rather than a second automatic backend/editor call.
+The Phase-47 deterministic simulation, Phase-48 Pixelorama, and Phase-51 Blender dispatch boundaries follow the same no-replay law: once owner-specific DISPEXEC `STARTED` is durable, a BaseException/crash or post-evidence terminalization failure requires explicit recovery rather than a second automatic backend/editor call. For Blender, an exact durable dispatch-output binding can complete terminalization only after the same output/lineage evidence is independently revalidated; recovery never re-invokes Blender.
 
-Phases 49 and 50 preserve that law across publication and acceptance: binding publication/currentness, terminal dispatch recovery, production adoption, Task acceptance, retry, and recovery never re-invoke Pixelorama. Exact durable output/adoption/acceptance evidence is consumed or rejected; it is not regenerated to make adoption or acceptance convenient.
+Phases 49 and 50 preserve that law across Pixelorama publication and acceptance: binding publication/currentness, terminal dispatch recovery, production adoption, Task acceptance, retry, and recovery never re-invoke Pixelorama. Exact durable output/adoption/acceptance evidence is consumed or rejected; it is not regenerated to make adoption or acceptance convenient.
 
 ## Current-development boundary
 
@@ -290,12 +296,13 @@ Current `main` does not grant:
 - automatic Artifact adoption or signing;
 - automatic Dream promotion;
 - production checkpoint/model activation;
-- direct simulation execution or direct Pixelorama editor-execution commands, or automatic Task terminalization from simulation/export/adoption/advisory evidence;
+- direct simulation execution, direct Pixelorama editor-execution commands, direct Blender production-execution commands, or automatic Task terminalization from simulation/export/adoption/advisory evidence;
 - generic Pixelorama project creation/import/edit/save, arbitrary editor scripts/plugins, or automatic output adoption/signing;
-- model-, vision-, specialist-, Pixelorama-, Manager-, or dispatcher-synthesized semantic production acceptance;
-- background Goal bootstrap, Manager scheduling/queue draining, production adoption, or production Task acceptance;
+- caller/model-selected Blender runtime/path/profile/version/runner/budget/workspace/output authority, automatic GLB adoption, or Blender-derived Task acceptance;
+- model-, vision-, specialist-, Pixelorama-, Blender-, Manager-, or dispatcher-synthesized semantic production acceptance;
+- background Goal bootstrap, Manager scheduling/queue draining, production adoption, production Task acceptance, or Blender execution/replay;
 - remote/multi-user cockpit hosting.
 
-The Pixelorama post-dispatch mutation surfaces are exactly the explicit module commands documented above: create-only `adopt-production-new` and human-only `accept-production-task`. Neither executes the editor, selects a different output, overwrites an asset, signs provenance, authorizes release, or grants background/automatic authority; only the acceptance command may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and human acceptance are durable.
+The Pixelorama post-dispatch mutation surfaces are exactly the explicit module commands documented above: create-only `adopt-production-new` and human-only `accept-production-task`. Neither executes the editor, selects a different output, overwrites an asset, signs provenance, authorizes release, or grants background/automatic authority; only the acceptance command may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and human acceptance are durable. Phase 51 adds no analogous Blender adoption or acceptance command.
 
-Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, and 50 are explicitly post-v0.5 development.
+Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, 50, and 51 are explicitly post-v0.5 development.
