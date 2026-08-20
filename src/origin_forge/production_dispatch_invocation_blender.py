@@ -9,6 +9,7 @@ from .blockbench_models import canonical_bytes, validate_sha256
 from .ids import IdKind, validate_id
 from .lineage import OriginForgeLineage
 from .model3d_requests import Model3DRequestError, _project
+from .production_blender_dispatch_output_binding import bind_blender_dispatch_output
 from .production_blender_export import BlenderExportService, BlenderExportServiceResult
 from .production_dispatch_binding_blender import (
     BLENDER_BINDER_ID,
@@ -459,6 +460,13 @@ def dispatch_blender_claim_once_if_applicable(
     except Exception as exc:
         raise legacy.ProductionDispatchInvocationRecoveryRequired(
             execution.execution_id, "OWNER_RETURN_CONTRACT_MISMATCH"
+        ) from exc
+
+    try:
+        bind_blender_dispatch_output(runtime, execution, blender_result)
+    except Exception as exc:
+        raise legacy.ProductionDispatchInvocationRecoveryRequired(
+            execution.execution_id, "RETURNED_TERMINALIZATION_FAILED"
         ) from exc
 
     returned = legacy._record_returned_or_recovery(

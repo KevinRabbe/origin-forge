@@ -4,6 +4,9 @@ import sqlite3
 from pathlib import Path
 
 from .migrations import MIGRATIONS as BASE_MIGRATIONS
+from .production_blender_dispatch_output_binding_migration import (
+    BLENDER_DISPATCH_OUTPUT_BINDING_MIGRATION,
+)
 from .production_pixelorama_adoption_migration import (
     PIXELORAMA_PRODUCTION_ADOPTION_MIGRATION,
 )
@@ -19,6 +22,7 @@ MIGRATIONS = (
     PIXELORAMA_DISPATCH_OUTPUT_BINDING_MIGRATION,
     PIXELORAMA_PRODUCTION_ADOPTION_MIGRATION,
     PIXELORAMA_PRODUCTION_TASK_ACCEPTANCE_MIGRATION,
+    BLENDER_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
