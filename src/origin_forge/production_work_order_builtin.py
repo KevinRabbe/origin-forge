@@ -6,6 +6,11 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from .production_capability_models import CapabilityCatalog
+from .production_work_order_blender import (
+    BLENDER_ADAPTER_ID,
+    BLENDER_CONTRACT_ID,
+    BlenderExportGLBDispatchValidator,
+)
 from .production_work_order_models import (
     DispatchContract,
     DispatchContractCatalog,
@@ -65,7 +70,6 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
     """Document the reviewed dispatch-contract inclusion boundary."""
 
     deferred = (
-        "originforge.blender.model3d",
         "originforge.image.generate",
         "originforge.vision.inspect",
         "originforge.audio.ffmpeg",
@@ -88,6 +92,11 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
             PIXELORAMA_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
             "Pixelorama spritesheet export accepts one exact Artifact ref and an inert payload while editor/profile/process authority remains downstream and infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            BLENDER_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "Blender GLB export accepts one exact protected MODEL3D_REQUEST ref and an inert payload while operation/workspace/path/profile/process authority remains downstream and infrastructure-owned",
         ),
     ]
     rows.extend(
@@ -266,6 +275,7 @@ def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
         CodeBoundedRetryDispatchValidator(),
         DeterministicSimulationDispatchValidator(),
         PixeloramaSpritesheetExportDispatchValidator(),
+        BlenderExportGLBDispatchValidator(),
     )
 
 
@@ -307,7 +317,6 @@ def _simulation_contract(adapter) -> DispatchContract:
     )
 
 
-
 def _pixelorama_contract(adapter) -> DispatchContract:
     validator = PixeloramaSpritesheetExportDispatchValidator()
     return DispatchContract(
@@ -324,6 +333,24 @@ def _pixelorama_contract(adapter) -> DispatchContract:
         max_input_refs=1,
     )
 
+
+def _blender_contract(adapter) -> DispatchContract:
+    validator = BlenderExportGLBDispatchValidator()
+    return DispatchContract(
+        contract_id=BLENDER_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.MODEL3D_REQUEST,),
+        max_payload_bytes=2,
+        max_input_refs=1,
+    )
+
+
 def build_builtin_dispatch_catalog(
     phase32_catalog: CapabilityCatalog,
 ) -> DispatchContractCatalog:
@@ -331,11 +358,9 @@ def build_builtin_dispatch_catalog(
 
     The historic full built-in Phase-32 catalog contains the code adapter and is
     deliberately kept code-only here because Phase 45 freezes that exact v1
-    dispatch boundary. A simulation-only catalog receives the deterministic
-    simulation contract and a Pixelorama-only catalog receives the spritesheet-export
-    contract. The full catalog remains code-only for Phase-45/46 authority. A
-    non-code catalog that contains more than one reviewed adapter fails closed
-    instead of choosing by ordering.
+    dispatch boundary. A single reviewed non-code adapter may receive its exact
+    contract. Mixed reviewed non-code catalogs fail closed instead of choosing
+    by ordering.
     """
 
     if not isinstance(phase32_catalog, CapabilityCatalog):
@@ -346,8 +371,9 @@ def build_builtin_dispatch_catalog(
         return DispatchContractCatalog.create(phase32_catalog, (_code_contract(code),))
     simulation = adapters.get(SIMULATION_ADAPTER_ID)
     pixelorama = adapters.get(PIXELORAMA_ADAPTER_ID)
+    blender = adapters.get(BLENDER_ADAPTER_ID)
     reviewed_non_code = tuple(
-        value for value in (simulation, pixelorama) if value is not None
+        value for value in (simulation, pixelorama, blender) if value is not None
     )
     if len(reviewed_non_code) > 1:
         raise ValueError(
@@ -362,5 +388,10 @@ def build_builtin_dispatch_catalog(
         return DispatchContractCatalog.create(
             phase32_catalog,
             (_pixelorama_contract(pixelorama),),
+        )
+    if blender is not None:
+        return DispatchContractCatalog.create(
+            phase32_catalog,
+            (_blender_contract(blender),),
         )
     raise ValueError("Phase-32 catalog lacks a reviewed Phase-33 dispatch adapter")

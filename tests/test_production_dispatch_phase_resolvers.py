@@ -150,7 +150,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
         ):
             resolver.resolve(self.runtime, self._ref(profile))
 
-    def test_combined_registry_is_deterministic_and_adds_only_audio_profile_claim(self) -> None:
+    def test_combined_registry_is_deterministic_and_adds_reviewed_phase_claims(self) -> None:
         first = build_dispatch_input_resolver_registry()
         second = build_dispatch_input_resolver_registry()
         self.assertEqual(first.fingerprint, second.fingerprint)
@@ -162,6 +162,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
                 "resolver.core.project-entity@1",
                 "resolver.core.verification@1",
                 "resolver.phase.audio-profile@1",
+                "resolver.phase.model3d-request@1",
             ),
         )
         phase_claims = [
@@ -170,12 +171,16 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
             if descriptor.resolver_id.startswith("resolver.phase.")
             for claim in descriptor.claims
         ]
-        self.assertEqual(len(phase_claims), 1)
-        claim = phase_claims[0]
-        self.assertEqual(claim.ref_type, WorkOrderRefType.AUDIO_PROFILE)
-        self.assertEqual(claim.source_id_prefix, "AUDPROF-")
-        self.assertEqual(claim.source_object_type, "AUDIO_PROFILE")
-        self.assertEqual(claim.role, "audio_profile")
+        self.assertEqual(len(phase_claims), 2)
+        claims = {claim.ref_type: claim for claim in phase_claims}
+        audio_claim = claims[WorkOrderRefType.AUDIO_PROFILE]
+        self.assertEqual(audio_claim.source_id_prefix, "AUDPROF-")
+        self.assertEqual(audio_claim.source_object_type, "AUDIO_PROFILE")
+        self.assertEqual(audio_claim.role, "audio_profile")
+        model3d_claim = claims[WorkOrderRefType.MODEL3D_REQUEST]
+        self.assertEqual(model3d_claim.source_id_prefix, "MODEL3DREQ-")
+        self.assertEqual(model3d_claim.source_object_type, "MODEL3D_REQUEST")
+        self.assertEqual(model3d_claim.role, "model3d_request")
 
     def test_review_keeps_unproven_phase_families_explicitly_deferred(self) -> None:
         rows = phase_specific_resolver_review()
@@ -197,12 +202,12 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
             for value in rows
             if value.status is PhaseSpecificResolverReviewStatus.SUPPORTED
         ]
-        self.assertEqual(supported, ["audio-profile"])
+        self.assertEqual(supported, ["audio-profile", "model3d-request"])
         self.assertTrue(
             all(
                 value.status is not PhaseSpecificResolverReviewStatus.SUPPORTED
                 for value in rows
-                if value.evidence_family != "audio-profile"
+                if value.evidence_family not in {"audio-profile", "model3d-request"}
             )
         )
 
