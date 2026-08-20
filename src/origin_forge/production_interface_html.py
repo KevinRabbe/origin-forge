@@ -19,16 +19,20 @@ def _bounded(page: str) -> str:
 
 
 def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
-    return _bounded(decorate_overview(_render_classic_overview(snapshot), snapshot))
+    classic = _render_classic_overview(snapshot)
+    try:
+        themed = decorate_overview(classic, snapshot)
+    except ValueError as exc:
+        raise ProductionInterfaceRenderError("cockpit theme render failed") from exc
+    return _bounded(themed)
 
 
 def render_detail(
     snapshot: ProductionInterfaceSnapshot, kind: str, object_id: str
 ) -> str:
-    return _bounded(
-        decorate_detail(
-            _render_classic_detail(snapshot, kind, object_id),
-            kind=kind,
-            object_id=object_id,
-        )
-    )
+    classic = _render_classic_detail(snapshot, kind, object_id)
+    try:
+        themed = decorate_detail(classic, kind=kind, object_id=object_id)
+    except ValueError as exc:
+        raise ProductionInterfaceRenderError("cockpit theme render failed") from exc
+    return _bounded(themed)
