@@ -13,6 +13,7 @@ from .production_dispatch_invocation import (
     ProductionDispatchInvocationError,
     ProductionDispatchInvocationRecoveryRequired,
 )
+from .production_dispatch_invocation_blender import dispatch_blender_claim_once_if_applicable
 from .production_execution_assembly import PixeloramaSpritesheetExportExecutionPayload
 from .production_pixelorama_dispatch_output_binding_models import (
     PIXELORAMA_DISPATCH_OUTPUT_BINDING_SCHEMA_VERSION,
@@ -178,8 +179,16 @@ def _dispatch_claim_once_three_owner(
     claim_id: str,
     expected_claim_revision: int,
 ) -> CompletedDispatchInvocation:
-    """Single-shot coordinator with immutable Pixelorama output binding."""
+    """Single-shot coordinator with reviewed Pixelorama and Blender fanout."""
     import origin_forge.production_dispatch_invocation as legacy
+
+    blender = dispatch_blender_claim_once_if_applicable(
+        runtime,
+        claim_id,
+        expected_claim_revision,
+    )
+    if blender is not None:
+        return blender
 
     frozen_claim, binding = legacy._read_frozen_request_evidence(
         runtime, claim_id, expected_claim_revision
