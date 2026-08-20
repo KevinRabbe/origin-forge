@@ -69,6 +69,7 @@ class Phase47CSimulationPreparationOwnerTests(unittest.TestCase):
         self.assertEqual(
             tuple(value.owner_id for value in registry.descriptors),
             (
+                "originforge.preparation.blender-export-glb@1",
                 "originforge.preparation.pixelorama-spritesheet-export-planner@1",
                 "originforge.preparation.simulation-work-order-planner@1",
                 "originforge.preparation.work-order-planner@1",
