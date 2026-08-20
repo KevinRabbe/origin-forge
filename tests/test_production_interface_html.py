@@ -43,6 +43,33 @@ class ProductionInterfaceHtmlTests(unittest.TestCase):
         self.assertIn("form-action 'none'", page)
         self.assertIn("connect-src 'none'", page)
 
+    def test_ui_foundation_is_read_only_and_navigable(self) -> None:
+        self.runtime.create_goal("goal")
+        page = render_overview(build_production_interface_snapshot(self.runtime))
+        self.assertIn('class="app-header"', page)
+        self.assertIn('class="mode-badge"', page)
+        self.assertIn("Read only", page)
+        self.assertIn('class="metric-grid"', page)
+        self.assertIn('aria-label="Cockpit sections"', page)
+        self.assertIn('href="#resources"', page)
+        self.assertIn('id="resources"', page)
+        self.assertIn('class="table-shell"', page)
+        self.assertIn('<main id="main" class="cockpit-main">', page)
+        self.assertNotIn("<link", page.lower())
+
+    def test_detail_uses_same_shell_without_gaining_authority(self) -> None:
+        goal = self.runtime.create_goal("goal")
+        snapshot = build_production_interface_snapshot(self.runtime)
+        page = render_detail(snapshot, "goal", goal)
+        lowered = page.lower()
+        self.assertIn('class="breadcrumb"', page)
+        self.assertIn('href="/">Overview</a>', page)
+        self.assertIn(goal, page)
+        self.assertIn("Read only", page)
+        self.assertNotIn("<script", lowered)
+        self.assertNotIn("<form", lowered)
+        self.assertNotIn("<button", lowered)
+
     def test_causal_detail_navigation_is_snapshot_scoped(self) -> None:
         goal = self.runtime.create_goal("goal")
         flow = self.runtime.create_flow(goal)
