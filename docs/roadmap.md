@@ -1107,6 +1107,28 @@ See `docs/phase-50-governed-pixelorama-production-task-acceptance.md` for the fr
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
+## Phase 51 — Governed Blender 3D Production Dispatch — DONE
+
+Completed as the next separately gated **post-v0.5 v1.0 production-integration slice**, promoting only the already-proven Phase-20C Blender GLB backend through the governed production path:
+
+- infrastructure-owned immutable `MODEL3DREQ-*` semantic requests separate exact canonical Phase-20A project intent from post-STARTED runtime IDs, paths, profile/runtime identity, runner/version, process budgets, adoption, Task outcome, signing, merge, and release authority;
+- Phase-33 adds exactly one `MODEL3D_REQUEST` WorkOrder ref with role `model3d_request`, inert `{}` payload, and pure Blender-v1 compatibility validation before claim/execution authority; `PHASE_SPECIFIC_EVIDENCE` remains non-authorizing;
+- Phase-34 resolves the exact protected semantic request through a non-creating ID/hash reader and binds only the fixed `blender.export-glb@1` projection through `binder.blender.export-glb@1`;
+- Phase-39 adds the separate `originforge.preparation.blender-export-glb@1` owner whose planner may choose exactly one pre-existing frozen `MODEL3DREQ-*` from the infrastructure allow-list, with mixed-owner catalogs and Goal bootstrap still fail-closed/code-only;
+- Phase-36 adds zero-model `originforge.execution.blender.export-glb@1`, requires only the infrastructure-owned trusted Blender profile, and atomically commits DISPEXEC `STARTED + Task READY→RUNNING` before any `BLOP-*` or `MODEL3D-*` allocation;
+- post-STARTED execution constructs the existing strict `BlenderJobRequest` from the frozen project plus fixed `exports/model.glb`, trusted runtime hash/runner/version, and code-owned `BlenderBudget()`, then invokes the existing governed Blender adapter exactly once;
+- one MODEL3D Run plus canonical request/result/GLB Artifact and output/Run Verification lineage is persisted and independently reread, rehashed, and GLB-reinspected before trustworthy dispatch return;
+- schema v16 adds one immutable Blender DISPEXEC→durable-output binding so a stranded durable result can be explicitly recovered through exact evidence revalidation without replaying Blender;
+- normal return consumes the claim, records DISPEXEC `RETURNED`, and deliberately leaves the production Task `RUNNING`; structural GLB correctness is not semantic acceptance, canonical adoption, signing, merge, release, or deployment truth;
+- cross-phase adversarial acceptance proves the actual preparation allow-list/proposal path, phase-evidence/wrong-role/extra-ref rejection, stale/deleted request currentness before STARTED, two-manager one-invocation races with no newer-Task fallback, GLB/evidence drift rejection, and durable-output terminalization recovery with zero Blender replay;
+- existing bounded-code, deterministic-simulation, Pixelorama, Goal-bootstrap, Manager, packaging, cockpit, and immutable v0.5 authority remain unchanged; no direct Blender mutation command, background loop, automatic adoption/Task acceptance/signing/merge/release, or generic owner/plugin dispatch is added.
+
+See `docs/phase-51-governed-blender-3d-production-dispatch.md` for the frozen architecture and `docs/phase-51-implementation-closure.md` for the accepted 51A–51F implementation, no-replay recovery, cross-phase adversarial acceptance, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `eb8cf4a60aca63314735fc069f0bf29186b4f092` / run `32263456991`, 51A head `a2fabcad5456e5c1742df87fa8933d7252d2f9f0` / run `32264666094`, 51B head `410fb4e27934a18e5eb757a5575fbef81ea5f744` / run `32312382896`, 51C head `ddddef0dc7ff7a28c3d4b03cbb14c9a3b4caae9d` / run `32323663915`, 51D head `b30ecb9080410661b9e8cb404d3cfc6ef1147b4a` / run `32335031647`, 51E head `1f1063686078232f07d39de09985a8e0021f5f17` / run `32336438548`, 51F race head `a5a952d1a4fd1d5b52fa6804f51d2a2b8ab6d6ea` / run `32401063637`, 51F recovery head `763d5c1f0478622de12107b8b570fac755a1da6f` / run `32413162858`, and 51F preparation/currentness head `ebca57a14bbd0c490d13c2eb4e6dda3050e82dfd` / run `32414424872` all passed the canonical Python 3.12/3.13 matrix on their accepted exact heads. Accepted Phase-51 implementation/acceptance is merged through `37ccca57316a9e1eb2460f49f4b9edf44aac86fa`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 # v1.0 — Integrated Game Production
 
 Representative Goal:
