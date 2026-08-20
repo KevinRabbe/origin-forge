@@ -177,6 +177,41 @@ def _digest(value: object, label: str, *, nullable: bool = False) -> str | None:
     return value
 
 
+def _single_input_ref_from_evidence(
+    raw_refs: list[object],
+    *,
+    label: str,
+    ref_type: WorkOrderRefType,
+    role: str,
+) -> tuple[WorkOrderInputRef, ...]:
+    if len(raw_refs) != 1 or not isinstance(raw_refs[0], dict):
+        raise PreparationPlannerEvidenceError(
+            f"{label} planner WorkOrder requires exactly one input ref"
+        )
+    raw_ref = raw_refs[0]
+    if set(raw_ref) != {"ref_type", "ref_id", "content_hash", "role", "revision"}:
+        raise PreparationPlannerEvidenceError(
+            f"{label} planner WorkOrder input ref schema drifted"
+        )
+    try:
+        ref = WorkOrderInputRef(
+            ref_type=WorkOrderRefType(raw_ref["ref_type"]),
+            ref_id=raw_ref["ref_id"],
+            content_hash=raw_ref["content_hash"],
+            role=raw_ref["role"],
+            revision=raw_ref["revision"],
+        )
+    except (ProductionWorkOrderModelError, TypeError, ValueError) as exc:
+        raise PreparationPlannerEvidenceError(
+            f"{label} planner WorkOrder input ref failed reconstruction"
+        ) from exc
+    if ref.ref_type is not ref_type or ref.role != role or ref.revision is not None:
+        raise PreparationPlannerEvidenceError(
+            f"{label} planner WorkOrder input ref authority drifted"
+        )
+    return (ref,)
+
+
 def _work_order_from_evidence(value: object) -> ProductionWorkOrder:
     if not isinstance(value, dict) or set(value) != _WORK_ORDER_KEYS:
         raise PreparationPlannerEvidenceError("planner WorkOrder schema drifted")
@@ -191,42 +226,26 @@ def _work_order_from_evidence(value: object) -> ProductionWorkOrder:
         value["selected_adapter_id"] == "originforge.pixelorama.export"
         and value["dispatch_contract_id"] == "pixelorama.spritesheet-export@1"
     ):
-        if len(raw_refs) != 1 or not isinstance(raw_refs[0], dict):
-            raise PreparationPlannerEvidenceError(
-                "Pixelorama planner WorkOrder requires exactly one input ref"
-            )
-        raw_ref = raw_refs[0]
-        if set(raw_ref) != {"ref_type", "ref_id", "content_hash", "role", "revision"}:
-            raise PreparationPlannerEvidenceError(
-                "Pixelorama planner WorkOrder input ref schema drifted"
-            )
-        try:
-            refs = (
-                WorkOrderInputRef(
-                    ref_type=WorkOrderRefType(raw_ref["ref_type"]),
-                    ref_id=raw_ref["ref_id"],
-                    content_hash=raw_ref["content_hash"],
-                    role=raw_ref["role"],
-                    revision=raw_ref["revision"],
-                ),
-            )
-        except (ProductionWorkOrderModelError, TypeError, ValueError) as exc:
-            raise PreparationPlannerEvidenceError(
-                "Pixelorama planner WorkOrder input ref failed reconstruction"
-            ) from exc
-        ref = refs[0]
-        if (
-            ref.ref_type is not WorkOrderRefType.ARTIFACT
-            or ref.role != "pixelorama_project"
-            or ref.revision is not None
-        ):
-            raise PreparationPlannerEvidenceError(
-                "Pixelorama planner WorkOrder input ref authority drifted"
-            )
+        refs = _single_input_ref_from_evidence(
+            raw_refs,
+            label="Pixelorama",
+            ref_type=WorkOrderRefType.ARTIFACT,
+            role="pixelorama_project",
+        )
+    elif (
+        value["selected_adapter_id"] == "originforge.blender.model3d"
+        and value["dispatch_contract_id"] == "blender.export-glb@1"
+    ):
+        refs = _single_input_ref_from_evidence(
+            raw_refs,
+            label="Blender",
+            ref_type=WorkOrderRefType.MODEL3D_REQUEST,
+            role="model3d_request",
+        )
     else:
         if raw_refs != []:
             raise PreparationPlannerEvidenceError(
-                "non-Pixelorama planner evidence may not contain WorkOrder input refs"
+                "planner evidence contains input refs outside reviewed preparation authority"
             )
         refs = ()
 
