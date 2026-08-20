@@ -8,6 +8,7 @@ import origin_forge.production_execution_owner as owner_module
 from origin_forge.model_scheduler import ModelRole
 from origin_forge.production_capability_builtin import builtin_trusted_production_adapters
 from origin_forge.production_dispatch_binding import CodeBoundedRetryInputBinder
+from origin_forge.production_dispatch_binding_blender import BlenderExportGLBInputBinder
 from origin_forge.production_dispatch_binding_simulation import DeterministicSimulationInputBinder
 from origin_forge.production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
 from origin_forge.production_execution_owner import (
@@ -44,8 +45,8 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_builtin_owners_exactly_match_reviewed_adapters_and_binders(self) -> None:
         owners = builtin_execution_owner_descriptors()
-        self.assertEqual(len(owners), 3)
-        code_owner, simulation_owner, pixelorama_owner = owners
+        self.assertEqual(len(owners), 4)
+        code_owner, simulation_owner, pixelorama_owner, blender_owner = owners
         adapters = {
             value.adapter_id: value for value in builtin_trusted_production_adapters()
         }
@@ -116,6 +117,35 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
         self.assertEqual(pixelorama_owner.model_strategy_roles, ())
         self.assertFalse(pixelorama_owner.requires_sandbox)
         self.assertFalse(pixelorama_owner.requires_workspace_manager)
+
+        blender_adapter = adapters["originforge.blender.model3d"]
+        blender_binder = BlenderExportGLBInputBinder().descriptor
+        self.assertEqual(
+            blender_owner.owner_id,
+            "originforge.execution.blender.export-glb@1",
+        )
+        self.assertEqual(blender_owner.adapter_id, blender_adapter.adapter_id)
+        self.assertEqual(
+            blender_owner.adapter_fingerprint,
+            blender_adapter.implementation_fingerprint,
+        )
+        self.assertEqual(
+            blender_owner.dispatch_contract_id,
+            blender_binder.dispatch_contract_id,
+        )
+        self.assertEqual(blender_owner.binder_id, blender_binder.binder_id)
+        self.assertEqual(
+            blender_owner.binder_fingerprint,
+            blender_binder.binder_fingerprint,
+        )
+        self.assertEqual(blender_owner.request_type_id, blender_binder.request_type_id)
+        self.assertEqual(
+            blender_owner.request_schema_hash,
+            blender_binder.request_schema_hash,
+        )
+        self.assertEqual(blender_owner.model_strategy_roles, ())
+        self.assertFalse(blender_owner.requires_sandbox)
+        self.assertFalse(blender_owner.requires_workspace_manager)
 
     def test_owner_and_registry_fingerprints_are_deterministic(self) -> None:
         first = build_builtin_execution_owner_registry()
