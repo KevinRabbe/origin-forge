@@ -374,19 +374,30 @@ def inspect_dispatch_binding_currentness_readonly(
 
     if bundle.resolved_inputs:
         resolved = bundle.resolved_inputs
-        if (
-            binding.selected_adapter_id != "originforge.pixelorama.export"
-            or binding.dispatch_contract_id != "pixelorama.spritesheet-export@1"
-            or binding.binder_id != "binder.pixelorama.spritesheet-export@1"
-            or len(resolved) != 1
-            or resolved[0].original_ref.ref_type.value != "ARTIFACT"
-            or resolved[0].original_ref.role != "pixelorama_project"
-            or resolved[0].source_object_type != "ARTIFACT"
-            or resolved[0].resolution_class != "CANONICAL_ARTIFACT"
-        ):
+        pixelorama_input = (
+            binding.selected_adapter_id == "originforge.pixelorama.export"
+            and binding.dispatch_contract_id == "pixelorama.spritesheet-export@1"
+            and binding.binder_id == "binder.pixelorama.spritesheet-export@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "ARTIFACT"
+            and resolved[0].original_ref.role == "pixelorama_project"
+            and resolved[0].source_object_type == "ARTIFACT"
+            and resolved[0].resolution_class == "CANONICAL_ARTIFACT"
+        )
+        blender_input = (
+            binding.selected_adapter_id == "originforge.blender.model3d"
+            and binding.dispatch_contract_id == "blender.export-glb@1"
+            and binding.binder_id == "binder.blender.export-glb@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "MODEL3D_REQUEST"
+            and resolved[0].original_ref.role == "model3d_request"
+            and resolved[0].source_object_type == "MODEL3D_REQUEST"
+            and resolved[0].resolution_class == "PROTECTED_MODEL3D_REQUEST"
+        )
+        if not (pixelorama_input or blender_input):
             return result(
                 DispatchBindingCurrentnessStatus.STALE_INPUT,
-                "current read-only v1 nonzero-ref eligibility is limited to the exact Pixelorama project Artifact contract",
+                "current read-only nonzero-ref eligibility is limited to exact reviewed production contracts",
             )
         try:
             current_inputs = resolver_registry.resolve_all(runtime, work_order.input_refs)
@@ -400,7 +411,7 @@ def inspect_dispatch_binding_currentness_readonly(
         ):
             return result(
                 DispatchBindingCurrentnessStatus.STALE_INPUT,
-                "current Pixelorama Artifact resolution differs from frozen input evidence",
+                "current reviewed input resolution differs from frozen input evidence",
             )
 
     try:
