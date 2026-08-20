@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .blender_adapter import BlenderRuntimeProfile
 from .config import ProjectConfig, load_config
 from .managed_llamacpp_loader import ManagedLlamaCppCpuLoader
 from .model_runtime_registry import ModelRuntimeBinding, ModelRuntimeRegistry, RuntimeDispatchLoader
@@ -9,6 +10,11 @@ from .model_scheduler import ModelRole, ModelSelectionPolicy
 from .model_scheduler_factory import ConfiguredModelScheduling, create_model_scheduling
 from .orchestration_policy import BoundedRetryPolicy
 from .pixelorama_cli_export import PixeloramaCliProfile
+from .production_blender_profile import (
+    ProductionBlenderProfileError,
+    blender_runtime_profile_dependency_hash,
+    load_infrastructure_blender_runtime_profile,
+)
 from .production_pixelorama_profile import (
     ProductionPixeloramaProfileError,
     load_infrastructure_pixelorama_cli_profile,
@@ -35,6 +41,7 @@ from .workspaces import GitWorkspaceManager
 _BOUNDED_RETRY_OWNER_ID = "originforge.execution.bounded-retry@1"
 _SIMULATION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 _PIXELORAMA_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
+_BLENDER_OWNER_ID = "originforge.execution.blender.export-glb@1"
 _NOT_REQUIRED_RESOURCE_MODEL_HASH = content_hash(
     {"kind": "NO_MODEL_RESOURCE_CONFIG", "version": 1}
 )
@@ -153,10 +160,26 @@ class PixeloramaSpritesheetExportExecutionPayload:
             )
 
 
+@dataclass(frozen=True)
+class BlenderExportGLBExecutionPayload:
+    profile: BlenderRuntimeProfile
+    profile_dependency_hash: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.profile, BlenderRuntimeProfile):
+            raise TypeError("profile must be a BlenderRuntimeProfile")
+        expected = blender_runtime_profile_dependency_hash(self.profile)
+        if self.profile_dependency_hash != expected:
+            raise ProductionExecutionAssemblyError(
+                "Blender profile dependency hash is not current"
+            )
+
+
 ExecutionDependencyPayload = (
     BoundedRetryExecutionPayload
     | DeterministicSimulationExecutionPayload
     | PixeloramaSpritesheetExportExecutionPayload
+    | BlenderExportGLBExecutionPayload
 )
 
 
@@ -193,6 +216,11 @@ class ProductionExecutionDependencies:
             if not isinstance(self.payload, PixeloramaSpritesheetExportExecutionPayload):
                 raise ProductionExecutionAssemblyError(
                     "Pixelorama owner requires trusted CLI profile payload"
+                )
+        elif self.owner.owner_id == _BLENDER_OWNER_ID:
+            if not isinstance(self.payload, BlenderExportGLBExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "Blender owner requires trusted runtime profile payload"
                 )
         else:
             raise ProductionExecutionAssemblyError(
@@ -425,6 +453,54 @@ def _assemble_pixelorama_dependencies(
     )
 
 
+def _assemble_blender_dependencies(
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _BLENDER_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "Blender dependency assembler received an unexpected owner"
+        )
+    if owner.model_strategy_roles:
+        raise ProductionExecutionAssemblyError(
+            "Blender export owner must not require model strategy roles"
+        )
+    if owner.requires_sandbox or owner.requires_workspace_manager:
+        raise ProductionExecutionAssemblyError(
+            "Blender export owner must not require coding sandbox or Git workspace authority"
+        )
+    try:
+        profile = load_infrastructure_blender_runtime_profile()
+    except ProductionBlenderProfileError as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted Blender runtime profile is unavailable"
+        ) from exc
+    profile_hash = blender_runtime_profile_dependency_hash(profile)
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=profile_hash,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=BlenderExportGLBExecutionPayload(
+            profile=profile,
+            profile_dependency_hash=profile_hash,
+        ),
+    )
+
+
 def _assemble_bounded_retry_dependencies(
     runtime: OriginForgeRuntime,
     claim,
@@ -581,6 +657,13 @@ def assemble_production_execution_dependencies(
             "no trusted execution owner matches the exact current dispatch binding"
         ) from exc
 
+    if owner.owner_id == _BLENDER_OWNER_ID:
+        return _assemble_blender_dependencies(
+            claim,
+            binding,
+            owner,
+            owner_registry,
+        )
     if owner.owner_id == _PIXELORAMA_OWNER_ID:
         return _assemble_pixelorama_dependencies(
             claim,
