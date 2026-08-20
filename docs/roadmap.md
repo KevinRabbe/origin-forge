@@ -936,7 +936,7 @@ See `docs/phase-43-governed-bounded-manager-driver.md` for the frozen architectu
 
 **Exit condition met in implementation:** prerequisite repair head `9ce497784180f9c6b59cfa349827350540cec0be` / run `31764367630`, planning head `c8ae085cb4da661ec777dbf921f9dd81e8b28ee9` / run `31764772997`, 43A implementation head `509799ea4ce35a6a800e2635a8da3fdb4278fb5e` / run `31765239984`, and 43B acceptance head `bd26828b88a2d055ffd2739a9a42614631c15c21` / run `31765713379` all passed Python 3.12 and Python 3.13. Accepted implementation/acceptance is merged to `main` as `ec3411940f01aad936a298fd0e3109af0579bc3d`.
 
-**Merge gate:** this documentation/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 44 — Governed Manager Operator Invocation — DONE
 
