@@ -12,6 +12,9 @@ from .production_blender_adoption_migration import (
 from .production_blender_dispatch_output_binding_migration import (
     BLENDER_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
+from .production_blender_task_acceptance_migration import (
+    BLENDER_PRODUCTION_TASK_ACCEPTANCE_MIGRATION,
+)
 from .production_pixelorama_adoption_migration import (
     PIXELORAMA_PRODUCTION_ADOPTION_MIGRATION,
 )
@@ -31,6 +34,7 @@ MIGRATIONS = (
     BLENDER_PRODUCTION_ADOPTION_MIGRATION,
     CONVERSATION_GATE_A_MIGRATION,
     CONVERSATION_GATE_C_MIGRATION,
+    BLENDER_PRODUCTION_TASK_ACCEPTANCE_MIGRATION,
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
