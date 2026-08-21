@@ -5,6 +5,7 @@ from .production_interface_classic import (
     render_detail as _render_classic_detail,
     render_overview as _render_classic_overview,
 )
+from .production_interface_detail_context import decorate_detail_context
 from .production_interface_lifecycle import decorate_lifecycle
 from .production_interface_snapshot import ProductionInterfaceSnapshot
 from .production_interface_theme import decorate_detail, decorate_overview
@@ -35,6 +36,12 @@ def render_detail(
     classic = _render_classic_detail(snapshot, kind, object_id)
     try:
         themed = decorate_detail(classic, kind=kind, object_id=object_id)
+        themed = decorate_detail_context(
+            themed,
+            snapshot,
+            kind=kind,
+            object_id=object_id,
+        )
     except ValueError as exc:
         raise ProductionInterfaceRenderError("cockpit theme render failed") from exc
     return _bounded(themed)
