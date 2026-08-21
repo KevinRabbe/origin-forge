@@ -96,11 +96,37 @@ class ProductionInterfaceHtmlTests(unittest.TestCase):
         lowered = page.lower()
         self.assertIn('class="breadcrumb"', page)
         self.assertIn('href="/">Overview</a>', page)
+        self.assertIn('aria-label="Snapshot relationships"', page)
         self.assertIn(goal, page)
         self.assertIn("Read only", page)
         self.assertNotIn("<script", lowered)
         self.assertNotIn("<form", lowered)
         self.assertNotIn("<button", lowered)
+
+    def test_task_detail_context_links_parent_and_counts_snapshot_children(self) -> None:
+        goal = self.runtime.create_goal("goal")
+        flow = self.runtime.create_flow(goal)
+        task = self.runtime.create_task(flow, "task")
+        snapshot = build_production_interface_snapshot(self.runtime)
+        page = render_detail(snapshot, "task", task)
+        self.assertIn('aria-label="Snapshot relationships"', page)
+        self.assertIn(f'href="/flow/{flow}"', page)
+        self.assertIn("Parent flow", page)
+        self.assertIn(
+            '<span class="detail-context-label">Runs</span>'
+            '<span class="detail-context-value">0</span>',
+            page,
+        )
+        self.assertIn(
+            '<span class="detail-context-label">Verifications</span>'
+            '<span class="detail-context-value">0</span>',
+            page,
+        )
+        self.assertIn(
+            '<span class="detail-context-label">Changes</span>'
+            '<span class="detail-context-value">0</span>',
+            page,
+        )
 
     def test_causal_detail_navigation_is_snapshot_scoped(self) -> None:
         goal = self.runtime.create_goal("goal")
