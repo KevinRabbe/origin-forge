@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import unittest
 
+import origin_forge.production_interface_accessibility as accessibility_module
 import origin_forge.production_interface_classic as classic_module
 import origin_forge.production_interface_cli as cli_module
 import origin_forge.production_interface_detail_context as detail_context_module
@@ -28,6 +29,7 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
                 classic_module,
                 html_module,
                 theme_module,
+                accessibility_module,
                 lifecycle_module,
                 detail_context_module,
                 lineage_module,

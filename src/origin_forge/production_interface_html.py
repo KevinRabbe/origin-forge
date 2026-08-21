@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from .production_interface_accessibility import (
+    decorate_detail_accessibility,
+    decorate_overview_accessibility,
+)
 from .production_interface_classic import (
     ProductionInterfaceRenderError,
     render_detail as _render_classic_detail,
@@ -39,6 +43,7 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
         themed = decorate_overview_run_timing(themed, snapshot)
         themed = decorate_lifecycle(themed, snapshot)
         themed = decorate_lineage(themed, snapshot)
+        themed = decorate_overview_accessibility(themed)
     except ValueError as exc:
         raise ProductionInterfaceRenderError("cockpit theme render failed") from exc
     return _bounded(themed)
@@ -67,6 +72,7 @@ def render_detail(
                 snapshot,
                 task_id=object_id,
             )
+        themed = decorate_detail_accessibility(themed)
     except ValueError as exc:
         raise ProductionInterfaceRenderError("cockpit theme render failed") from exc
     return _bounded(themed)

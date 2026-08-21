@@ -55,7 +55,7 @@ class ProductionInterfaceHtmlTests(unittest.TestCase):
         self.assertIn('href="#resources"', page)
         self.assertIn('id="resources"', page)
         self.assertIn('class="table-shell"', page)
-        self.assertIn('<main id="main" class="cockpit-main">', page)
+        self.assertIn('<main id="main" class="cockpit-main" tabindex="-1">', page)
         self.assertNotIn("<link", page.lower())
 
     def test_lifecycle_summary_is_snapshot_scoped_and_read_only(self) -> None:
