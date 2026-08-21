@@ -2,17 +2,27 @@ from __future__ import annotations
 
 import io
 import json
+import sqlite3
 import tomllib
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 from origin_forge import blender_admin_cli
+from origin_forge.lineage import OriginForgeLineage
+from origin_forge.production_blender_adoption import (
+    BlenderProductionAdoptionError,
+    GovernedBlenderProductionOutputAdopter,
+)
 from origin_forge.production_blender_adoption_receipt import (
     BlenderProductionAdoptionReceiptError,
     BlenderProductionAdoptionStatus,
     read_blender_production_adoption_receipt,
+)
+from origin_forge.production_blender_dispatch_output_binding import (
+    read_blender_dispatch_output_binding,
 )
 from origin_forge.production_blender_export import BlenderExportService
 from test_phase52b_blender_production_adoption import Phase52BBlenderProductionAdoptionTests
@@ -60,6 +70,18 @@ class Phase52CBlenderAdoptionOperatorAcceptanceTests(unittest.TestCase):
             code = blender_admin_cli.main(argv)
         return code, json.loads(output.getvalue())
 
+    def _mutate(self, sql: str, parameters: tuple[object, ...]) -> None:
+        conn = sqlite3.connect(self.runtime.store.db_path)
+        try:
+            conn.execute(sql, parameters)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _assert_no_receipt(self, execution_id: str) -> None:
+        with self.assertRaises(BlenderProductionAdoptionReceiptError):
+            read_blender_production_adoption_receipt(self.runtime, execution_id)
+
     def test_module_cli_adopts_exact_terminal_output_without_replay_or_task_authority(self) -> None:
         completed = self._terminal_execution()
         execution_id = completed.execution.execution_id
@@ -92,6 +114,123 @@ class Phase52CBlenderAdoptionOperatorAcceptanceTests(unittest.TestCase):
             [],
         )
 
+    def test_cli_fails_closed_when_binding_is_missing(self) -> None:
+        completed = self._terminal_execution()
+        execution_id = completed.execution.execution_id
+        self._mutate(
+            "DELETE FROM blender_dispatch_output_bindings WHERE execution_id = ?",
+            (execution_id,),
+        )
+
+        with patch.object(BlenderExportService, "execute", autospec=True) as replay:
+            code, payload = self._run_cli(execution_id, "assets/production/missing.glb")
+
+        self.assertEqual(replay.call_count, 0)
+        self.assertEqual(code, 2)
+        self.assertIn("not adoption eligible", str(payload["detail"]))
+        self.assertFalse((self.runtime.project_root / "assets/production/missing.glb").exists())
+        self._assert_no_receipt(execution_id)
+
+    def test_cli_fails_closed_when_binding_is_tampered(self) -> None:
+        completed = self._terminal_execution()
+        execution_id = completed.execution.execution_id
+        self._mutate(
+            "UPDATE blender_dispatch_output_bindings SET output_content_hash = ? WHERE execution_id = ?",
+            ("0" * 64, execution_id),
+        )
+
+        code, payload = self._run_cli(execution_id, "assets/production/tampered-binding.glb")
+
+        self.assertEqual(code, 2)
+        self.assertIn("not adoption eligible", str(payload["detail"]))
+        self.assertFalse(
+            (self.runtime.project_root / "assets/production/tampered-binding.glb").exists()
+        )
+        self._assert_no_receipt(execution_id)
+
+    def test_cli_fails_closed_when_execution_owner_drifts(self) -> None:
+        completed = self._terminal_execution()
+        execution_id = completed.execution.execution_id
+        self._mutate(
+            "UPDATE dispatch_executions SET execution_owner_id = ? WHERE execution_id = ?",
+            ("originforge.execution.pixelorama.export@1", execution_id),
+        )
+
+        code, payload = self._run_cli(execution_id, "assets/production/wrong-owner.glb")
+
+        self.assertEqual(code, 2)
+        self.assertIn("not adoption eligible", str(payload["detail"]))
+        self.assertFalse((self.runtime.project_root / "assets/production/wrong-owner.glb").exists())
+        self._assert_no_receipt(execution_id)
+
+    def test_cli_fails_closed_when_task_revision_is_stale(self) -> None:
+        completed = self._terminal_execution()
+        execution_id = completed.execution.execution_id
+        task_id = completed.execution.task_id
+        self._mutate(
+            "UPDATE tasks SET revision = revision + 1 WHERE id = ?",
+            (task_id,),
+        )
+
+        code, payload = self._run_cli(execution_id, "assets/production/stale-task.glb")
+
+        self.assertEqual(code, 2)
+        self.assertIn("not adoption eligible", str(payload["detail"]))
+        self.assertFalse((self.runtime.project_root / "assets/production/stale-task.glb").exists())
+        self._assert_no_receipt(execution_id)
+
+    def test_cli_fails_closed_when_run_is_no_longer_succeeded(self) -> None:
+        completed = self._terminal_execution()
+        execution_id = completed.execution.execution_id
+        binding = read_blender_dispatch_output_binding(self.runtime, execution_id)
+        self._mutate(
+            "UPDATE runs SET status = 'FAILED' WHERE id = ?",
+            (binding.run_id,),
+        )
+
+        code, payload = self._run_cli(execution_id, "assets/production/stale-run.glb")
+
+        self.assertEqual(code, 2)
+        self.assertIn("not adoption eligible", str(payload["detail"]))
+        self.assertFalse((self.runtime.project_root / "assets/production/stale-run.glb").exists())
+        self._assert_no_receipt(execution_id)
+
+    def test_cli_fails_closed_when_terminal_glb_bytes_drift(self) -> None:
+        completed = self._terminal_execution()
+        execution_id = completed.execution.execution_id
+        binding = read_blender_dispatch_output_binding(self.runtime, execution_id)
+        source = OriginForgeLineage(self.runtime).local_artifact_path(binding.output_artifact_id)
+        source.write_bytes(b"tampered-terminal-glb")
+
+        with patch.object(BlenderExportService, "execute", autospec=True) as replay:
+            code, payload = self._run_cli(execution_id, "assets/production/mutable-output.glb")
+
+        self.assertEqual(replay.call_count, 0)
+        self.assertEqual(code, 2)
+        self.assertIn("not adoption eligible", str(payload["detail"]))
+        self.assertFalse(
+            (self.runtime.project_root / "assets/production/mutable-output.glb").exists()
+        )
+        self._assert_no_receipt(execution_id)
+
+    def test_cli_fails_closed_when_bound_verification_drifts(self) -> None:
+        completed = self._terminal_execution()
+        execution_id = completed.execution.execution_id
+        binding = read_blender_dispatch_output_binding(self.runtime, execution_id)
+        self._mutate(
+            "UPDATE verifications SET status = 'FAIL' WHERE id = ?",
+            (binding.output_verification_id,),
+        )
+
+        code, payload = self._run_cli(execution_id, "assets/production/verification-drift.glb")
+
+        self.assertEqual(code, 2)
+        self.assertIn("not adoption eligible", str(payload["detail"]))
+        self.assertFalse(
+            (self.runtime.project_root / "assets/production/verification-drift.glb").exists()
+        )
+        self._assert_no_receipt(execution_id)
+
     def test_cli_byte_limit_fails_before_reservation_or_publication(self) -> None:
         completed = self._terminal_execution()
         execution_id = completed.execution.execution_id
@@ -107,23 +246,37 @@ class Phase52CBlenderAdoptionOperatorAcceptanceTests(unittest.TestCase):
         self.assertEqual(payload["error"], "BlenderProductionAdoptionError")
         self.assertIn("byte limit", str(payload["detail"]))
         self.assertFalse((self.runtime.project_root / destination).exists())
-        with self.assertRaises(BlenderProductionAdoptionReceiptError):
-            read_blender_production_adoption_receipt(self.runtime, execution_id)
+        self._assert_no_receipt(execution_id)
 
-    def test_cli_rejects_protected_destination_before_reservation(self) -> None:
+    def test_cli_rejects_protected_traversal_and_symlink_destinations(self) -> None:
         completed = self._terminal_execution()
         execution_id = completed.execution.execution_id
-
-        code, payload = self._run_cli(
-            execution_id,
+        for destination in (
             ".origin-forge/forbidden.glb",
-        )
+            ".git/forbidden.glb",
+            "assets/../escaped.glb",
+        ):
+            with self.subTest(destination=destination):
+                code, payload = self._run_cli(execution_id, destination)
+                self.assertEqual(code, 2)
+                self.assertEqual(payload["error"], "BlenderProductionAdoptionError")
 
-        self.assertEqual(code, 2)
-        self.assertEqual(payload["error"], "BlenderProductionAdoptionError")
-        self.assertIn("protected", str(payload["detail"]).casefold())
-        with self.assertRaises(BlenderProductionAdoptionReceiptError):
-            read_blender_production_adoption_receipt(self.runtime, execution_id)
+        outside = self.runtime.project_root / "outside-target"
+        outside.mkdir(exist_ok=True)
+        alias = self.runtime.project_root / "asset-alias"
+        try:
+            alias.symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            alias = None
+        if alias is not None:
+            code, payload = self._run_cli(
+                execution_id,
+                "asset-alias/escaped.glb",
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(payload["error"], "BlenderProductionAdoptionError")
+            self.assertFalse((outside / "escaped.glb").exists())
+        self._assert_no_receipt(execution_id)
 
     def test_cli_rejects_malformed_execution_identity(self) -> None:
         code, payload = self._run_cli(
@@ -134,9 +287,90 @@ class Phase52CBlenderAdoptionOperatorAcceptanceTests(unittest.TestCase):
         self.assertEqual(payload["error"], "ValueError")
         self.assertIn("DISPEXEC", str(payload["detail"]))
 
-    def test_blender_operator_remains_module_only_and_package_scripts_are_frozen(self) -> None:
-        pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
-        project = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]
+    def test_concurrent_same_execution_destination_publishes_at_most_once(self) -> None:
+        completed = self._terminal_execution()
+        execution_id = completed.execution.execution_id
+        binding = read_blender_dispatch_output_binding(self.runtime, execution_id)
+        destination = "assets/production/concurrent.glb"
+
+        def worker() -> tuple[str, object]:
+            try:
+                result = GovernedBlenderProductionOutputAdopter(self.runtime).adopt_new(
+                    execution_id,
+                    destination,
+                )
+                return "ok", result
+            except BlenderProductionAdoptionError as exc:
+                return "error", str(exc)
+
+        with patch.object(BlenderExportService, "execute", autospec=True) as replay, ThreadPoolExecutor(
+            max_workers=2
+        ) as pool:
+            outcomes = list(pool.map(lambda _: worker(), range(2)))
+
+        self.assertEqual(replay.call_count, 0)
+        self.assertEqual(len([value for status, value in outcomes if status == "ok"]), 1)
+        self.assertEqual(len([value for status, value in outcomes if status == "error"]), 1)
+        self.assertTrue((self.runtime.project_root / destination).is_file())
+        receipt = read_blender_production_adoption_receipt(self.runtime, execution_id)
+        self.assertEqual(receipt.status, BlenderProductionAdoptionStatus.PUBLISHED)
+        with self.runtime.store.session() as conn:
+            adopted_children = conn.execute(
+                """SELECT COUNT(*) FROM artifacts
+                   WHERE parent_artifact_id = ? AND status = 'ADOPTED'""",
+                (binding.output_artifact_id,),
+            ).fetchone()[0]
+            receipts = conn.execute(
+                "SELECT COUNT(*) FROM blender_production_adoptions WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()[0]
+        self.assertEqual(adopted_children, 1)
+        self.assertEqual(receipts, 1)
+
+    def test_post_link_crash_is_ambiguous_and_cli_retry_never_overwrites_or_replays(self) -> None:
+        completed = self._terminal_execution()
+        execution_id = completed.execution.execution_id
+        binding = read_blender_dispatch_output_binding(self.runtime, execution_id)
+        source_bytes = OriginForgeLineage(self.runtime).local_artifact_path(
+            binding.output_artifact_id
+        ).read_bytes()
+        destination = self.runtime.project_root / "assets/production/crash-window.glb"
+
+        with patch.object(
+            OriginForgeLineage,
+            "create_artifact",
+            autospec=True,
+            side_effect=RuntimeError("injected post-link crash"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "post-link crash"):
+                GovernedBlenderProductionOutputAdopter(self.runtime).adopt_new(
+                    execution_id,
+                    "assets/production/crash-window.glb",
+                )
+
+        self.assertEqual(destination.read_bytes(), source_bytes)
+        receipt = read_blender_production_adoption_receipt(self.runtime, execution_id)
+        self.assertEqual(receipt.status, BlenderProductionAdoptionStatus.PREPARED)
+        self.assertIsNone(receipt.adopted_artifact_id)
+        self.assertIsNone(receipt.verification_id)
+
+        with patch.object(BlenderExportService, "execute", autospec=True) as replay:
+            code, payload = self._run_cli(
+                execution_id,
+                "assets/production/crash-window.glb",
+            )
+        self.assertEqual(replay.call_count, 0)
+        self.assertEqual(code, 2)
+        self.assertIn("recovery required", str(payload["detail"]))
+        self.assertEqual(destination.read_bytes(), source_bytes)
+        self.assertEqual(
+            read_blender_production_adoption_receipt(self.runtime, execution_id).status,
+            BlenderProductionAdoptionStatus.PREPARED,
+        )
+
+    def test_blender_operator_remains_module_only_and_pixelorama_authority_is_unchanged(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
         self.assertEqual(
             project["scripts"],
             {
@@ -146,6 +380,15 @@ class Phase52CBlenderAdoptionOperatorAcceptanceTests(unittest.TestCase):
             },
         )
         self.assertNotIn("origin-forge-blender", project["scripts"])
+        pixelorama_cli = (root / "src/origin_forge/pixelorama_admin_cli.py").read_text(
+            encoding="utf-8"
+        )
+        pixelorama_adoption = (
+            root / "src/origin_forge/production_pixelorama_adoption.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("adopt-production-new", pixelorama_cli)
+        self.assertNotIn("blender_admin_cli", pixelorama_cli)
+        self.assertNotIn("BlenderProduction", pixelorama_adoption)
 
 
 if __name__ == "__main__":
