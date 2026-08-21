@@ -34,7 +34,7 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 17)
+            self.assertEqual(SCHEMA_VERSION, 18)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -123,6 +123,9 @@ class MigrationTests(unittest.TestCase):
                 "pixelorama_production_adoptions",
                 "blender_dispatch_output_bindings",
                 "blender_production_adoptions",
+                "conversation_sessions",
+                "conversation_turns",
+                "conversation_submissions",
             ):
                 self.assertIn(table, tables)
             self.assertIn("idx_entity_relations_active_unique", relation_indexes)
@@ -387,7 +390,7 @@ class MigrationTests(unittest.TestCase):
                     (claim_id,),
                 ).fetchone()
 
-            self.assertEqual(version, 17)
+            self.assertEqual(version, 18)
             self.assertEqual(after, before)
             self.assertEqual(consumed["status"], "CONSUMED")
             self.assertEqual(consumed["revision"], 1)
