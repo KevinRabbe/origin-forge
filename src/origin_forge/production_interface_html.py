@@ -5,6 +5,7 @@ from .production_interface_classic import (
     render_detail as _render_classic_detail,
     render_overview as _render_classic_overview,
 )
+from .production_interface_lifecycle import decorate_lifecycle
 from .production_interface_snapshot import ProductionInterfaceSnapshot
 from .production_interface_theme import decorate_detail, decorate_overview
 
@@ -22,6 +23,7 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
     classic = _render_classic_overview(snapshot)
     try:
         themed = decorate_overview(classic, snapshot)
+        themed = decorate_lifecycle(themed, snapshot)
     except ValueError as exc:
         raise ProductionInterfaceRenderError("cockpit theme render failed") from exc
     return _bounded(themed)
