@@ -10,6 +10,7 @@ from .production_interface_lifecycle import decorate_lifecycle
 from .production_interface_lineage import decorate_lineage
 from .production_interface_snapshot import ProductionInterfaceSnapshot
 from .production_interface_theme import decorate_detail, decorate_overview
+from .production_interface_workspace import decorate_workspace
 
 
 _MAX_HTML_BYTES = 4 * 1024 * 1024
@@ -25,6 +26,7 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
     classic = _render_classic_overview(snapshot)
     try:
         themed = decorate_overview(classic, snapshot)
+        themed = decorate_workspace(themed, snapshot)
         themed = decorate_lifecycle(themed, snapshot)
         themed = decorate_lineage(themed, snapshot)
     except ValueError as exc:
