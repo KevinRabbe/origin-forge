@@ -6,6 +6,7 @@ import unittest
 import origin_forge.production_interface_accessibility as accessibility_module
 import origin_forge.production_interface_classic as classic_module
 import origin_forge.production_interface_cli as cli_module
+import origin_forge.production_interface_conversation as conversation_module
 import origin_forge.production_interface_detail_context as detail_context_module
 import origin_forge.production_interface_html as html_module
 import origin_forge.production_interface_lifecycle as lifecycle_module
@@ -34,6 +35,7 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
                 detail_context_module,
                 lineage_module,
                 workspace_module,
+                conversation_module,
                 task_workspace_module,
                 task_switcher_module,
                 project_tokens_module,
@@ -68,13 +70,34 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source)
 
-    def test_http_surface_has_no_successful_non_get_dispatch(self) -> None:
-        source = inspect.getsource(server_module.ProductionInterfaceRouter.route)
-        self.assertIn('if method != "GET"', source)
-        self.assertNotIn('method == "POST"', source)
-        self.assertNotIn('method == "PUT"', source)
-        self.assertNotIn('method == "PATCH"', source)
-        self.assertNotIn('method == "DELETE"', source)
+    def test_http_surface_allows_only_exact_conversation_post_routes(self) -> None:
+        route_source = inspect.getsource(server_module.ProductionInterfaceRouter.route)
+        post_source = inspect.getsource(server_module.ProductionInterfaceRouter._route_post)
+        server_source = inspect.getsource(server_module)
+
+        self.assertIn('if method == "POST"', route_source)
+        self.assertIn('path != "/conversation/session"', post_source)
+        self.assertIn("_conversation_turn_session_id(path)", post_source)
+        self.assertIn("create_conversation_session(", post_source)
+        self.assertIn("submit_human_turn(", post_source)
+        for forbidden_method in (
+            'method == "PUT"',
+            'method == "PATCH"',
+            'method == "DELETE"',
+        ):
+            self.assertNotIn(forbidden_method, route_source)
+
+        for forbidden_boundary in (
+            "conversation_production_processing",
+            "process_production_conversation_submission",
+            "production_manager_advance",
+            "production_goal_bootstrap",
+            "production_dispatch_execution",
+            "production_dispatch_invocation",
+            "production_blender_adoption",
+            "production_pixelorama_adoption",
+        ):
+            self.assertNotIn(forbidden_boundary, server_source)
 
 
 if __name__ == "__main__":
