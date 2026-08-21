@@ -168,10 +168,12 @@ class ConversationGateATests(unittest.TestCase):
             return "ACCEPTED"
 
         with ThreadPoolExecutor(max_workers=2) as pool:
+            future_a = pool.submit(submit, runtime_a, "client-a")
+            future_b = pool.submit(submit, runtime_b, "client-b")
             results = sorted(
                 (
-                    pool.submit(submit, runtime_a, "client-a").result(timeout=10),
-                    pool.submit(submit, runtime_b, "client-b").result(timeout=10),
+                    future_a.result(timeout=10),
+                    future_b.result(timeout=10),
                 )
             )
 
