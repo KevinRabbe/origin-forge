@@ -1129,6 +1129,26 @@ See `docs/phase-51-governed-blender-3d-production-dispatch.md` for the frozen ar
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
+## Phase 52 — Governed Blender Production Output Adoption — DONE
+
+Completed as the next separately gated **post-v0.5 v1.0 production-integration slice** after Phase 51, adding explicit create-only canonical publication of one exact terminal governed Blender GLB without changing immutable v0.5 release records:
+
+- the immutable Phase-51 `DISPEXEC → claim / Run / request / result / output / Verification` binding remains the sole production source authority; no caller/model source Artifact/path/Run/Verification substitution is accepted;
+- read-only adoption currentness requires the exact Blender owner, `DISPEXEC RETURNED`, claim `CONSUMED`, the frozen production Task still `RUNNING`, exact successful Run/request/result/output/Verification lineage, and exact current regular non-symlinked GLB bytes/hash/size/structure;
+- schema v17 adds one Blender-specific immutable production-adoption receipt with lifecycle only `PREPARED → PUBLISHED`, binding one exact execution/output to one destination;
+- publication is create-only: existing destinations are never overwritten, one execution cannot fan out to a second canonical path, and PREPARED retry is safe only while the destination is absent;
+- ambiguous post-link state (`PREPARED` plus existing destination) fails closed for explicit operator recovery rather than deleting, replacing, replaying, or guessing;
+- successful publication creates one adopted child `BLENDER_GLB_EXPORT` Artifact and exact `blender-production-adoption-integrity` PASS evidence before receipt finalization;
+- the module-only human operator command `python -m origin_forge.blender_admin_cli ... adopt-production-new --execution-id DISPEXEC-* --destination <new-project-path>` exposes only the governed application boundary and adds no fourth installed package script;
+- Blender is never replayed by adoption; semantic geometry/aesthetic acceptance, Task PASS/terminalization, provenance signing, merge, deployment, release, Manager/Goal-bootstrap automatic adoption, and cockpit/browser/GUI mutation authority remain outside Phase 52;
+- Pixelorama production adoption/Task acceptance remains a separate authority family and is not reused or widened.
+
+See `docs/phase-52-governed-blender-production-output-adoption.md` for the frozen architecture and `docs/phase-52-implementation-closure.md` for the accepted 52A–52C implementation, create-only/no-replay recovery semantics, operator boundary, adversarial acceptance, future-UI integration constraints, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `89b2d79656e3e44b3148233a27509d48694a6af2` / run `32440731032`, 52A head `4c333b8484b96623530eeee5204db971f887c1b6` / run `32442040314`, 52B head `1f7f3b356c65792202ffde5382de45f94c6d8a1c` / run `32483360618`, and 52C accepted head `a55a185603b3f8088c07f92ae9b0ef71b45e0e1f` / run `32500706983` all passed the canonical Python 3.12/3.13 matrix on their accepted exact heads. Accepted Phase-52 implementation/acceptance is merged through `b2b402c1b467923458f69d90f6410162285ad9a5`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 # v1.0 — Integrated Game Production
 
 Representative Goal:
