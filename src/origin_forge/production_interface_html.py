@@ -9,6 +9,10 @@ from .production_interface_detail_context import decorate_detail_context
 from .production_interface_lifecycle import decorate_lifecycle
 from .production_interface_lineage import decorate_lineage
 from .production_interface_project_tokens import decorate_project_tokens
+from .production_interface_run_timing import (
+    decorate_overview_run_timing,
+    decorate_task_run_timing,
+)
 from .production_interface_snapshot import ProductionInterfaceSnapshot
 from .production_interface_task_switcher import decorate_task_switcher
 from .production_interface_task_workspace import decorate_task_workspace
@@ -32,6 +36,7 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
         themed = decorate_workspace(themed, snapshot)
         themed = decorate_task_switcher(themed, snapshot)
         themed = decorate_project_tokens(themed, snapshot)
+        themed = decorate_overview_run_timing(themed, snapshot)
         themed = decorate_lifecycle(themed, snapshot)
         themed = decorate_lineage(themed, snapshot)
     except ValueError as exc:
@@ -53,6 +58,11 @@ def render_detail(
         )
         if kind.lower() == "task":
             themed = decorate_task_workspace(
+                themed,
+                snapshot,
+                task_id=object_id,
+            )
+            themed = decorate_task_run_timing(
                 themed,
                 snapshot,
                 task_id=object_id,
