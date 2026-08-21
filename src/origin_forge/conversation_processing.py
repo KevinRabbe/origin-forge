@@ -5,6 +5,11 @@ import sqlite3
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .conversation_operations import (
+    ConversationOperation,
+    ConversationOperationConflict,
+    bind_conversation_submission_operation,
+)
 from .conversation_service import (
     MAX_CONVERSATION_CONTENT_BYTES,
     ConversationActorType,
@@ -474,6 +479,15 @@ def process_read_only_submission(
         raise ValueError("submission_id must be a CONVSUB ID")
     if not isinstance(inspection, ConversationReadOnlyInspection):
         raise TypeError("inspection must be a ConversationReadOnlyInspection")
+
+    try:
+        bind_conversation_submission_operation(
+            runtime,
+            submission_id,
+            ConversationOperation.READ_ONLY_PROJECT_COUNTS,
+        )
+    except ConversationOperationConflict as exc:
+        raise ConversationProcessingConflict(str(exc)) from exc
 
     receipt = claim_conversation_submission(runtime, submission_id)
     if receipt.status is ConversationSubmissionStatus.RESPONDED:

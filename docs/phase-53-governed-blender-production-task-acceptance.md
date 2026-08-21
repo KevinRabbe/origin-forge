@@ -50,9 +50,10 @@ v15  Pixelorama production Task acceptance
 v16  Blender dispatch-output binding
 v17  Blender production adoption
 v18  independent governed-conversation Gate-A substrate
+v19  governed-conversation Gate-C operation/reference substrate
 ```
 
-`src/origin_forge/db.py` composes the migrations in that order and derives `SCHEMA_VERSION` from the final migration. Phase 53 therefore reserves **schema v19** for its Blender production Task-acceptance receipt. It must append after the independent conversation v18 migration; it must not renumber, replace, fold into, or otherwise claim the UI/conversation schema line.
+`src/origin_forge/db.py` composes the migrations in that order and derives `SCHEMA_VERSION` from the final migration. Phase 53 therefore reserves **schema v20** for its Blender production Task-acceptance receipt. It must append after the governed-conversation Gate-C v19 migration; it must not renumber, replace, fold into, or otherwise claim the UI/conversation schema line.
 
 The current immutable `BlenderDispatchOutputBinding` already binds one exact:
 
@@ -194,9 +195,9 @@ For a first acceptance:
 - child Tasks are compatible with success under the existing runtime transition law;
 - there is no conflicting Phase-53 acceptance authority for the Task/execution/adopted Artifact relation.
 
-## 5. Schema v19 — immutable Blender production Task acceptance receipt
+## 5. Schema v20 — immutable Blender production Task acceptance receipt
 
-Phase 53A must add exactly one new append-only migration after conversation Gate-A v18.
+Phase 53A must add exactly one new append-only migration after governed-conversation Gate-C v19.
 
 Proposed table:
 
@@ -231,7 +232,7 @@ Database-level requirements:
 - rows cannot be deleted;
 - conflicting unique/relation writes fail closed.
 
-Phase 53 does not modify the Phase-52 adoption receipt or conversation v18 tables.
+Phase 53 does not modify the Phase-52 adoption receipt or governed-conversation v18/v19 tables.
 
 ## 6. Exact Task PASS Verification
 
@@ -476,8 +477,8 @@ These are implementation constraints for future UI work only. Phase 53 itself mu
 
 Implement only:
 
-- schema-v19 Blender production Task-acceptance migration;
-- migration registration after conversation v18;
+- schema-v20 Blender production Task-acceptance migration;
+- migration registration after governed-conversation v19;
 - Blender-specific immutable receipt model/read/publish primitive;
 - exact Task PASS Verification type/verifier/evidence;
 - focused migration/immutability/uniqueness/atomic-publication tests.
@@ -561,7 +562,7 @@ Before Phase 53 is considered implemented, tests must prove fail-closed behavior
 - proof that acceptance never republishes/rewrites the adopted GLB;
 - proof that model/vision/specialist evidence cannot create the HUMAN_OPERATOR PASS;
 - proof that Pixelorama acceptance authority remains independent;
-- proof that conversation v18 state remains untouched;
+- proof that governed-conversation v18/v19 state remains untouched;
 - proof that no cockpit/browser/GUI mutation authority is introduced;
 - proof that no provenance signing, merge, deployment, release, Flow transition or Goal transition occurs.
 
