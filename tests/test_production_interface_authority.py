@@ -9,8 +9,12 @@ import origin_forge.production_interface_detail_context as detail_context_module
 import origin_forge.production_interface_html as html_module
 import origin_forge.production_interface_lifecycle as lifecycle_module
 import origin_forge.production_interface_lineage as lineage_module
+import origin_forge.production_interface_project_tokens as project_tokens_module
+import origin_forge.production_interface_run_timing as run_timing_module
 import origin_forge.production_interface_server as server_module
 import origin_forge.production_interface_snapshot as snapshot_module
+import origin_forge.production_interface_task_switcher as task_switcher_module
+import origin_forge.production_interface_task_workspace as task_workspace_module
 import origin_forge.production_interface_theme as theme_module
 import origin_forge.production_interface_workspace as workspace_module
 
@@ -28,6 +32,10 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
                 detail_context_module,
                 lineage_module,
                 workspace_module,
+                task_workspace_module,
+                task_switcher_module,
+                project_tokens_module,
+                run_timing_module,
                 server_module,
                 cli_module,
             )
