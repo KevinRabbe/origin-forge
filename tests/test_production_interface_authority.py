@@ -5,6 +5,7 @@ import unittest
 
 import origin_forge.production_interface_classic as classic_module
 import origin_forge.production_interface_cli as cli_module
+import origin_forge.production_interface_detail_context as detail_context_module
 import origin_forge.production_interface_html as html_module
 import origin_forge.production_interface_lifecycle as lifecycle_module
 import origin_forge.production_interface_server as server_module
@@ -22,6 +23,7 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
                 html_module,
                 theme_module,
                 lifecycle_module,
+                detail_context_module,
                 server_module,
                 cli_module,
             )
