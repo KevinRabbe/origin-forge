@@ -152,7 +152,9 @@ class Phase52CBlenderAdoptionOperatorAcceptanceTests(unittest.TestCase):
         completed = self._terminal_execution()
         execution_id = completed.execution.execution_id
         self._mutate(
-            "UPDATE dispatch_executions SET status = 'STARTED' WHERE execution_id = ?",
+            """UPDATE dispatch_executions
+               SET status = 'STARTED', revision = 0, terminal_detail_hash = NULL
+               WHERE execution_id = ?""",
             (execution_id,),
         )
 
