@@ -57,6 +57,38 @@ class ProductionInterfaceHtmlTests(unittest.TestCase):
         self.assertIn('<main id="main" class="cockpit-main">', page)
         self.assertNotIn("<link", page.lower())
 
+    def test_lifecycle_summary_is_snapshot_scoped_and_read_only(self) -> None:
+        goal = self.runtime.create_goal("goal")
+        flow = self.runtime.create_flow(goal)
+        self.runtime.create_task(flow, "task")
+        snapshot = build_production_interface_snapshot(self.runtime)
+        page = render_overview(snapshot)
+        self.assertIn('aria-label="Production lifecycle summary"', page)
+        self.assertIn("Production lifecycle", page)
+        self.assertIn(
+            'class="lifecycle-stage-name">Goals</span>'
+            '<span class="lifecycle-stage-total">1</span>',
+            page,
+        )
+        self.assertIn(
+            'class="lifecycle-stage-name">Flows</span>'
+            '<span class="lifecycle-stage-total">1</span>',
+            page,
+        )
+        self.assertIn(
+            'class="lifecycle-stage-name">Tasks</span>'
+            '<span class="lifecycle-stage-total">1</span>',
+            page,
+        )
+        self.assertIn(
+            'class="lifecycle-stage-name">Artifacts</span>'
+            '<span class="lifecycle-stage-total">0</span>',
+            page,
+        )
+        goal_status = str(snapshot.goals[0]["status"])
+        self.assertIn(f'title="{goal_status}"', page)
+        self.assertIn("do not grant execution, mutation, or verification authority", page)
+
     def test_detail_uses_same_shell_without_gaining_authority(self) -> None:
         goal = self.runtime.create_goal("goal")
         snapshot = build_production_interface_snapshot(self.runtime)
