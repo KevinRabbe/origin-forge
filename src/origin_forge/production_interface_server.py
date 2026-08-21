@@ -560,9 +560,9 @@ def create_production_interface_server(
         def _dispatch(self, method: str) -> None:
             body = b""
             if method == "POST":
-                transfer_encoding = self.headers.get("Transfer-Encoding")
-                content_length = self.headers.get("Content-Length")
-                if transfer_encoding is not None or content_length is None:
+                transfer_encodings = self.headers.get_all("Transfer-Encoding", [])
+                content_lengths = self.headers.get_all("Content-Length", [])
+                if transfer_encodings or not content_lengths:
                     self.close_connection = True
                     self._send(
                         router._response(
@@ -572,6 +572,17 @@ def create_production_interface_server(
                         )
                     )
                     return
+                if len(content_lengths) != 1:
+                    self.close_connection = True
+                    self._send(
+                        router._response(
+                            400,
+                            "text/plain; charset=utf-8",
+                            b"invalid content length\n",
+                        )
+                    )
+                    return
+                content_length = content_lengths[0]
                 if not content_length.isascii() or not content_length.isdecimal():
                     self.close_connection = True
                     self._send(
@@ -594,6 +605,16 @@ def create_production_interface_server(
                     )
                     return
                 body = self.rfile.read(body_length)
+                if len(body) != body_length:
+                    self.close_connection = True
+                    self._send(
+                        router._response(
+                            400,
+                            "text/plain; charset=utf-8",
+                            b"incomplete request body\n",
+                        )
+                    )
+                    return
 
             response = router.route(
                 method,
