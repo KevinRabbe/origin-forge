@@ -438,6 +438,9 @@ def decorate_workspace(page: str, snapshot: ProductionInterfaceSnapshot) -> str:
     if not isinstance(snapshot, ProductionInterfaceSnapshot):
         raise TypeError("snapshot must be a ProductionInterfaceSnapshot")
     page = _replace_once(page, _STYLE_MARKER, _WORKSPACE_CSS + _STYLE_MARKER)
-    index = '<a href="#workspace">Workspace</a>' + _INDEX_MARKER
-    page = _replace_once(page, _INDEX_MARKER, index)
+    page = _replace_once(
+        page,
+        _INDEX_MARKER,
+        _INDEX_MARKER + '<a href="#workspace">Workspace</a>',
+    )
     return _replace_once(page, _INDEX_MARKER, _workspace(snapshot) + _INDEX_MARKER)
