@@ -12,7 +12,11 @@ from .conversation_processing import (
 )
 from .conversation_production import admit_conversation_goal
 from .conversation_service import ConversationSubmissionStatus
-from .production_goal_bootstrap_models import GoalBootstrapReceipt, GoalBootstrapStage, GoalBootstrapStatus
+from .production_goal_bootstrap_models import (
+    GoalBootstrapReceipt,
+    GoalBootstrapStage,
+    GoalBootstrapStatus,
+)
 from .production_goal_bootstrap_operator import (
     GoalBootstrapDecision,
     GoalBootstrapOperatorBlocked,
@@ -41,25 +45,6 @@ _RECOVERABLE_DECISIONS = frozenset(
         GoalBootstrapDecision.MATERIALIZED_NEEDS_PREPPOL,
     }
 )
-
-
-def _ready_receipt_from_projection(runtime: OriginForgeRuntime, goal_id: str) -> GoalBootstrapReceipt:
-    projection = inspect_goal_bootstrap_status_readonly(runtime, goal_id)
-    if projection.decision is not GoalBootstrapDecision.READY_FOR_MANAGER:
-        if projection.decision in _RECOVERABLE_DECISIONS:
-            raise ConversationProductionRecoveryRequired(
-                f"Goal {goal_id} has recoverable bootstrap state "
-                f"{projection.decision.value}; explicit recovery is required"
-            )
-        detail = projection.detail or projection.decision.value
-        raise ConversationProductionProcessingError(
-            f"Goal {goal_id} is not ready for Manager handoff: {detail}"
-        )
-    if projection.receipt is None:
-        raise ConversationProductionProcessingError(
-            "READY_FOR_MANAGER projection lacks its durable bootstrap receipt"
-        )
-    return projection.receipt
 
 
 def _validate_ready_materialization(
