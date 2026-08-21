@@ -9,6 +9,7 @@ from .production_interface_detail_context import decorate_detail_context
 from .production_interface_lifecycle import decorate_lifecycle
 from .production_interface_lineage import decorate_lineage
 from .production_interface_snapshot import ProductionInterfaceSnapshot
+from .production_interface_task_workspace import decorate_task_workspace
 from .production_interface_theme import decorate_detail, decorate_overview
 from .production_interface_workspace import decorate_workspace
 
@@ -46,6 +47,12 @@ def render_detail(
             kind=kind,
             object_id=object_id,
         )
+        if kind.lower() == "task":
+            themed = decorate_task_workspace(
+                themed,
+                snapshot,
+                task_id=object_id,
+            )
     except ValueError as exc:
         raise ProductionInterfaceRenderError("cockpit theme render failed") from exc
     return _bounded(themed)
