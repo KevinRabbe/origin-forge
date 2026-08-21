@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from origin_forge.production_interface_html import render_detail, render_overview
@@ -88,6 +89,119 @@ class ProductionInterfaceHtmlTests(unittest.TestCase):
         goal_status = str(snapshot.goals[0]["status"])
         self.assertIn(f'title="{goal_status}"', page)
         self.assertIn("do not grant execution, mutation, or verification authority", page)
+
+    def test_evidence_lineage_joins_existing_snapshot_records_without_new_authority(self) -> None:
+        goal = self.runtime.create_goal("goal")
+        flow = self.runtime.create_flow(goal)
+        task = self.runtime.create_task(flow, "task")
+        snapshot = build_production_interface_snapshot(self.runtime)
+        run_id = "RUN-lineage"
+        change_id = "CHANGE-lineage"
+        artifact_id = "ARTIFACT-lineage"
+        verification_id = "VERIFY-lineage"
+        manifest_id = "MANIFEST-lineage"
+        enriched = replace(
+            snapshot,
+            runs=(
+                {
+                    "id": run_id,
+                    "task_id": task,
+                    "role": "PRODUCER",
+                    "model_profile": "profile-lineage",
+                    "model_hash": "sha256:model",
+                    "status": "SUCCEEDED",
+                    "started_at": "2026-08-21T00:00:00Z",
+                    "ended_at": "2026-08-21T00:00:01Z",
+                    "input_token_count": 0,
+                    "output_token_count": 0,
+                },
+            ),
+            changes=(
+                {
+                    "id": change_id,
+                    "task_id": task,
+                    "decision_id": None,
+                    "run_id": run_id,
+                    "summary": "lineage change",
+                    "summary_truncated": False,
+                    "change_type": "ASSET",
+                    "change_type_truncated": False,
+                    "before_ref": None,
+                    "before_ref_truncated": False,
+                    "after_ref": "artifact:model.glb",
+                    "after_ref_truncated": False,
+                    "status": "RECORDED",
+                    "created_at": "2026-08-21T00:00:01Z",
+                },
+            ),
+            artifacts=(
+                {
+                    "id": artifact_id,
+                    "change_id": change_id,
+                    "type": "MODEL3D",
+                    "type_truncated": False,
+                    "path_or_uri": "artifacts/model.glb",
+                    "path_or_uri_truncated": False,
+                    "content_hash": "sha256:artifact",
+                    "parent_artifact_id": None,
+                    "created_by_run_id": run_id,
+                    "model_id": "model-lineage",
+                    "model_id_truncated": False,
+                    "status": "ADOPTED",
+                    "created_at": "2026-08-21T00:00:02Z",
+                    "artifact_bytes_disclosed": False,
+                    "skill_versions_disclosed": False,
+                    "tool_versions_disclosed": False,
+                },
+            ),
+            artifact_verifications=(
+                {
+                    "id": verification_id,
+                    "target_type": "ARTIFACT",
+                    "target_id": artifact_id,
+                    "verification_type": "STRUCTURAL",
+                    "verification_type_truncated": False,
+                    "verifier": "test-verifier",
+                    "verifier_truncated": False,
+                    "status": "PASSED",
+                    "run_id": run_id,
+                    "created_at": "2026-08-21T00:00:03Z",
+                    "evidence_disclosed": False,
+                    "metrics_disclosed": False,
+                },
+            ),
+            provenance={
+                **snapshot.provenance,
+                "manifests": [
+                    {
+                        "manifest_id": manifest_id,
+                        "artifact_id": artifact_id,
+                        "artifact_type": "MODEL3D",
+                        "artifact_location": "artifacts/model.glb",
+                        "task_id": task,
+                        "run_id": run_id,
+                        "signing_key_id": "KEY-lineage",
+                    }
+                ],
+            },
+        )
+        page = render_overview(enriched)
+        self.assertIn('aria-label="Evidence and lineage"', page)
+        self.assertIn('href="#lineage"', page)
+        self.assertIn('id="lineage"', page)
+        self.assertIn(f'href="/task/{task}"', page)
+        self.assertIn(f'href="/run/{run_id}"', page)
+        self.assertIn(f'href="/change/{change_id}"', page)
+        self.assertIn(f'href="/artifact/{artifact_id}"', page)
+        self.assertIn(f'href="/verification/{verification_id}"', page)
+        self.assertIn(manifest_id, page)
+        self.assertIn("KEY-lineage", page)
+        self.assertNotIn(f'/manifest/{manifest_id}', page)
+        self.assertIn("does not perform Ed25519 trust verification", page)
+        self.assertIn(
+            "Visibility does not grant execution, verification, mutation, or trust authority",
+            page,
+        )
 
     def test_detail_uses_same_shell_without_gaining_authority(self) -> None:
         goal = self.runtime.create_goal("goal")
