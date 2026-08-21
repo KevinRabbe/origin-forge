@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from .conversation_gate_c_migration import CONVERSATION_GATE_C_MIGRATION
 from .conversation_migration import CONVERSATION_GATE_A_MIGRATION
 from .migrations import MIGRATIONS as BASE_MIGRATIONS
 from .production_blender_adoption_migration import (
@@ -29,6 +30,7 @@ MIGRATIONS = (
     BLENDER_DISPATCH_OUTPUT_BINDING_MIGRATION,
     BLENDER_PRODUCTION_ADOPTION_MIGRATION,
     CONVERSATION_GATE_A_MIGRATION,
+    CONVERSATION_GATE_C_MIGRATION,
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
