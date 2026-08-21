@@ -4,7 +4,11 @@ import json
 from typing import Any
 
 from .ids import IdKind, validate_id
-from .production_planning_evidence import MaterializedTaskBinding, PlanMaterialization
+from .production_planning_evidence import (
+    MaterializedTaskBinding,
+    PlanMaterialization,
+    ProductionPlanningEvidenceError,
+)
 from .runtime import OriginForgeRuntime
 
 
@@ -50,22 +54,22 @@ def _materialization_from_payload(payload: object) -> PlanMaterialization:
         raise ProductionMaterializationReadError(
             "stored plan materialization task bindings are invalid"
         )
-    bindings: list[MaterializedTaskBinding] = []
-    for raw_binding in raw_bindings:
-        if not isinstance(raw_binding, dict) or set(raw_binding) != {
-            "step_key",
-            "task_id",
-        }:
-            raise ProductionMaterializationReadError(
-                "stored plan materialization task binding schema drifted"
-            )
-        bindings.append(
-            MaterializedTaskBinding(
-                step_key=raw_binding["step_key"],
-                task_id=raw_binding["task_id"],
-            )
-        )
     try:
+        bindings: list[MaterializedTaskBinding] = []
+        for raw_binding in raw_bindings:
+            if not isinstance(raw_binding, dict) or set(raw_binding) != {
+                "step_key",
+                "task_id",
+            }:
+                raise ProductionMaterializationReadError(
+                    "stored plan materialization task binding schema drifted"
+                )
+            bindings.append(
+                MaterializedTaskBinding(
+                    step_key=raw_binding["step_key"],
+                    task_id=raw_binding["task_id"],
+                )
+            )
         return PlanMaterialization(
             materialization_id=payload["materialization_id"],
             planning_input_id=payload["planning_input_id"],
@@ -79,7 +83,9 @@ def _materialization_from_payload(payload: object) -> PlanMaterialization:
             flow_id=payload["flow_id"],
             task_bindings=tuple(bindings),
         )
-    except (TypeError, ValueError) as exc:
+    except ProductionMaterializationReadError:
+        raise
+    except (ProductionPlanningEvidenceError, TypeError, ValueError) as exc:
         raise ProductionMaterializationReadError(
             "stored plan materialization failed canonical validation"
         ) from exc
