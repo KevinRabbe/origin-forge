@@ -658,7 +658,7 @@ Implemented the Manager-side planning substrate needed to turn one durable Goal 
 - immutable normalized planning input/proposal/audit/materialization evidence;
 - explicit one-transaction audited-plan materialization allocating infrastructure-owned Flow/Task IDs and rolling back all partial state on failure;
 - deterministic dependency readiness requiring canonical Task `SUCCEEDED` plus Task Verification `PASS`, with explicit waiting/failed/invalid/active/terminal evidence and no Task transition side effect;
-- one-shot Task-less `PLANNER` Runs using the existing Phase-14 scheduled model/resource boundary, exact request/response/proposal/WorkOrder evidence, and no implicit audit/materialization;
+- one-shot Task-less `PLANNER` Runs using the existing Phase-14 scheduled model/resource boundary, exact request/response/proposal evidence, and no implicit audit/materialization;
 - Phase-30 immutable-SQLite-guard-based read-only planning evidence, graph, and readiness inspection with exact materialized Task/dependency drift detection;
 - read-only `origin-forge-plan` module CLI exposing status/show/graph/readiness only;
 - no automatic Task execution, recursive replanning, hidden queue, model self-verification, Artifact adoption/signing, Project Intelligence mutation, arbitrary model tool execution, cockpit mutation, merge, or release authority.
@@ -890,7 +890,7 @@ See `docs/phase-41-governed-preparation-recovery.md` for the frozen architecture
 
 **Exit condition met in implementation:** Phase-41 acceptance is green through exact adversarial code/test head `3d651f2193538b68a11371722961c6b8e5c31692` / run `31724154244` on Python 3.12 and Python 3.13; the implementation-closure companion head `8721bc2e923e0df59bd6b6ad77c6794a3a934885` / run `31724934199` also passed both interpreters.
 
-**Merge gate:** this canonical roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with unrelated heavyweight evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded squash merge.
+**Merge gate:** this canonical roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded squash merge.
 
 ## Phase 42 — Governed Manager Recovery Integration — DONE
 
@@ -1021,7 +1021,7 @@ Promoted only the existing deterministic simulation backend through the governed
 
 See `docs/phase-47-governed-deterministic-simulation-production-dispatch.md` for the frozen architecture and `docs/phase-47-implementation-closure.md` for the accepted planning through 47F implementation, adversarial acceptance, authority exclusions, and exact CI evidence.
 
-**Exit condition met in implementation:** planning head `d0c93da80b8e8a8f62c23c9e26a238f85fbb289f` / run `31854658992`, 47A head `33905dd52fcf0d7e107311321f8d2cc584bc4de5` / run `31855236685`, 47B head `b84d52caf0f52f1ec782427e3d9615a3f8d5fe85` / run `31863500202`, 47C head `a750bc59c3ae8470e727586d41fb0e9c886c1b73` / run `31890507717`, 47D head `72f473691c11b664e276ca1d7afe797f532736ba` / run `31900288864`, 47E head `32306b005eff6296eb0c94c1152d8b14e5977f04` / run `31900910397`, and 47F acceptance head `6389dd236df636b38f260f832afb252b86b72c62` / run `31910549681` all passed Python 3.12 and Python 3.13. Accepted Phase-47 implementation/acceptance is merged to `main` as `29e00d8d5afa20f9f24c6a20fef35b8cfffa5340`.
+**Exit condition met in implementation:** planning head `d0c93da80b8e8a8f62c23c9e26a238f85fbb289f` / run `31854658992`, 47A head `33905dd52fcf0d7e107311321f8d2cc584bc4de5` / run `31855236685`, 47B head `b84d52caf0f52f1ec782427e3d9615a3f8d5fe85` / run `31863500202`, 47C head `a750bc59c3ae8470e727586d41fb0e9c886c1b73` / run `31890507717`, 47D head `72f473691c11e664e276ca1d7afe797f532736ba` / run `31900288864`, 47E head `32306b005eff6296eb0c94c1152d8b14e5977f04` / run `31900910397`, and 47F acceptance head `6389dd236df636b38f260f832afb252b86b72c62` / run `31910549681` all passed Python 3.12 and Python 3.13. Accepted Phase-47 implementation/acceptance is merged to `main` as `29e00d8d5afa20f9f24c6a20fef35b8cfffa5340`.
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
