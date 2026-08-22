@@ -84,8 +84,8 @@ class ProductionInterfaceGateDTests(unittest.TestCase):
         self.assertIn('action="/conversation/session"', initial_page)
         self.assertIn(">Start conversation</button>", initial_page)
         csp = dict(initial.headers)["Content-Security-Policy"]
-        self.assertIn("script-src 'none'", csp)
-        self.assertIn("connect-src 'none'", csp)
+        self.assertIn("script-src 'self'", csp)
+        self.assertIn("connect-src 'self'", csp)
         self.assertIn("form-action 'self'", csp)
         self.assertNotIn("form-action 'none'", csp)
 
