@@ -17,6 +17,7 @@ from origin_forge.production_blender_task_acceptor import (
     BlenderProductionTaskAcceptorError,
     GovernedBlenderProductionTaskAcceptor,
 )
+from origin_forge.service import StaleRevision
 from test_phase53a_blender_production_task_acceptance import (
     Phase53ABlenderProductionTaskAcceptanceTests,
 )
@@ -175,6 +176,67 @@ class Phase53BBlenderProductionTaskAcceptanceCurrentnessTests(unittest.TestCase)
                 run_count,
             )
 
+    def test_stale_revision_race_converges_on_exact_concurrent_winner(self) -> None:
+        runtime, binding, _, _, task_revision = self._ready()
+        acceptor = GovernedBlenderProductionTaskAcceptor(runtime)
+        original_transition = runtime.transition_task
+
+        def concurrent_winner(task_id, target, *, expected_revision):
+            original_transition(
+                task_id,
+                target,
+                expected_revision=expected_revision,
+            )
+            raise StaleRevision("simulated losing acceptor after concurrent winner")
+
+        with patch.object(
+            runtime,
+            "transition_task",
+            side_effect=concurrent_winner,
+        ):
+            accepted = acceptor.accept(
+                binding.execution_id,
+                actor_id="operator.phase53b.race",
+            )
+
+        self.assertEqual(accepted.task_status, "SUCCEEDED")
+        self.assertEqual(accepted.task_revision_at_acceptance, task_revision)
+        self.assertEqual(accepted.task_revision, task_revision + 1)
+        final = acceptor.inspect(binding.execution_id)
+        self.assertEqual(
+            final.status,
+            BlenderProductionTaskAcceptanceCurrentnessStatus.ACCEPTED_TASK_SUCCEEDED,
+        )
+        with runtime.store.session() as conn:
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM blender_production_task_acceptances"
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                conn.execute(
+                    """SELECT COUNT(*) FROM verifications
+                       WHERE target_type = 'TASK' AND target_id = ?
+                             AND verification_type = ?""",
+                    (
+                        binding.task_id,
+                        BLENDER_PRODUCTION_TASK_ACCEPTANCE_VERIFICATION_TYPE,
+                    ),
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                conn.execute(
+                    """SELECT COUNT(*) FROM state_events
+                       WHERE aggregate_type = 'TASK' AND aggregate_id = ?
+                             AND event_type = 'TASK_STATUS_CHANGED'
+                             AND old_state = 'RUNNING' AND new_state = 'SUCCEEDED'""",
+                    (binding.task_id,),
+                ).fetchone()[0],
+                1,
+            )
+
     def test_live_adopted_byte_drift_blocks_first_acceptance(self) -> None:
         runtime, binding, adoption, _, _ = self._ready()
         destination = runtime.project_root / adoption.destination_path
@@ -199,6 +261,48 @@ class Phase53BBlenderProductionTaskAcceptanceCurrentnessTests(unittest.TestCase)
                 0,
             )
         self.assertEqual(runtime.get_task(binding.task_id)["status"], "RUNNING")
+
+    def test_incomplete_child_fails_before_phase53_pass(self) -> None:
+        runtime, binding, _, _, _ = self._ready()
+        parent = runtime.get_task(binding.task_id)
+        child_id = runtime.create_task(
+            parent["flow_id"],
+            "unfinished child blocks Blender production acceptance",
+            parent_task_id=binding.task_id,
+        )
+        self.assertEqual(runtime.get_task(child_id)["status"], "QUEUED")
+
+        currentness = inspect_blender_production_task_acceptance_currentness_readonly(
+            runtime,
+            binding.execution_id,
+        )
+        self.assertEqual(
+            currentness.status,
+            BlenderProductionTaskAcceptanceCurrentnessStatus.STALE_OR_CONFLICTING,
+        )
+        self.assertIn("child Tasks incompatible", currentness.detail or "")
+        with self.assertRaises(BlenderProductionTaskAcceptorError):
+            GovernedBlenderProductionTaskAcceptor(runtime).accept(binding.execution_id)
+        self.assertEqual(runtime.get_task(binding.task_id)["status"], "RUNNING")
+        with runtime.store.session() as conn:
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) FROM blender_production_task_acceptances"
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                conn.execute(
+                    """SELECT COUNT(*) FROM verifications
+                       WHERE target_type = 'TASK' AND target_id = ?
+                             AND verification_type = ?""",
+                    (
+                        binding.task_id,
+                        BLENDER_PRODUCTION_TASK_ACCEPTANCE_VERIFICATION_TYPE,
+                    ),
+                ).fetchone()[0],
+                0,
+            )
 
     def test_post_success_asset_drift_does_not_rewrite_historical_acceptance(self) -> None:
         runtime, binding, adoption, _, _ = self._ready()
@@ -258,7 +362,6 @@ class Phase53BBlenderProductionTaskAcceptanceCurrentnessTests(unittest.TestCase)
             "ModelAdapter",
             "conversation",
             "manager",
-            "ui",
             "browser",
             "model3d_request_id=",
             "model3d_request_hash=",
