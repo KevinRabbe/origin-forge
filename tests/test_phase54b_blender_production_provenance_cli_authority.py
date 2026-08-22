@@ -105,8 +105,8 @@ class Phase54BBlenderProductionProvenanceCliAuthorityTests(unittest.TestCase):
             scripts,
             {
                 "origin-forge": "origin_forge.cli:main",
-                "origin-forge-attempt": "origin_forge.attempt_cli:main",
-                "origin-forge-cockpit": "origin_forge.cockpit_cli:main",
+                "origin-forge-attempt": "origin_forge.orchestration_cli:main",
+                "origin-forge-cockpit": "origin_forge.production_interface_cli:main",
             },
         )
         self.assertNotIn("origin_forge.blender_admin_cli:main", scripts.values())
