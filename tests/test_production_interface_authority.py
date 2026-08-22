@@ -11,6 +11,8 @@ import origin_forge.production_interface_detail_context as detail_context_module
 import origin_forge.production_interface_html as html_module
 import origin_forge.production_interface_lifecycle as lifecycle_module
 import origin_forge.production_interface_lineage as lineage_module
+import origin_forge.production_interface_live as live_module
+import origin_forge.production_interface_live_decorator as live_decorator_module
 import origin_forge.production_interface_project_tokens as project_tokens_module
 import origin_forge.production_interface_run_timing as run_timing_module
 import origin_forge.production_interface_server as server_module
@@ -36,6 +38,8 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
                 lineage_module,
                 workspace_module,
                 conversation_module,
+                live_module,
+                live_decorator_module,
                 task_workspace_module,
                 task_switcher_module,
                 project_tokens_module,
@@ -72,6 +76,9 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
 
     def test_http_surface_allows_only_exact_conversation_post_routes(self) -> None:
         route_source = inspect.getsource(server_module.ProductionInterfaceRouter.route)
+        live_get_source = inspect.getsource(
+            server_module.ProductionInterfaceRouter._route_live_get
+        )
         post_source = inspect.getsource(server_module.ProductionInterfaceRouter._route_post)
         server_source = inspect.getsource(server_module)
 
@@ -80,6 +87,10 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
         self.assertIn("_conversation_turn_session_id(path)", post_source)
         self.assertIn("create_conversation_session(", post_source)
         self.assertIn("submit_human_turn(", post_source)
+        self.assertIn('path == "/assets/conversation-live.js"', route_source)
+        self.assertIn('path.startswith("/api/conversation/live/")', route_source)
+        self.assertIn("_route_live_get(", route_source)
+        self.assertIn("read_conversation_live_state(", live_get_source)
         for forbidden_method in (
             'method == "PUT"',
             'method == "PATCH"',
@@ -98,6 +109,25 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
             "production_pixelorama_adoption",
         ):
             self.assertNotIn(forbidden_boundary, server_source)
+
+    def test_live_browser_transport_is_read_only_same_origin_polling(self) -> None:
+        script = live_module.CONVERSATION_LIVE_SCRIPT
+        self.assertIn('method: "GET"', script)
+        self.assertIn('credentials: "same-origin"', script)
+        self.assertIn("fetch(url", script)
+        self.assertNotIn('method: "POST"', script)
+        self.assertNotIn("WebSocket", script)
+        self.assertNotIn("EventSource", script)
+        self.assertNotIn("innerHTML", script)
+        self.assertNotIn("outerHTML", script)
+        self.assertNotIn("insertAdjacentHTML", script)
+        self.assertNotIn("eval(", script)
+
+        server_source = inspect.getsource(server_module)
+        self.assertNotIn("conversation_production", server_source)
+        self.assertNotIn("conversation_processing", server_source)
+        self.assertNotIn("production_manager", server_source)
+        self.assertNotIn(".store", server_source)
 
 
 if __name__ == "__main__":
