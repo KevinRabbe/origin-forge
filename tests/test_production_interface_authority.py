@@ -4,6 +4,7 @@ import inspect
 import unittest
 
 import origin_forge.conversation_blender_task_acceptance_actions as blender_action_projection_module
+import origin_forge.conversation_blender_task_acceptance_service as blender_action_service_module
 import origin_forge.production_blender_dispatch_output_discovery as blender_discovery_module
 import origin_forge.production_interface_accessibility as accessibility_module
 import origin_forge.production_interface_blender_acceptance as blender_acceptance_module
@@ -115,6 +116,8 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
             "production_blender_adoption",
             "production_pixelorama_adoption",
             "GovernedBlenderProductionTaskAcceptor",
+            "conversation_blender_task_acceptance_service",
+            "accept_conversation_blender_task",
         ):
             self.assertNotIn(forbidden_boundary, server_source)
 
@@ -178,6 +181,43 @@ class ProductionInterfaceAuthorityTests(unittest.TestCase):
         self.assertNotIn("<button", renderer_source)
         self.assertNotIn("blender", post_source.lower())
         self.assertNotIn("accept", post_source.lower())
+
+    def test_blender_acceptance_action_gate_b_has_one_typed_phase53_delegation_site(self) -> None:
+        service_source = inspect.getsource(blender_action_service_module)
+        server_source = inspect.getsource(server_module)
+        renderer_source = inspect.getsource(blender_acceptance_module)
+
+        self.assertIn("read_conversation_live_state(", service_source)
+        self.assertIn(
+            "project_conversation_blender_task_acceptance_actions_readonly(",
+            service_source,
+        )
+        self.assertEqual(
+            service_source.count("GovernedBlenderProductionTaskAcceptor(runtime).accept("),
+            1,
+        )
+        self.assertIn("LOCAL_GUI_BLENDER_ACCEPTANCE_ACTOR_ID", service_source)
+        for forbidden in (
+            ".store",
+            "transition_task(",
+            "publish_blender_production_task_acceptance",
+            "record_verification(",
+            "write_bytes(",
+            "unlink(",
+            "subprocess",
+            "ModelAdapter",
+            "Manager",
+            "sign_manifest(",
+            "merge_pull_request(",
+            "release_candidate(",
+        ):
+            self.assertNotIn(forbidden, service_source)
+
+        self.assertNotIn("conversation_blender_task_acceptance_service", server_source)
+        self.assertNotIn("accept_conversation_blender_task", server_source)
+        self.assertNotIn("<form", renderer_source)
+        self.assertNotIn("<button", renderer_source)
+        self.assertNotIn("blender", live_module.CONVERSATION_LIVE_SCRIPT.lower())
 
 
 if __name__ == "__main__":
