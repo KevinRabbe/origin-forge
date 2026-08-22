@@ -21,7 +21,7 @@ from .production_blender_task_acceptance_currentness import (
     BlenderProductionTaskAcceptanceCurrentnessStatus,
     inspect_blender_production_task_acceptance_currentness_readonly,
 )
-from .production_dispatch_read import DispatchReadError, read_dispatch_binding
+from .production_dispatch_read import ProductionDispatchReadError, read_dispatch_binding
 from .runtime import OriginForgeRuntime
 
 
@@ -270,7 +270,7 @@ def _exact_view(
     except (
         BlenderDispatchOutputBindingError,
         BlenderProductionAdoptionReceiptError,
-        DispatchReadError,
+        ProductionDispatchReadError,
         ConversationBlenderTaskAcceptanceActionError,
         KeyError,
         ValueError,
