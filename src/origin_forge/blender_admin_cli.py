@@ -8,6 +8,10 @@ from .production_blender_adoption import (
     BlenderProductionAdoptionError,
     GovernedBlenderProductionOutputAdopter,
 )
+from .production_blender_provenance_signer import (
+    BlenderProductionProvenanceSigningError,
+    GovernedBlenderProductionProvenanceSigner,
+)
 from .production_blender_task_acceptor import (
     BlenderProductionTaskAcceptorError,
     GovernedBlenderProductionTaskAcceptor,
@@ -19,8 +23,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m origin_forge.blender_admin_cli",
         description=(
-            "Explicit human-operated adoption and acceptance of governed Blender production outputs. "
-            "Publication is create-only and never overwrites an existing project asset."
+            "Explicit human-operated adoption, acceptance, and provenance signing of governed "
+            "Blender production outputs. Publication is create-only and never overwrites an "
+            "existing project asset; provenance signing grants no release authority."
         ),
     )
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
@@ -44,6 +49,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     accept_task.add_argument("--execution-id", required=True)
     accept_task.add_argument("--actor-id")
+
+    sign_provenance = commands.add_parser(
+        "sign-production-provenance",
+        help="cryptographically sign one exact terminally accepted Blender production Artifact",
+    )
+    sign_provenance.add_argument("--execution-id", required=True)
+    sign_provenance.add_argument("--certificate-id", required=True)
+    sign_provenance.add_argument(
+        "--operational-private-key",
+        required=True,
+        type=Path,
+        dest="operational_private_key",
+    )
     return parser
 
 
@@ -68,10 +86,19 @@ def main(argv: list[str] | None = None) -> int:
                 args.execution_id,
                 actor_id=args.actor_id,
             )
+        elif args.command == "sign-production-provenance":
+            result = GovernedBlenderProductionProvenanceSigner(runtime).sign(
+                args.execution_id,
+                args.certificate_id,
+                operational_private_key_handle=args.operational_private_key,
+            )
         else:  # pragma: no cover - argparse owns the command set.
             raise ValueError("unsupported Blender admin command")
         _print(result.to_dict())
         return 0
+    except BlenderProductionProvenanceSigningError as exc:
+        _print({"error": exc.code.value, "detail": str(exc)})
+        return 2
     except KeyError as exc:
         _print({"error": "NOT_FOUND", "detail": str(exc)})
         return 3
