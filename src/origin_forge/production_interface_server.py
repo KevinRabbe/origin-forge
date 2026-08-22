@@ -7,6 +7,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Mapping
 from urllib.parse import parse_qs, urlsplit
 
+from .conversation_blender_task_acceptance_actions import (
+    ConversationBlenderTaskAcceptanceActionError,
+    project_conversation_blender_task_acceptance_actions_readonly,
+)
 from .conversation_live import (
     ConversationLiveError,
     ConversationLiveState,
@@ -22,6 +26,9 @@ from .conversation_service import (
     submit_human_turn,
 )
 from .ids import IdKind, validate_id
+from .production_interface_blender_acceptance import (
+    decorate_blender_task_acceptance_actions,
+)
 from .production_interface_conversation import decorate_conversation_workspace
 from .production_interface_html import (
     ProductionInterfaceRenderError,
@@ -335,6 +342,10 @@ class ProductionInterfaceRouter:
                 client_submission_id=client_submission_id,
             )
             if live_state is not None:
+                action_state = project_conversation_blender_task_acceptance_actions_readonly(
+                    self.runtime, live_state
+                )
+                page = decorate_blender_task_acceptance_actions(page, action_state)
                 page = decorate_live_conversation(page, live_state)
         except ProductionInterfaceRenderError:
             return self._response(
@@ -345,6 +356,7 @@ class ProductionInterfaceRouter:
         except (
             ConversationError,
             ConversationLiveError,
+            ConversationBlenderTaskAcceptanceActionError,
             KeyError,
             TypeError,
             ValueError,
