@@ -470,11 +470,11 @@ Core rule:
 proposal → independent plan → trusted evidence → audit → promotion eligibility → STOP
 ```
 
-See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules and exclusions.
+See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules, decision-time authority checks and exclusions.
 
 **Exit condition met:** Origin Forge can turn exact verified evidence into bounded independently evaluated improvement candidates, preserve stronger upstream Skill evidence, fail closed when no governed evaluator exists, record audited promotion eligibility without activating the candidate, and keep production truth/authority outside the Workshop.
 
-**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 27 — Code Mode and Programmatic Context Experiments — DONE
 
@@ -507,7 +507,7 @@ See `docs/phase-27-code-mode-programmatic-context.md` for the detailed contracts
 
 **Exit condition met:** Origin Forge can execute a model-proposable finite read-only mini-program over an exact infrastructure-owned operation catalog, persist/reconstruct/replay-check the resulting context evidence, compare it against conventional context using regression-dominant metrics, and keep generic code/process/filesystem/Task/activation/promotion/signing/merge/release authority outside the experiment.
 
-**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 28 — Cross-Media Watermarking and Fingerprinting — DONE
 
@@ -530,7 +530,7 @@ See `docs/phase-28-cross-media-watermarking.md` for the detailed v1 algorithms, 
 
 **Exit condition met:** Origin Forge can create, compare, persist and inspect exact fingerprints across source/raster/audio/validated-GLB media, create/detect one explicitly fragile derivative PNG mark, bind fingerprint evidence to Phase-18 Artifact provenance without verifying signatures itself, and keep production authority unchanged.
 
-**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 29 — Training / Fine-Tuning Research — DONE
 
@@ -565,7 +565,7 @@ See `docs/phase-29-training-finetuning-research.md` for the detailed trusted-pro
 
 **Exit condition met:** Origin Forge can construct and persist only trusted redacted verified-runtime trajectories into deterministic leakage-safe datasets, freeze independent training/evaluation requirements, represent candidate checkpoint results as non-production evidence, recompute regression-dominant outcomes, inspect the chain read-only, and keep training execution, checkpoint activation, model/routing mutation, Task authority, Phase-26 promotion, signing, merge and release outside the research substrate.
 
-**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
 
 ## Phase 30 — Full Production Interface — DONE
 
@@ -576,7 +576,15 @@ Implemented the first bounded local production cockpit over proven Origin Forge 
 - fail-closed uninitialized, stale-schema, aliased, symlinked, actively-written, and changing-database inspection paths with no automatic migration/checkpoint/repair;
 - SELECT-only Project Intelligence / Design Bible projection through the same immutable DB boundary;
 - causal Decision → Change → Artifact metadata → Verification-summary navigation;
-- fresh non-loading model/resource configuration/admission state, public provenance metadata, and Dream/memory inspection. It does not read arbitrary Artifact bytes, execute models/tools, mutate Tasks, adopt/sign Artifacts, promote Dream memory, merge, or release.
+- fresh non-loading model/resource configuration/admission monitoring with zero lease/routing mutation authority and no default-config creation;
+- non-creating bounded public provenance inspection with canonical/hash validation while withholding secret material, DER/signature bytes, arbitrary Artifact bytes, Skill/tool lists, and fresh trust/currentness claims;
+- non-creating bounded Dream/memory inspection with canonical/hash/containment validation while withholding raw evidence refs/finding messages and all promotion/execution authority;
+- escaped static HTML under a strict no-script/no-form/no-network CSP;
+- fixed loopback-only `127.0.0.1` HTTP routes with no arbitrary static/project file serving, conservative snapshot/response bounds, and controlled fail-closed overflow;
+- operator surface limited to `snapshot` and `serve`;
+- metadata-only Artifact inspection in v1; arbitrary byte/media previews remain outside the accepted surface;
+- Verification evidence/metrics and approved command arrays remain withheld from the cockpit;
+- no Task mutation/completion/retry, model/tool execution, Artifact adoption/signing, Dream promotion, merge, release, or remote/multi-user hosting authority.
 
 See `docs/phase-30-full-production-interface.md` for the detailed read-side mutation boundary, presentation/network contract, authority exclusions, and closure proof.
 
@@ -819,7 +827,7 @@ See `docs/phase-38-governed-manager-dispatch-single-tick.md` for the finalized a
 
 **Exit condition met in implementation:** Phase-38 slices 38A–38E independently passed the normal Python 3.12/3.13 matrix through final code/test head `5888524b1977126c62541681bb610aa086e11136`; its acceptance run `31628078866` passed both interpreters after a test-only correction removed an unrelated immutable-read race from the mocked Phase-37 boundary without changing production code.
 
-**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated heavyweight evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 39 — Governed Task Preparation Authority & Single Tick — DONE
 
