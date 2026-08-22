@@ -1149,6 +1149,27 @@ See `docs/phase-52-governed-blender-production-output-adoption.md` for the froze
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
+## Phase 53 — Governed Blender Production Task Acceptance — DONE
+
+Completed as the next separately gated **post-v0.5 v1.0 acceptance slice** after Phase 52, closing the explicit human semantic-acceptance boundary for one exact canonically adopted Blender production result:
+
+- schema v20 adds one immutable database-enforced Blender Task-acceptance relation binding the exact DISPEXEC, Task/revision, Phase-51 output relation, Phase-52 adopted `BLENDER_GLB_EXPORT` and integrity Verification, protected Phase-34/MODEL3D semantic request relation, and exact Task PASS;
+- first acceptance reconstructs the exact Phase-51/52/WorkOrder/binding/MODEL3D lineage, requires `DISPEXEC RETURNED` + claim `CONSUMED`, exact PUBLISHED adoption, exact RUNNING Task revision/child compatibility, and independently revalidates the canonical adopted GLB path, no-symlink regular-file status, hash, byte count, and GLB structure before any Task PASS publication;
+- semantic acceptance authority is exactly `HUMAN_OPERATOR`; models, vision systems, specialists, Blender, Manager, Planner, conversation processing, browser code, and UI presentation remain advisory/evidence surfaces and cannot synthesize the acceptance;
+- acceptance publication atomically creates/reuses exactly one `blender-production-task-acceptance` Task PASS plus one immutable receipt; conflicting identity/hash/revision/evidence relations fail closed;
+- read-only currentness exposes exactly `NOT_ACCEPTED`, `ACCEPTED_PENDING_TASK_TRANSITION`, `ACCEPTED_TASK_SUCCEEDED`, and `STALE_OR_CONFLICTING`;
+- durable PASS+receipt beside a still-RUNNING Task is explicit recovery state: retry reuses the same acceptance and asks the existing runtime/store transition law for `RUNNING → SUCCEEDED`, with `StaleRevision` convergence allowed only when a fresh read proves the exact accepted concurrent winner already succeeded;
+- exact already-SUCCEEDED replay is idempotent through the same historical acceptance and does not reread later mutable GLB bytes to rewrite accepted Task history;
+- the module-only human command `python -m origin_forge.blender_admin_cli ... accept-production-task --execution-id DISPEXEC-*` delegates to the governed acceptor, permits only optional operator attribution, and adds no fourth installed package entrypoint or caller/model production-identity override;
+- cross-phase adversarial acceptance proves real Phase-51→52→53 success/replay/recovery, malformed execution rejection, byte-drift and child incompatibility failure, no adopted-GLB mutation, no Blender replay, no duplicate acceptance, and no Pixelorama/conversation/UI/model/subprocess/package authority widening;
+- successful acceptance does not sign provenance, authorize release, transition the parent Flow/Goal, auto-accept future work, or add a mutating cockpit/browser/GUI surface.
+
+See `docs/phase-53-governed-blender-production-task-acceptance.md` for the frozen architecture and `docs/phase-53-implementation-closure.md` for the accepted planning through 53C implementation, currentness/terminalization/recovery semantics, operator boundary, adversarial acceptance, future-UI instructions, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `9b02629aa57b63de0f26229f8140169c387b3044` / run `32511018996`, 53A head `10bc74bfbd7c71dbc5a20bdf0a0dfd5af7b8adc2` / run `32529893352`, 53B accepted head `3730b00b4932010d386f5dbcdd2dad3351a63fa6` / run `32539323142`, and 53C accepted head `f591fc425362a6a9914a767a302414f13bd33c7d` / run `32546353421` all passed the canonical Python 3.12/3.13 matrix on their accepted exact heads. Accepted Phase-53 implementation/acceptance is merged through `9a0e1fbd2bacb21507392baf10f28c406c6da311`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 # v1.0 — Integrated Game Production
 
 Representative Goal:
