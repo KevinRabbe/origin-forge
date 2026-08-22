@@ -470,11 +470,11 @@ Core rule:
 proposal → independent plan → trusted evidence → audit → promotion eligibility → STOP
 ```
 
-See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules, decision-time authority checks and exclusions.
+See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules and exclusions.
 
 **Exit condition met:** Origin Forge can turn exact verified evidence into bounded independently evaluated improvement candidates, preserve stronger upstream Skill evidence, fail closed when no governed evaluator exists, record audited promotion eligibility without activating the candidate, and keep production truth/authority outside the Workshop.
 
-**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 27 — Code Mode and Programmatic Context Experiments — DONE
 
@@ -507,7 +507,7 @@ See `docs/phase-27-code-mode-programmatic-context.md` for the detailed contracts
 
 **Exit condition met:** Origin Forge can execute a model-proposable finite read-only mini-program over an exact infrastructure-owned operation catalog, persist/reconstruct/replay-check the resulting context evidence, compare it against conventional context using regression-dominant metrics, and keep generic code/process/filesystem/Task/activation/promotion/signing/merge/release authority outside the experiment.
 
-**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 28 — Cross-Media Watermarking and Fingerprinting — DONE
 
@@ -530,7 +530,7 @@ See `docs/phase-28-cross-media-watermarking.md` for the detailed v1 algorithms, 
 
 **Exit condition met:** Origin Forge can create, compare, persist and inspect exact fingerprints across source/raster/audio/validated-GLB media, create/detect one explicitly fragile derivative PNG mark, bind fingerprint evidence to Phase-18 Artifact provenance without verifying signatures itself, and keep production authority unchanged.
 
-**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 29 — Training / Fine-Tuning Research — DONE
 
@@ -565,7 +565,7 @@ See `docs/phase-29-training-finetuning-research.md` for the detailed trusted-pro
 
 **Exit condition met:** Origin Forge can construct and persist only trusted redacted verified-runtime trajectories into deterministic leakage-safe datasets, freeze independent training/evaluation requirements, represent candidate checkpoint results as non-production evidence, recompute regression-dominant outcomes, inspect the chain read-only, and keep training execution, checkpoint activation, model/routing mutation, Task authority, Phase-26 promotion, signing, merge and release outside the research substrate.
 
-**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before SHA-guarded merge.
+**Merge gate:** the immutable closure head must pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 30 — Full Production Interface — DONE
 
@@ -576,15 +576,7 @@ Implemented the first bounded local production cockpit over proven Origin Forge 
 - fail-closed uninitialized, stale-schema, aliased, symlinked, actively-written, and changing-database inspection paths with no automatic migration/checkpoint/repair;
 - SELECT-only Project Intelligence / Design Bible projection through the same immutable DB boundary;
 - causal Decision → Change → Artifact metadata → Verification-summary navigation;
-- fresh non-loading model/resource configuration/admission monitoring with zero lease/routing mutation authority and no default-config creation;
-- non-creating bounded public provenance inspection with canonical/hash validation while withholding secret material, DER/signature bytes, arbitrary Artifact bytes, Skill/tool lists, and fresh trust/currentness claims;
-- non-creating bounded Dream/memory inspection with canonical/hash/containment validation while withholding raw evidence refs/finding messages and all promotion/execution authority;
-- escaped static HTML under a strict no-script/no-form/no-network CSP;
-- fixed loopback-only `127.0.0.1` HTTP routes with no arbitrary static/project file serving, conservative snapshot/response bounds, and controlled fail-closed overflow;
-- operator surface limited to `snapshot` and `serve`;
-- metadata-only Artifact inspection in v1; arbitrary byte/media previews remain outside the accepted surface;
-- Verification evidence/metrics and approved command arrays remain withheld from the cockpit;
-- no Task mutation/completion/retry, model/tool execution, Artifact adoption/signing, Dream promotion, merge, release, or remote/multi-user hosting authority.
+- fresh non-loading model/resource configuration/admission state, public provenance metadata, and Dream/memory inspection. It does not read arbitrary Artifact bytes, execute models/tools, mutate Tasks, adopt/sign Artifacts, promote Dream memory, merge, or release.
 
 See `docs/phase-30-full-production-interface.md` for the detailed read-side mutation boundary, presentation/network contract, authority exclusions, and closure proof.
 
@@ -827,7 +819,7 @@ See `docs/phase-38-governed-manager-dispatch-single-tick.md` for the finalized a
 
 **Exit condition met in implementation:** Phase-38 slices 38A–38E independently passed the normal Python 3.12/3.13 matrix through final code/test head `5888524b1977126c62541681bb610aa086e11136`; its acceptance run `31628078866` passed both interpreters after a test-only correction removed an unrelated immutable-read race from the mocked Phase-37 boundary without changing production code.
 
-**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated heavyweight evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 39 — Governed Task Preparation Authority & Single Tick — DONE
 
@@ -1146,6 +1138,27 @@ Completed as the next separately gated **post-v0.5 v1.0 production-integration s
 See `docs/phase-52-governed-blender-production-output-adoption.md` for the frozen architecture and `docs/phase-52-implementation-closure.md` for the accepted 52A–52C implementation, create-only/no-replay recovery semantics, operator boundary, adversarial acceptance, future-UI integration constraints, authority exclusions, and exact CI evidence.
 
 **Exit condition met in implementation:** planning head `89b2d79656e3e44b3148233a27509d48694a6af2` / run `32440731032`, 52A head `4c333b8484b96623530eeee5204db971f887c1b6` / run `32442040314`, 52B head `1f7f3b356c65792202ffde5382de45f94c6d8a1c` / run `32483360618`, and 52C accepted head `a55a185603b3f8088c07f92ae9b0ef71b45e0e1f` / run `32500706983` all passed the canonical Python 3.12/3.13 matrix on their accepted exact heads. Accepted Phase-52 implementation/acceptance is merged through `b2b402c1b467923458f69d90f6410162285ad9a5`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
+## Phase 53 — Governed Blender Production Task Acceptance — DONE
+
+Completed as the next separately gated **post-v0.5 v1.0 acceptance slice** after Phase 52, adding explicit human semantic acceptance and canonical Task terminalization for one exact already-dispatched, already-canonically-adopted Blender result without changing immutable v0.5 release records:
+
+- the sole semantic acceptance authority is `HUMAN_OPERATOR`; vision/model/specialist evidence remains advisory and Blender, Manager, dispatch, conversation, and browser code cannot synthesize acceptance;
+- schema v20 adds one immutable database-enforced Blender Task-acceptance receipt after the independent governed-conversation v19 migration, binding exactly one execution, production Task, adopted Artifact, Phase-52 adoption Verification, and Phase-53 Task PASS;
+- exact `blender-production-task-acceptance` PASS evidence is published atomically with the immutable receipt, with MODEL3D request identity/hash derived from the frozen governed dispatch binding rather than caller input;
+- before first acceptance, `GovernedBlenderProductionTaskAcceptor` independently reconstructs the complete Phase-51 RETURNED/CONSUMED dispatch relation and Phase-52 PUBLISHED adoption relation, then re-reads the canonical destination and requires exact regular non-symlinked GLB bytes/hash/size/structure plus current Task/child/revision compatibility;
+- only after the exact PASS/receipt is durable does the coordinator request the existing runtime/store `RUNNING → SUCCEEDED` Task transition, preserving optimistic revision, child-Task, Verification, and state-event laws instead of writing Task state directly;
+- durable PASS+receipt beside a still-RUNNING Task is explicit recovery state; exact retry reuses that acceptance and may finish the Task transition without duplicate acceptance, Blender replay, or GLB mutation;
+- exact already-SUCCEEDED replay is idempotent only through the same historical Phase-53 acceptance, and later canonical-file drift does not rewrite accepted Task history;
+- the module-only command `python -m origin_forge.blender_admin_cli ... accept-production-task --execution-id DISPEXEC-*` exposes only the exact execution identity plus ordinary operator metadata, adds no caller Task/Artifact/path/Run/Verification/score/model/runtime/force/sign/release authority, and adds no fourth installed package script;
+- cross-phase adversarial acceptance proves malformed execution identity, stale/missing/conflicting lineage, current GLB drift, incomplete children, durable-PASS recovery, replay/concurrency, parser authority-widening rejection, no adopted-GLB mutation on acceptance/replay, and no Pixelorama/conversation/UI/model/subprocess authority widening;
+- Phase 53 adds no Blender replay/repair, automatic acceptance, Task failure authority, Flow/Goal terminalization, provenance signing, merge/deploy/release, Manager/background acceptance, Goal-bootstrap widening, cockpit/browser mutation, or Pixelorama authority reuse.
+
+See `docs/phase-53-governed-blender-production-task-acceptance.md` for the frozen architecture and `docs/phase-53-implementation-closure.md` for the accepted 53A–53C implementation, currentness/terminalization/recovery semantics, operator boundary, adversarial acceptance, future-UI integration constraints, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `9b02629aa57b63de0f26229f8140169c387b3044` / run `32511018996`, 53A accepted head `10bc74bfbd7c71dbc5a20bdf0a0dfd5af7b8adc2` / run `32529893352`, 53B accepted head `3730b00b4932010d386f5dbcdd2dad3351a63fa6` / run `32539323142`, and 53C accepted head `f591fc425362a6a9914a767a302414f13bd33c7d` / run `32546353421` all passed the canonical Python 3.12/3.13 matrix on their accepted exact heads. Accepted Phase-53 implementation/acceptance is merged through `9a0e1fbd2bacb21507392baf10f28c406c6da311`.
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
