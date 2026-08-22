@@ -2,7 +2,7 @@
 
 Status: **POST-v0.5 DEVELOPMENT MAINLINE**
 
-This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch integration, Phase-49 governed Pixelorama production-output adoption, Phase-50 governed Pixelorama production Task acceptance, Phase-51 governed Blender 3D production dispatch, and Phase-52 governed Blender production-output adoption. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
+This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch integration, Phase-49 governed Pixelorama production-output adoption, Phase-50 governed Pixelorama production Task acceptance, Phase-51 governed Blender 3D production dispatch, Phase-52 governed Blender production-output adoption, and Phase-53 governed Blender production Task acceptance. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
 
 ## Install
 
@@ -20,7 +20,7 @@ origin-forge-attempt  exactly one bounded coding attempt
 origin-forge-cockpit  read-only local inspection
 ```
 
-Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
+Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52/53 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
 
 ## Initialize a project
 
@@ -113,7 +113,7 @@ from origin_forge.production_goal_bootstrap_operator import (
 
 A successful bootstrap or recovery stops at GOALBOOT `READY` after exact PREPPOL publication/revalidation. It does **not** invoke Manager. Production advancement remains a separate explicit `origin-forge manager advance` authorization.
 
-Phases 47, 48, 49, 50, 51, and 52 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run`, `media.2d.export`, or `media.3d.blender` Tasks.
+Phases 47, 48, 49, 50, 51, 52, and 53 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run`, `media.2d.export`, or `media.3d.blender` Tasks.
 
 ## Inspect or explicitly advance governed Manager work
 
@@ -222,11 +222,36 @@ The destination must be a new safe project-relative path. Publication is create-
 
 A successful adoption creates one adopted child `BLENDER_GLB_EXPORT` Artifact, one exact `blender-production-adoption-integrity` PASS Verification, and finalizes the immutable Blender adoption receipt as PUBLISHED. The Task remains `RUNNING`; no Task PASS/FAIL is synthesized, semantic geometry or aesthetic quality is not asserted, and provenance is not signed.
 
-Phase 52 adoption never invokes Blender. It consumes only the exact already-durable Phase-51 terminal output and fails closed rather than replaying the backend. There is still no Blender production Task-acceptance command: canonical byte adoption is a separate and strictly weaker fact than semantic Task acceptance.
+Phase 52 adoption never invokes Blender. It consumes only the exact already-durable Phase-51 terminal output and fails closed rather than replaying the backend. Phase 52 itself stops at canonical byte adoption; Phase 53 adds the separate explicit human-only Task-acceptance boundary documented next.
 
-A future UI may expose this same governed boundary only as a client of the existing application/service authority. Presentation code must not copy files directly, duplicate or weaken currentness checks, auto-select source authority, auto-adopt, retry ambiguous PREPARED state, replay Blender, overwrite assets, terminalize Tasks, sign provenance, or authorize release. Successful adoption should be presented as canonical byte adoption only—not semantic correctness or Task success.
+A future UI may expose this same governed adoption boundary only as a client of the existing application/service authority. Presentation code must not copy files directly, duplicate or weaken currentness checks, auto-select source authority, auto-adopt, retry ambiguous PREPARED state, replay Blender, overwrite assets, terminalize Tasks, sign provenance, or authorize release. Successful adoption should be presented as canonical byte adoption only—not semantic correctness or Task success.
 
 The cockpit remains a separate read-only inspection surface. Phase 52 does not add a Manager, Goal-bootstrap, simulation, Pixelorama execution, Blender execution, production-adoption, or production-acceptance mutation command to the cockpit/browser surface.
+
+## Explicitly accept one adopted Blender production Task
+
+Phase 53 adds one separate explicit human-operated acceptance command to the same module-only Blender admin family. It does **not** add a fourth installed package script:
+
+```bash
+python -m origin_forge.blender_admin_cli \
+  --project-root /path/to/project \
+  accept-production-task \
+  --execution-id DISPEXEC-...
+```
+
+The optional `--actor-id` argument is operator metadata only. Production selection remains exactly one canonical `DISPEXEC-*`. The command accepts no Task ID, WorkOrder/binding override, MODEL3D request ID, claim ID, Run ID, source or adopted Artifact ID, Verification ID, destination/path, PASS value, semantic score, model/specialist report, Blender runtime/profile/version/runner, force/bypass, signing material, merge/deploy/release option, retry count, watch/poll/loop mode, or background behavior. All production identities are derived from durable Phase-51/52 authority.
+
+Before a first acceptance, the selected execution must reconstruct the exact current Phase-51 dispatch relation and exact Phase-52 PUBLISHED adoption relation: reviewed Blender owner, `DISPEXEC RETURNED`, claim `CONSUMED`, exact frozen Task/WorkOrder/Phase-34 binding/MODEL3D request identity, exact successful Blender Run/request/result/output/Verification lineage, exact adopted `BLENDER_GLB_EXPORT` parent/Run/path/hash/size relation, exact Phase-52 adoption-integrity PASS, and the exact still-`RUNNING` production Task under existing child/revision laws. The canonical adopted destination is independently re-read and must remain a safe regular non-symlinked structurally valid GLB with the exact accepted bytes/hash/size. Missing, stale, ambiguous, tampered, drifted, relinked, or conflicting evidence fails closed before a new Task PASS is created.
+
+A successful explicit acceptance atomically records one immutable Blender production Task-acceptance receipt and exactly one Task-targeted `blender-production-task-acceptance` PASS with `acceptance_authority=HUMAN_OPERATOR`. Only after that exact acceptance is durable does Origin Forge invoke the existing runtime/store Task transition law to move the Task `RUNNING → SUCCEEDED`; it does not write Task status directly or weaken the existing verification, child-Task, revision, and state-event gates.
+
+The Phase-53 PASS records that the explicit human/governance boundary accepted the exact canonically adopted Blender result against the Task contract. Vision/model/specialist evidence remains advisory and cannot synthesize HUMAN_OPERATOR acceptance. Blender itself, Manager, dispatch, the conversation processor, and the browser cannot create this acceptance.
+
+If the Phase-53 PASS/receipt becomes durable but Task transition is interrupted, retrying the same exact execution reuses that acceptance and may finish the canonical transition without creating a duplicate or invoking Blender. An exact already-`SUCCEEDED` replay is idempotent only through that same historical Phase-53 acceptance; later file drift does not retroactively rewrite the accepted Task history. Conflicting post-SUCCEEDED acceptance attempts fail closed.
+
+Phase 53 acceptance never invokes Blender, rewrites/republishes/moves/deletes the adopted GLB, invokes Pixelorama, signs provenance, authorizes release, transitions the parent Flow/Goal, or grants Manager/background/browser acceptance authority.
+
+A future UI may display read-only Phase-53 currentness and invoke this same typed governed acceptor only after explicit human confirmation. Presentation code must not write Task/Verification/acceptance state directly, mutate the GLB, duplicate/weaken lineage/currentness validation, auto-accept, convert model/vision/specialist scores into human acceptance, replay Blender, or sign/merge/deploy/release.
 
 ## Run exactly one bounded coding attempt
 
@@ -312,6 +337,8 @@ Phases 49 and 50 preserve that law across Pixelorama publication and acceptance:
 
 Phase 52 preserves the same no-replay law across Blender canonical publication. Adoption consumes only the exact current terminal Phase-51 binding/output; PREPARED ambiguity never triggers automatic overwrite, cleanup, or Blender replay.
 
+Phase 53 preserves the law through Blender Task acceptance. A durable exact PASS/receipt may be reused to finish the normal Task transition after interruption, but no acceptance/recovery/replay path invokes Blender or mutates the adopted GLB.
+
 ## Current-development boundary
 
 Current `main` does not grant:
@@ -324,13 +351,13 @@ Current `main` does not grant:
 - production checkpoint/model activation;
 - direct simulation execution, direct Pixelorama editor-execution commands, direct Blender production-execution commands, or automatic Task terminalization from simulation/export/adoption/advisory evidence;
 - generic Pixelorama project creation/import/edit/save, arbitrary editor scripts/plugins, or automatic output adoption/signing;
-- caller/model-selected Blender runtime/path/profile/version/runner/budget/workspace/output authority, automatic GLB adoption, or Blender-derived Task acceptance;
-- model-, vision-, specialist-, Pixelorama-, Blender-, Manager-, or dispatcher-synthesized semantic production acceptance;
+- caller/model-selected Blender runtime/path/profile/version/runner/budget/workspace/output authority, automatic GLB adoption, or automatic/model-derived Blender Task acceptance;
+- model-, vision-, specialist-, Pixelorama-, Blender-, Manager-, dispatcher-, conversation-, or browser-synthesized semantic production acceptance;
 - background Goal bootstrap, Manager scheduling/queue draining, production adoption, production Task acceptance, or Blender execution/replay;
 - remote/multi-user cockpit hosting.
 
 The Pixelorama post-dispatch mutation surfaces are exactly the explicit module commands documented above: create-only `adopt-production-new` and human-only `accept-production-task`. Neither executes the editor, selects a different output, overwrites an asset, signs provenance, authorizes release, or grants background/automatic authority; only the acceptance command may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and human acceptance are durable.
 
-The Blender post-dispatch mutation surface is exactly the explicit module-only Phase-52 create-only `adopt-production-new` command documented above. It never invokes Blender, selects a different source, overwrites an asset, signs provenance, authorizes release, or grants Task acceptance/background authority. Phase 52 adds no Blender analogue of Pixelorama `accept-production-task`.
+The Blender post-dispatch mutation surfaces are exactly the explicit module-only Phase-52 create-only `adopt-production-new` command and Phase-53 human-only `accept-production-task` command documented above. Neither invokes Blender, selects a different production source, overwrites or rewrites an asset, signs provenance, authorizes release, or grants background/browser authority; only the Phase-53 acceptance command may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after the exact durable HUMAN_OPERATOR acceptance is established.
 
-Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, 50, 51, and 52 are explicitly post-v0.5 development.
+Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, 50, 51, 52, and 53 are explicitly post-v0.5 development.
