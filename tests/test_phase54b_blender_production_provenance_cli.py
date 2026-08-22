@@ -230,7 +230,7 @@ class Phase54BPixeloramaExclusionTests(unittest.TestCase):
         try:
             fixture.test_exact_pixelorama_owner_materializes_after_started_calls_service_once_and_returns()
             execution = fixture._execution()
-            execution_id = execution["id"]
+            execution_id = execution["execution_id"]
             self.assertIsInstance(execution_id, str)
             output = io.StringIO()
             unused_key = fixture.root.parent / "phase54b-pixelorama-unused.pem"
