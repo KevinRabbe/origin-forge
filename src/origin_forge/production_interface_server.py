@@ -7,16 +7,18 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Mapping
 from urllib.parse import parse_qs, urlsplit
 
+from .conversation_live import (
+    ConversationLiveError,
+    ConversationLiveState,
+    read_conversation_live_state,
+)
 from .conversation_service import (
-    DEFAULT_TURN_READ_LIMIT,
     ConversationConflict,
     ConversationError,
     ConversationSession,
-    ConversationTurn,
     ConversationSessionStatus,
     create_conversation_session,
     list_conversation_sessions,
-    list_conversation_turns,
     submit_human_turn,
 )
 from .ids import IdKind, validate_id
@@ -26,6 +28,11 @@ from .production_interface_html import (
     render_detail,
     render_overview,
 )
+from .production_interface_live import live_json_bytes
+from .production_interface_live_decorator import (
+    decorate_live_conversation,
+    live_script_bytes,
+)
 from .production_interface_snapshot import build_production_interface_snapshot
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision
@@ -33,7 +40,6 @@ from .service import StaleRevision
 
 _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 _MAX_REQUEST_BYTES = 256 * 1024
-_CONVERSATION_TURN_LIMIT = min(48, DEFAULT_TURN_READ_LIMIT)
 _SERVER_SNAPSHOT_LIMITS = {
     "max_goals": 16,
     "max_flows": 16,
@@ -230,6 +236,20 @@ def _conversation_turn_session_id(path: str) -> str | None:
     return parts[2]
 
 
+def _conversation_live_session_id(path: str) -> str | None:
+    parts = path.split("/")
+    if (
+        len(parts) != 5
+        or parts[0] != ""
+        or parts[1] != "api"
+        or parts[2] != "conversation"
+        or parts[3] != "live"
+        or not validate_id(parts[4], IdKind.CONVERSATION_SESSION)
+    ):
+        return None
+    return parts[4]
+
+
 class ProductionInterfaceRouter:
     def __init__(self, runtime: OriginForgeRuntime):
         if not isinstance(runtime, OriginForgeRuntime):
@@ -264,7 +284,7 @@ class ProductionInterfaceRouter:
             ("Cache-Control", "no-store"),
             (
                 "Content-Security-Policy",
-                "default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; frame-src 'none'; form-action 'self'; base-uri 'none'; object-src 'none'",
+                "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src 'none'; form-action 'self'; base-uri 'none'; object-src 'none'",
             ),
             ("Referrer-Policy", "no-referrer"),
             ("X-Content-Type-Options", "nosniff"),
@@ -280,12 +300,10 @@ class ProductionInterfaceRouter:
             extra_headers=(("Location", "/#workspace"),),
         )
 
-    def _selected_conversation(
-        self,
-    ) -> tuple[ConversationSession | None, tuple[ConversationTurn, ...]]:
+    def _selected_conversation(self) -> ConversationLiveState | None:
         sessions = list_conversation_sessions(self.runtime, limit=16)
         if not sessions:
-            return None, ()
+            return None
         selected = next(
             (
                 session
@@ -294,19 +312,16 @@ class ProductionInterfaceRouter:
             ),
             sessions[0],
         )
-        after_sequence = max(0, selected.revision - _CONVERSATION_TURN_LIMIT)
-        turns = list_conversation_turns(
-            self.runtime,
-            selected.id,
-            after_sequence=after_sequence,
-            limit=_CONVERSATION_TURN_LIMIT,
-        )
-        return selected, turns
+        return read_conversation_live_state(self.runtime, selected.id)
 
     def _render_overview(self, snapshot) -> ProductionInterfaceResponse:
         try:
             page = render_overview(snapshot)
-            session, turns = self._selected_conversation()
+            live_state = self._selected_conversation()
+            session: ConversationSession | None = (
+                live_state.session if live_state is not None else None
+            )
+            turns = live_state.turns if live_state is not None else ()
             client_submission_id = (
                 secrets.token_urlsafe(24)
                 if session is not None
@@ -319,13 +334,22 @@ class ProductionInterfaceRouter:
                 turns=turns,
                 client_submission_id=client_submission_id,
             )
+            if live_state is not None:
+                page = decorate_live_conversation(page, live_state)
         except ProductionInterfaceRenderError:
             return self._response(
                 500,
                 "text/plain; charset=utf-8",
                 b"rendered page exceeds interface byte limit\n",
             )
-        except (ConversationError, KeyError, TypeError, ValueError, OSError):
+        except (
+            ConversationError,
+            ConversationLiveError,
+            KeyError,
+            TypeError,
+            ValueError,
+            OSError,
+        ):
             return self._response(
                 500,
                 "text/plain; charset=utf-8",
@@ -431,6 +455,28 @@ class ProductionInterfaceRouter:
             )
         return self._redirect_to_workspace()
 
+    def _route_live_get(self, session_id: str) -> ProductionInterfaceResponse:
+        try:
+            state = read_conversation_live_state(self.runtime, session_id)
+            body = live_json_bytes(state)
+        except KeyError:
+            return self._response(
+                404,
+                "text/plain; charset=utf-8",
+                b"conversation session not found\n",
+            )
+        except (ConversationError, ConversationLiveError, TypeError, ValueError, OSError):
+            return self._response(
+                500,
+                "text/plain; charset=utf-8",
+                b"conversation live state unavailable\n",
+            )
+        return self._response(
+            200,
+            "application/json; charset=utf-8",
+            body,
+        )
+
     def route(
         self,
         method: str,
@@ -464,6 +510,22 @@ class ProductionInterfaceRouter:
             )
         if path == "/healthz":
             return self._response(200, "text/plain; charset=utf-8", b"ok\n")
+        if path == "/assets/conversation-live.js":
+            return self._response(
+                200,
+                "application/javascript; charset=utf-8",
+                live_script_bytes(),
+                extra_headers=(("Cross-Origin-Resource-Policy", "same-origin"),),
+            )
+        if path.startswith("/api/conversation/live/"):
+            live_session_id = _conversation_live_session_id(path)
+            if live_session_id is None:
+                return self._response(
+                    404,
+                    "text/plain; charset=utf-8",
+                    b"not found\n",
+                )
+            return self._route_live_get(live_session_id)
 
         try:
             snapshot = build_production_interface_snapshot(
