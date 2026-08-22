@@ -8,6 +8,10 @@ from .production_blender_adoption import (
     BlenderProductionAdoptionError,
     GovernedBlenderProductionOutputAdopter,
 )
+from .production_blender_task_acceptor import (
+    BlenderProductionTaskAcceptorError,
+    GovernedBlenderProductionTaskAcceptor,
+)
 from .runtime import OriginForgeRuntime
 
 
@@ -15,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m origin_forge.blender_admin_cli",
         description=(
-            "Explicit human-operated adoption of one exact terminal Blender production output. "
+            "Explicit human-operated adoption and acceptance of governed Blender production outputs. "
             "Publication is create-only and never overwrites an existing project asset."
         ),
     )
@@ -33,6 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=512 * 1024 * 1024,
     )
+
+    accept_task = commands.add_parser(
+        "accept-production-task",
+        help="explicitly accept one exact governed Blender production Task",
+    )
+    accept_task.add_argument("--execution-id", required=True)
+    accept_task.add_argument("--actor-id")
     return parser
 
 
@@ -44,21 +55,32 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     runtime = OriginForgeRuntime(args.project_root)
     try:
-        if args.command != "adopt-production-new":  # pragma: no cover - argparse owns the command set.
+        if args.command == "adopt-production-new":
+            result = GovernedBlenderProductionOutputAdopter(
+                runtime,
+                max_source_bytes=args.max_source_bytes,
+            ).adopt_new(
+                args.execution_id,
+                args.destination,
+            )
+        elif args.command == "accept-production-task":
+            result = GovernedBlenderProductionTaskAcceptor(runtime).accept(
+                args.execution_id,
+                actor_id=args.actor_id,
+            )
+        else:  # pragma: no cover - argparse owns the command set.
             raise ValueError("unsupported Blender admin command")
-        result = GovernedBlenderProductionOutputAdopter(
-            runtime,
-            max_source_bytes=args.max_source_bytes,
-        ).adopt_new(
-            args.execution_id,
-            args.destination,
-        )
         _print(result.to_dict())
         return 0
     except KeyError as exc:
         _print({"error": "NOT_FOUND", "detail": str(exc)})
         return 3
-    except (BlenderProductionAdoptionError, OSError, ValueError) as exc:
+    except (
+        BlenderProductionAdoptionError,
+        BlenderProductionTaskAcceptorError,
+        OSError,
+        ValueError,
+    ) as exc:
         _print({"error": type(exc).__name__, "detail": str(exc)})
         return 2
 
