@@ -470,7 +470,7 @@ Core rule:
 proposal → independent plan → trusted evidence → audit → promotion eligibility → STOP
 ```
 
-See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules, decision-time authority checks and exclusions.
+See `docs/phase-26-skill-harness-workshop.md` for the detailed v1 contracts, trust registry, Dream bridge, persistence rules and exclusions.
 
 **Exit condition met:** Origin Forge can turn exact verified evidence into bounded independently evaluated improvement candidates, preserve stronger upstream Skill evidence, fail closed when no governed evaluator exists, record audited promotion eligibility without activating the candidate, and keep production truth/authority outside the Workshop.
 
@@ -576,7 +576,7 @@ Implemented the first bounded local production cockpit over proven Origin Forge 
 - fail-closed uninitialized, stale-schema, aliased, symlinked, actively-written, and changing-database inspection paths with no automatic migration/checkpoint/repair;
 - SELECT-only Project Intelligence / Design Bible projection through the same immutable DB boundary;
 - causal Decision → Change → Artifact metadata → Verification-summary navigation;
-- fresh non-loading model/resource configuration/admission monitoring with zero lease/routing mutation authority and no default-config creation;
+- fresh non-loading model/resource configuration/admission state monitoring with zero lease/routing mutation authority and no default-config creation;
 - non-creating bounded public provenance inspection with canonical/hash validation while withholding secret material, DER/signature bytes, arbitrary Artifact bytes, Skill/tool lists, and fresh trust/currentness claims;
 - non-creating bounded Dream/memory inspection with canonical/hash/containment validation while withholding raw evidence refs/finding messages and all promotion/execution authority;
 - escaped static HTML under a strict no-script/no-form/no-network CSP;
@@ -869,7 +869,7 @@ See `docs/phase-40-governed-manager-production-advance.md` for the frozen archit
 
 **Exit condition met in implementation:** exact code/test acceptance head `2184aaa9998fd8c6030047eae0639dc1091bbc82` passed normal run `31660742401` on Python 3.12 and Python 3.13 after all authority-expanding slices were independently gated.
 
-**Merge gate:** the immutable documentation/roadmap closure head created after these proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** the immutable documentation/roadmap closure head created after those proofs must itself pass the normal Python 3.12/3.13 matrix with unrelated external evidence workflows disarmed/skipped before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 41 — Governed Preparation Recovery & Pre-Planner Resumption — DONE
 
@@ -936,7 +936,7 @@ See `docs/phase-43-governed-bounded-manager-driver.md` for the frozen architectu
 
 **Exit condition met in implementation:** prerequisite repair head `9ce497784180f9c6b59cfa349827350540cec0be` / run `31764367630`, planning head `c8ae085cb4da661ec777dbf921f9dd81e8b28ee9` / run `31764772997`, 43A implementation head `509799ea4ce35a6a800e2635a8da3fdb4278fb5e` / run `31765239984`, and 43B acceptance head `bd26828b88a2d055ffd2739a9a42614631c15c21` / run `31765713379` all passed Python 3.12 and Python 3.13. Accepted implementation/acceptance is merged to `main` as `ec3411940f01aad936a298fd0e3109af0579bc3d`.
 
-**Merge gate:** this documentation/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
 ## Phase 44 — Governed Manager Operator Invocation — DONE
 
@@ -1167,6 +1167,28 @@ Completed as the next separately gated **post-v0.5 v1.0 acceptance slice** after
 See `docs/phase-53-governed-blender-production-task-acceptance.md` for the frozen architecture and `docs/phase-53-implementation-closure.md` for the accepted planning through 53C implementation, currentness/terminalization/recovery semantics, operator boundary, adversarial acceptance, future-UI instructions, authority exclusions, and exact CI evidence.
 
 **Exit condition met in implementation:** planning head `9b02629aa57b63de0f26229f8140169c387b3044` / run `32511018996`, 53A head `10bc74bfbd7c71dbc5a20bdf0a0dfd5af7b8adc2` / run `32529893352`, 53B accepted head `3730b00b4932010d386f5dbcdd2dad3351a63fa6` / run `32539323142`, and 53C accepted head `f591fc425362a6a9914a767a302414f13bd33c7d` / run `32546353421` all passed the canonical Python 3.12/3.13 matrix on their accepted exact heads. Accepted Phase-53 implementation/acceptance is merged through `9a0e1fbd2bacb21507392baf10f28c406c6da311`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
+## Phase 54 — Governed Blender Production Provenance Signing — DONE
+
+Completed as the next separately gated **post-v0.5 v1.0 provenance slice** after Phase 53, composing one exact terminally accepted Blender production result with the existing Phase-18 cryptographic provenance trust boundary without changing production state or release authority:
+
+- public production identity remains exactly `DISPEXEC-*`; Phase 54 derives the exact Phase-51 Blender dispatch/output relation, Phase-52 PUBLISHED adoption, canonical `ADOPTED` `BLENDER_GLB_EXPORT`, and Phase-53 acceptance relation internally rather than accepting caller/model Task/Run/Artifact/Verification/path/hash overrides;
+- signing eligibility requires exact Phase-53 `ACCEPTED_TASK_SUCCEEDED` currentness and never invokes or recovers Task acceptance to make an execution signable;
+- immediately before signing, the governed service independently revalidates the canonical adopted GLB containment, no-symlink regular-file status, accepted byte count/hash, and GLB structure; drift fails closed and is never repaired or overwritten by signing;
+- `GovernedBlenderProductionProvenanceSigner` delegates cryptographic authority to the existing Phase-18 `ProvenanceService.sign_artifact(...)` with the derived adopted Artifact, explicit existing `KEYCERT-*`, explicit external operational private-key path, and fixed `parent_manifest_ids=()`;
+- Phase 18 remains authoritative for `ARTIFACT_SIGNING` certificate purpose, Company Root trust, revocation, key matching/containment/permissions, Ed25519 signing, immutable manifest publication, signature-chain verification, and trust/currentness inspection; Phase 54 adds no second crypto or trust policy;
+- a successful result requires the persisted manifest to bind the exact adopted Artifact, accepted Task, production Run, Phase-52 adoption PASS, and Phase-53 acceptance PASS and to be reported trusted/current by the Phase-18 inspection path;
+- the adopted Artifact intentionally remains `ADOPTED`, the accepted Task remains `SUCCEEDED`, production Verification state and GLB bytes are unchanged, no `ARTIFACT_ACCEPTED` event is synthesized, and `release_authorized=false` remains explicit;
+- repeated **explicit** signing may create multiple immutable Phase-18 `PROVMAN-*` manifests over the same still-current production truth; there is no fake one-manifest-per-execution receipt and no automatic retry/re-sign after exception, restart, Manager activity, browser polling, conversation events, or background recovery;
+- the module-only command `python -m origin_forge.blender_admin_cli ... sign-production-provenance --execution-id DISPEXEC-* --certificate-id KEYCERT-* --operational-private-key <external-path>` accepts exactly those reviewed signing inputs and adds no fourth installed package entrypoint;
+- adversarial acceptance proves terminal signing without production mutation, adopted-but-unaccepted and byte-drift rejection, cross-project rejection, real Pixelorama execution exclusion, non-artifact-signing certificate rejection, project-contained private-key rejection, parser authority isolation, exact three-script packaging, and no acceptance/execution/lifecycle/Manager/conversation/browser/release call path;
+- Company Root provisioning, certificate issuance/revocation, private-key generation/copying/project storage, arbitrary parent manifests, Pixelorama authority widening, automatic/background signing, merge, deployment, publish, and release authority remain outside Phase 54.
+
+See `docs/phase-54-governed-blender-production-provenance-signing.md` for the frozen architecture and `docs/phase-54-implementation-closure.md` for the accepted 54A–54B service/operator implementation, repeated-signing semantics, cross-phase adversarial acceptance, trust/key prerequisites, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `bf5381d442aa174ced0e747a72a2fef7cbeb8fb9` / run `32592325248`, 54A accepted head `066935565b7aa47f806f39711d3d2a99b07121b4` / run `32594069919`, and repaired 54B accepted head `75718f1ffa843741e86fe16acbcbbdd11f6d281c` / run `32606508671` all passed the canonical Python 3.12/3.13 matrix on their accepted exact heads. Accepted Phase-54 implementation/operator surface is merged through `00c169b3d56a4750d371f6005bfa324b47477101`.
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
