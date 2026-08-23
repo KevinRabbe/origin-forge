@@ -1192,6 +1192,29 @@ See `docs/phase-54-governed-blender-production-provenance-signing.md` for the fr
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
+## Phase 55 — Governed Pixelorama Production Provenance Signing — DONE
+
+Completed as the next separately gated **post-v0.5 v1.0 provenance slice**, composing one exact terminally accepted Pixelorama production result with the existing Phase-18 cryptographic provenance trust boundary without changing production state or release authority:
+
+- public production identity remains exactly `DISPEXEC-*`; Phase 55 derives the exact reviewed Pixelorama dispatch/output relation, Phase-49 PUBLISHED adoption, canonical `ADOPTED` `SPRITESHEET_EXPORT`, and Phase-50 human Task-acceptance relation internally rather than accepting caller/model Task/Run/Artifact/Verification/path/hash overrides;
+- signing eligibility requires exact Phase-50 `ACCEPTED_TASK_SUCCEEDED` currentness and never invokes or recovers Task acceptance to make an execution signable;
+- immediately before signing, the governed service independently revalidates the canonical project-contained adopted PNG as a regular non-symlink RGBA8 PNG with the exact accepted byte count and SHA-256; drift fails closed and is never repaired, overwritten, or re-encoded by signing;
+- `GovernedPixeloramaProductionProvenanceSigner` delegates cryptographic authority to the existing Phase-18 `ProvenanceService.sign_artifact(...)` with the derived adopted Artifact, explicit existing `KEYCERT-*`, explicit external operational private-key path, and fixed `parent_manifest_ids=()`;
+- Phase 18 remains authoritative for `ARTIFACT_SIGNING` certificate purpose, Company Root trust, revocation, key matching/containment/permissions, Ed25519 signing, immutable manifest publication, signature-chain verification, and trust/currentness inspection; Phase 55 adds no second crypto or trust policy;
+- a successful result requires the persisted manifest to bind the exact adopted Artifact, accepted Task, production Run, Phase-49 adoption PASS, and Phase-50 acceptance PASS and to be reported trusted/current by the Phase-18 inspection path;
+- the adopted Artifact intentionally remains `ADOPTED`, the accepted Task remains `SUCCEEDED`, production Verification state and PNG bytes are unchanged, no `ARTIFACT_ACCEPTED` event is synthesized, and `release_authorized=false` remains explicit;
+- repeated **explicit** signing may create multiple immutable Phase-18 `PROVMAN-*` manifests over the same still-current production truth; there is no fake one-manifest-per-execution receipt and no automatic retry/re-sign after exception, restart, Manager activity, browser polling, conversation events, or background recovery;
+- the module-only command `python -m origin_forge.pixelorama_admin_cli ... sign-production-provenance --execution-id DISPEXEC-* --certificate-id KEYCERT-* --operational-private-key <external-path>` accepts exactly those reviewed signing inputs and adds no fourth installed package entrypoint;
+- adversarial acceptance proves terminal signing without production mutation, adopted-but-unaccepted and byte-drift rejection, cross-project rejection, real Blender execution exclusion, non-artifact-signing certificate rejection, project-contained private-key rejection, parser authority isolation, exact three-script packaging, repeated explicit signing, and no legacy adoption/acceptance/release recovery call path;
+- the first 55B matrix failure was limited to one stale pre-existing expected-command-set assertion; the repair added only the architecture-authorized `sign-production-provenance` command to that expected set, and the corrected exact head passed both interpreters without widening the production signer;
+- Company Root provisioning, certificate issuance/revocation, private-key generation/copying/project storage, arbitrary parent manifests, Blender authority widening, generic media-signing dispatch, automatic/background/Manager/conversation/browser signing, merge, deployment, publish, and release authority remain outside Phase 55.
+
+See `docs/phase-55-governed-pixelorama-production-provenance-signing.md` for the frozen architecture and `docs/phase-55-implementation-closure.md` for the accepted 55A–55B service/operator implementation, repeated-signing semantics, cross-media adversarial acceptance, trust/key prerequisites, authority exclusions, and exact CI evidence.
+
+**Exit condition met in implementation:** planning head `058bd2fd1200920cdfafd3b102f11a80c3795836` / run `32613410897`, 55A accepted head `ee8d76993d03e8c48f7fc10d5a87a870bdd1881c` / run `32613994294`, and repaired 55B accepted head `f95dca2e82518e87b4f494e17cb0dbc9d79f27de` / run `32657074635` all passed the canonical Python 3.12/3.13 matrix on their accepted exact heads. Accepted Phase-55 implementation/operator surface is merged through `7d07d9267bbc67c4f9149ef7257bfa677255252a`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 # v1.0 — Integrated Game Production
 
 Representative Goal:
