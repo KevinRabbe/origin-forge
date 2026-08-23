@@ -15,6 +15,10 @@ from .production_pixelorama_adoption import (
 from .production_pixelorama_dispatch_output_binding_read import (
     PixeloramaDispatchOutputBindingReadError,
 )
+from .production_pixelorama_provenance_signer import (
+    GovernedPixeloramaProductionProvenanceSigner,
+    PixeloramaProductionProvenanceSigningError,
+)
 from .production_pixelorama_task_acceptor import (
     GovernedPixeloramaProductionTaskAcceptor,
     PixeloramaProductionTaskAcceptorError,
@@ -26,8 +30,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m origin_forge.pixelorama_admin_cli",
         description=(
-            "Explicit human-operated Pixelorama media adoption. "
-            "All publication is create-only and never overwrites an existing project asset."
+            "Explicit human-operated Pixelorama media adoption, acceptance, and provenance signing. "
+            "Publication is create-only and never overwrites an existing project asset; provenance "
+            "signing grants no release authority."
         ),
     )
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
@@ -62,6 +67,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="accept one current governed Pixelorama production task",
     )
     production_accept.add_argument("execution_id")
+
+    sign_provenance = commands.add_parser(
+        "sign-production-provenance",
+        help="cryptographically sign one exact terminally accepted Pixelorama production Artifact",
+    )
+    sign_provenance.add_argument("--execution-id", required=True)
+    sign_provenance.add_argument("--certificate-id", required=True)
+    sign_provenance.add_argument(
+        "--operational-private-key",
+        required=True,
+        type=Path,
+        dest="operational_private_key",
+    )
     return parser
 
 
@@ -93,10 +111,19 @@ def main(argv: list[str] | None = None) -> int:
             result = GovernedPixeloramaProductionTaskAcceptor(runtime).accept(
                 args.execution_id
             )
+        elif args.command == "sign-production-provenance":
+            result = GovernedPixeloramaProductionProvenanceSigner(runtime).sign(
+                args.execution_id,
+                args.certificate_id,
+                operational_private_key_handle=args.operational_private_key,
+            )
         else:  # pragma: no cover - argparse owns the closed command set.
             raise ValueError("unsupported Pixelorama admin command")
         _print(result.to_dict())
         return 0
+    except PixeloramaProductionProvenanceSigningError as exc:
+        _print({"error": exc.code.value, "detail": str(exc)})
+        return 2
     except KeyError as exc:
         _print({"error": "NOT_FOUND", "detail": str(exc)})
         return 3
