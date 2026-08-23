@@ -2,7 +2,7 @@
 
 Status: **POST-v0.5 DEVELOPMENT MAINLINE**
 
-This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch integration, Phase-49 governed Pixelorama production-output adoption, Phase-50 governed Pixelorama production Task acceptance, Phase-51 governed Blender 3D production dispatch, Phase-52 governed Blender production-output adoption, Phase-53 governed Blender production Task acceptance, and Phase-54 governed Blender production provenance signing. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
+This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch integration, Phase-49 governed Pixelorama production-output adoption, Phase-50 governed Pixelorama production Task acceptance, Phase-51 governed Blender 3D production dispatch, Phase-52 governed Blender production-output adoption, Phase-53 governed Blender production Task acceptance, Phase-54 governed Blender production provenance signing, and Phase-55 governed Pixelorama production provenance signing. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
 
 ## Install
 
@@ -20,7 +20,7 @@ origin-forge-attempt  exactly one bounded coding attempt
 origin-forge-cockpit  read-only local inspection
 ```
 
-Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52/53/54 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
+Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52/53/54/55 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
 
 ## Initialize a project
 
@@ -113,7 +113,7 @@ from origin_forge.production_goal_bootstrap_operator import (
 
 A successful bootstrap or recovery stops at GOALBOOT `READY` after exact PREPPOL publication/revalidation. It does **not** invoke Manager. Production advancement remains a separate explicit `origin-forge manager advance` authorization.
 
-Phases 47, 48, 49, 50, 51, 52, 53, and 54 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run`, `media.2d.export`, or `media.3d.blender` Tasks.
+Phases 47, 48, 49, 50, 51, 52, 53, 54, and 55 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run`, `media.2d.export`, or `media.3d.blender` Tasks.
 
 ## Inspect or explicitly advance governed Manager work
 
@@ -284,6 +284,35 @@ Expected governed signing failures are emitted as bounded JSON without exposing 
 
 The cockpit/browser/conversation surfaces do not gain signing authority from Phase 54. Any future UI signing path requires a separately reviewed authority boundary; private-key material must not enter model/conversation/browser project state merely to make signing convenient.
 
+## Explicitly sign provenance for one terminally accepted Pixelorama production result
+
+Phase 55 adds one separate explicit operator-triggered signing command to the same module-only Pixelorama admin family. It does **not** add a fourth installed package script:
+
+```bash
+python -m origin_forge.pixelorama_admin_cli \
+  --project-root /path/to/project \
+  sign-production-provenance \
+  --execution-id DISPEXEC-... \
+  --certificate-id KEYCERT-... \
+  --operational-private-key /external/path/to/operational-key.pem
+```
+
+The operator supplies exactly one canonical `DISPEXEC-*`, one existing Phase-18 certificate identity, and one external operational private-key path. The command accepts no Task/Run/Artifact/Verification identity, source/destination/path/hash/byte-count override, parent manifest, acceptance flag, media selector, force/bypass, Company Root private key, release/publish/deploy flag, model/tool/specialist selector, or automatic signing target.
+
+The selected execution must already represent the exact current terminal Pixelorama production chain: the reviewed Phase-48/49 dispatch/output relation, exact Phase-49 PUBLISHED adoption and canonical `ADOPTED` `SPRITESHEET_EXPORT`, and exact Phase-50 `ACCEPTED_TASK_SUCCEEDED` human Task acceptance. Phase 55 derives the adopted Artifact internally and immediately revalidates the canonical project-contained non-symlink regular-file RGBA8 PNG, exact accepted hash, and byte count before signing. It never invokes or recovers Phase-50 acceptance to make an execution eligible.
+
+Signing delegates to the existing Phase-18 provenance service with fixed `parent_manifest_ids=()`. Phase 18 remains authoritative for `ARTIFACT_SIGNING` certificate purpose, Company Root trust, revocation, private-key containment/permissions, key matching, Ed25519 signing, immutable manifest persistence, signature-chain verification, and trust/currentness inspection.
+
+The operational private key must remain outside the project tree. Phase 55 does not generate or copy keys, issue or revoke certificates, provision a Company Root, accept the Company Root private key, repair trust state, or permit `RELEASE_SIGNING` authority to substitute for artifact signing.
+
+A successful result proves the new immutable manifest is trusted/current and binds the exact adopted Artifact, accepted Task, production Run, Phase-49 adoption PASS, and Phase-50 acceptance PASS. The adopted Artifact remains `ADOPTED`; the Task remains `SUCCEEDED`; production Verification state and PNG bytes are unchanged; and `release_authorized=false` remains explicit.
+
+Repeated **explicit** signing is allowed and may create multiple immutable `PROVMAN-*` manifests over the same current production truth. There is no one-manifest-per-execution receipt and no automatic signing or retry after restart, Manager activity, browser polling, conversation events, startup, or recovery.
+
+Governed failures are bounded JSON without exposing the private-key path. Missing/pending/stale Phase-50 acceptance, adopted PNG drift, and Phase-18 trust/key rejection remain independent problems. Signing does not replay Pixelorama, rewrite or re-encode the PNG, call `accept_artifact()`, publish or recover Task acceptance, transition Task/Flow/Goal state, provision trust, merge, deploy, publish, or release.
+
+The cockpit/browser/conversation surfaces do not gain signing authority from Phase 55. Any future UI signing path requires a separately reviewed authority boundary; browser/model/conversation project state must not receive a host private-key path.
+
 ## Run exactly one bounded coding attempt
 
 Use explicit context:
@@ -370,6 +399,8 @@ Phases 52 and 53 preserve the same no-replay law across Blender canonical public
 
 Phase 54 remains downstream of that accepted production history. Signing requires exact terminal Phase-53 currentness and current adopted bytes, never invokes or recovers Task acceptance, and never replays Blender or repairs the GLB. Re-signing happens only through another explicit operator invocation; no restart/recovery path automatically creates another provenance manifest.
 
+Phase 55 remains downstream of the accepted Pixelorama production history. Signing requires exact terminal Phase-50 currentness and current adopted RGBA8 PNG bytes, never invokes or recovers Task acceptance, and never replays Pixelorama or repairs/re-encodes the PNG. Re-signing happens only through another explicit operator invocation; no restart/recovery path automatically creates another provenance manifest.
+
 ## Current-development boundary
 
 Current `main` does not grant:
@@ -382,14 +413,15 @@ Current `main` does not grant:
 - production checkpoint/model activation;
 - direct simulation execution, direct Pixelorama editor-execution commands, direct Blender production-execution commands, or automatic Task terminalization from simulation/export/adoption/advisory evidence;
 - generic Pixelorama project creation/import/edit/save, arbitrary editor scripts/plugins, or automatic output adoption/signing;
+- caller/model/browser-selected Pixelorama provenance target, Task/Run/Artifact/Verification/path/hash/parent-manifest authority, automatic signing, trust provisioning, private-key generation/storage, or signing-derived release authority;
 - caller/model-selected Blender runtime/path/profile/version/runner/budget/workspace/output authority, automatic GLB adoption, or automatic/synthetic Blender Task acceptance;
 - caller/model/browser-selected Blender provenance target, Task/Run/Artifact/Verification/path/hash/parent-manifest authority, automatic signing, trust provisioning, private-key generation/storage, or signing-derived release authority;
 - model-, vision-, specialist-, Pixelorama-, Blender-, Manager-, dispatcher-, conversation-, browser-, or UI-synthesized semantic production acceptance;
-- background Goal bootstrap, Manager scheduling/queue draining, production adoption, production Task acceptance, Blender execution/replay, or provenance signing;
+- background Goal bootstrap, Manager scheduling/queue draining, production adoption, production Task acceptance, Blender execution/replay, Pixelorama execution/replay, or provenance signing;
 - remote/multi-user cockpit hosting.
 
-The Pixelorama post-dispatch mutation surfaces are exactly the explicit module commands documented above: create-only `adopt-production-new` and human-only `accept-production-task`. Neither executes the editor, selects a different output, overwrites an asset, signs provenance, authorizes release, or grants background/automatic authority; only the acceptance command may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and human acceptance are durable.
+The Pixelorama post-dispatch mutation surfaces are exactly the explicit module commands documented above: Phase-49 create-only `adopt-production-new`, Phase-50 human-only `accept-production-task`, and Phase-55 explicit `sign-production-provenance`. None executes or replays the editor, selects or rewrites a different source, overwrites the canonical asset, authorizes release, or grants background/automatic authority. Only Phase 50 may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and HUMAN_OPERATOR acceptance are durable; Phase 55 requires that terminal acceptance first and may only create a Phase-18 immutable provenance manifest over the exact still-current adopted Artifact.
 
 The Blender post-dispatch mutation surfaces are exactly the explicit module-only Phase-52 create-only `adopt-production-new`, Phase-53 human-only `accept-production-task`, and Phase-54 explicit `sign-production-provenance` commands documented above. None invokes or replays Blender, selects or rewrites a different source, overwrites the canonical asset, authorizes release, or grants background/automatic authority. Only Phase 53 may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and HUMAN_OPERATOR acceptance are durable; Phase 54 requires that terminal acceptance first and may only create a Phase-18 immutable provenance manifest over the exact still-current adopted Artifact.
 
-Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, 50, 51, 52, 53, and 54 are explicitly post-v0.5 development.
+Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, 50, 51, 52, 53, 54, and 55 are explicitly post-v0.5 development.
