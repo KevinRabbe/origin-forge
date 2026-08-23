@@ -61,7 +61,12 @@ class PixeloramaAdminCliTests(unittest.TestCase):
         self.assertEqual(len(subparsers), 1)
         self.assertEqual(
             set(subparsers[0].choices),
-            {"adopt-new", "adopt-production-new", "accept-production-task"},
+            {
+                "adopt-new",
+                "adopt-production-new",
+                "accept-production-task",
+                "sign-production-provenance",
+            },
         )
         production = subparsers[0].choices["adopt-production-new"]
         positional_names = {
