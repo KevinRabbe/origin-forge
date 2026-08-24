@@ -4,12 +4,12 @@ import sqlite3
 from dataclasses import dataclass
 
 from .ids import IdKind, new_id, validate_id
-from .production_capability_store import ProductionCapabilityStoreError
 from .production_design_specification_currentness import (
     AcceptedDesignError,
     DesignSpecificationAcceptance,
     _ReadOnlyProductionCapabilityStore,
     _load_exact_relation,
+    _semantic_currentness_conn,
     inspect_accepted_design,
 )
 from .production_design_specification_evidence import (
@@ -142,15 +142,20 @@ def _load_candidate_conn(
         )
 
     try:
-        evidence._assert_semantic_binding_conn(conn, design_input)
-        evidence._assert_capability_binding(design_input, capability_store)
-    except (
-        DesignSpecificationEvidenceError,
-        ProductionCapabilityStoreError,
-        KeyError,
-    ) as exc:
+        semantic_stale = _semantic_currentness_conn(conn, evidence, design_input)
+    except (AcceptedDesignError, DesignSpecificationEvidenceError, KeyError) as exc:
         raise GovernedDesignSpecificationAcceptanceError(
-            "design specification source evidence is not current"
+            "design specification source evidence failed currentness validation"
+        ) from exc
+    if semantic_stale is not None:
+        raise GovernedDesignSpecificationAcceptanceError(
+            f"design specification source evidence is not current: {semantic_stale}"
+        )
+    try:
+        evidence._assert_capability_binding(design_input, capability_store)
+    except (DesignSpecificationEvidenceError, KeyError) as exc:
+        raise GovernedDesignSpecificationAcceptanceError(
+            "design specification source evidence is not current: capability authority drifted"
         ) from exc
     return project_id, design_input, specification, audit
 
