@@ -26,6 +26,7 @@ from origin_forge.production_design_specifier import (
     freeze_governed_design_input,
     parse_design_specification,
 )
+from origin_forge.runs import create_run
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import GoalStatus, RunStatus
 
@@ -169,15 +170,14 @@ class GovernedDesignSpecificationTests(unittest.TestCase):
         self.assertEqual(run["role"], "DESIGN_SPECIFIER")
         self.assertEqual(run["status"], RunStatus.SUCCEEDED.value)
 
-        verification = self.runtime.get_verification(result.verification_id)
-        generation_evidence = json.loads(verification["evidence_json"])
-        generation_metrics = json.loads(verification["metrics_json"])
-        self.assertFalse(generation_evidence["accepted"])
-        self.assertFalse(generation_evidence["audited"])
-        self.assertEqual(generation_metrics["model_calls"], 1)
-        self.assertEqual(generation_metrics["response_bytes"], len(_response().encode("utf-8")))
-
         with self.runtime.store.session() as conn:
+            verification = conn.execute(
+                "SELECT * FROM verifications WHERE id = ? AND target_type = 'RUN' AND target_id = ?",
+                (result.verification_id, result.run_id),
+            ).fetchone()
+            self.assertIsNotNone(verification)
+            generation_evidence = json.loads(verification["evidence_json"])
+            generation_metrics = json.loads(verification["metrics_json"])
             self.assertEqual(
                 conn.execute("SELECT COUNT(*) FROM design_specification_audits").fetchone()[0],
                 0,
@@ -186,6 +186,10 @@ class GovernedDesignSpecificationTests(unittest.TestCase):
                 conn.execute("SELECT COUNT(*) FROM design_specification_acceptances").fetchone()[0],
                 0,
             )
+        self.assertFalse(generation_evidence["accepted"])
+        self.assertFalse(generation_evidence["audited"])
+        self.assertEqual(generation_metrics["model_calls"], 1)
+        self.assertEqual(generation_metrics["response_bytes"], len(_response().encode("utf-8")))
 
     def test_independent_audit_round_trips_and_database_rows_are_immutable(self) -> None:
         design_input = self._freeze()
@@ -247,9 +251,6 @@ class GovernedDesignSpecificationTests(unittest.TestCase):
 
     def test_strict_parser_rejects_duplicate_unknown_authority_and_capability_fields(self) -> None:
         design_input = self._freeze()
-        run_id = self.runtime.create_run_for_task if False else None  # authority stays in runs.create_run
-        from origin_forge.runs import create_run
-
         governed_run = create_run(
             self.runtime.store,
             None,
