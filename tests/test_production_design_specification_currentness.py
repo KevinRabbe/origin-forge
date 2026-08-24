@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -183,6 +184,22 @@ class AcceptedDesignCurrentnessTests(unittest.TestCase):
         self.assertEqual(recovery_one.acceptance_id, acceptance.acceptance_id)
         self.assertEqual(self.model.call_count, calls)
         self.assertEqual(after, before)
+
+    def test_read_only_currentness_does_not_recreate_missing_capability_root(self) -> None:
+        design_input, specification, audit = self._pass_candidate()
+        acceptance = self._insert_acceptance(design_input, specification, audit)
+        capability_root = self.capabilities.root
+        shutil.rmtree(capability_root)
+        self.assertFalse(capability_root.exists())
+
+        inspection = inspect_accepted_design(self.runtime, acceptance.acceptance_id)
+
+        self.assertFalse(inspection.current)
+        self.assertEqual(
+            inspection.stale_reason,
+            "capability authority is unavailable or invalid",
+        )
+        self.assertFalse(capability_root.exists())
 
     def test_canonical_acceptance_hash_tamper_fails_closed(self) -> None:
         design_input, specification, audit = self._pass_candidate()
