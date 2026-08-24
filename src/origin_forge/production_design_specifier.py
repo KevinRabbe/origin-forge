@@ -332,6 +332,20 @@ def parse_design_specification(
         except (DesignSpecificationModelError, TypeError, ValueError) as exc:
             raise DesignSpecifierError("design deliverable failed validation") from exc
 
+    unknown_capabilities = sorted(
+        {
+            capability
+            for deliverable in deliverables
+            for capability in deliverable.required_capabilities
+        }
+        - set(design_input.capability_ids)
+    )
+    if unknown_capabilities:
+        raise DesignSpecifierError(
+            "design response requests unknown capabilities: "
+            + ", ".join(unknown_capabilities)
+        )
+
     try:
         return DesignSpecification.create(
             design_input=design_input,
