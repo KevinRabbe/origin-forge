@@ -5,6 +5,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from .ids import IdKind, validate_id
 from .production_capability_store import (
@@ -39,6 +40,34 @@ _MAX_ACCEPTED_AT_CHARS = 128
 
 class AcceptedDesignError(RuntimeError):
     pass
+
+
+class _ReadOnlyProductionCapabilityStore(ProductionCapabilityStore):
+    """Use Phase-32 parsing without allowing read paths to create evidence roots."""
+
+    def _ensure_root(self) -> Path:
+        try:
+            state = self.runtime.state_dir.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise ProductionCapabilityStoreError(
+                "protected project state is unavailable"
+            ) from exc
+        if self.root.is_symlink() or not self.root.is_dir():
+            raise ProductionCapabilityStoreError(
+                "production-capabilities root is unavailable or invalid"
+            )
+        try:
+            root = self.root.resolve(strict=True)
+            root.relative_to(state)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ProductionCapabilityStoreError(
+                "production-capabilities root escaped protected project state"
+            ) from exc
+        if root != state / "production-capabilities":
+            raise ProductionCapabilityStoreError(
+                "production-capabilities root path is aliased"
+            )
+        return root
 
 
 def _canonical_hash(value: object) -> str:
@@ -354,7 +383,7 @@ def inspect_accepted_design(
     if not isinstance(runtime, OriginForgeRuntime):
         raise TypeError("runtime must be an OriginForgeRuntime")
     evidence = DesignSpecificationEvidenceStore(runtime)
-    capability_store = ProductionCapabilityStore(runtime)
+    capability_store = _ReadOnlyProductionCapabilityStore(runtime)
     with production_read_connection(runtime) as conn:
         acceptance, design_input, specification, audit = _load_exact_relation(
             conn,
@@ -517,9 +546,6 @@ def _expected_planning_fields(
         "project_intelligence_hash": design_input.project_intelligence_hash,
         "capability_catalog_hash": design_input.capability_catalog_hash,
         "capability_ids": design_input.capability_ids,
-        # Phase 31 has no persistent global model/resource policy registry. These
-        # hashes are therefore derived from the accepted DESIGNIN and never from
-        # caller-supplied replacements; later Planner admission remains separate.
         "model_policy_hash": design_input.model_policy_hash,
         "resource_policy_hash": design_input.resource_policy_hash,
     }
@@ -561,8 +587,6 @@ def bridge_accepted_design_to_planning_input(
         ) from exc
 
     with runtime.store.session() as conn:
-        # Reload everything under the authoritative write transaction so restart
-        # recovery cannot turn a stale read-only snapshot into a new PLINPUT.
         acceptance, design_input, specification, audit = _load_exact_relation(
             conn,
             acceptance_id=acceptance_id,
