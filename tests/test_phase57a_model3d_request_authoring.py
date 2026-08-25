@@ -10,19 +10,10 @@ from pathlib import Path
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
 from origin_forge.production_capability_models import CapabilityRoutingPolicy
 from origin_forge.production_capability_store import ProductionCapabilityStore
-from origin_forge.production_design_specification_acceptor import (
-    GovernedDesignSpecificationAcceptor,
-)
-from origin_forge.production_design_specification_currentness import (
-    bridge_accepted_design_to_planning_input,
-)
-from origin_forge.production_design_specification_evidence import (
-    DesignSpecificationEvidenceStore,
-)
-from origin_forge.production_design_specification_models import (
-    DesignSpecificationAuditStatus,
-    audit_design_specification,
-)
+from origin_forge.production_design_specification_acceptor import GovernedDesignSpecificationAcceptor
+from origin_forge.production_design_specification_currentness import bridge_accepted_design_to_planning_input
+from origin_forge.production_design_specification_evidence import DesignSpecificationEvidenceStore
+from origin_forge.production_design_specification_models import DesignSpecificationAuditStatus, audit_design_specification
 from origin_forge.production_design_specifier import (
     BoundedDesignSpecifier,
     DeterministicDesignSpecifierAdapter,
@@ -41,9 +32,7 @@ from origin_forge.production_model3d_request_authoring_evidence import (
     inspect_model3d_request_input,
     resolve_model3d_request_lineage,
 )
-from origin_forge.production_model3d_request_authoring_models import (
-    Model3DRequestAuditStatus,
-)
+from origin_forge.production_model3d_request_authoring_models import Model3DRequestAuditStatus
 from origin_forge.production_planning_evidence import ProductionPlanningEvidenceStore
 from origin_forge.production_planning_models import (
     PlanAuditStatus,
@@ -60,23 +49,19 @@ def _design_response() -> str:
     return json.dumps(
         {
             "summary": "Define a governed low-poly Blender production asset.",
-            "requirements": [
-                {
-                    "key": "shape",
-                    "statement": "Produce one bounded semantic 3D asset.",
-                    "acceptance_criteria": ["The asset has deterministic geometry."],
-                    "constraints": ["No downstream execution authority is implied."],
-                }
-            ],
-            "deliverables": [
-                {
-                    "key": "model",
-                    "objective": "Produce the accepted semantic Blender asset.",
-                    "acceptance_criteria": ["The model is exportable as GLB."],
-                    "constraints": ["Use the governed Blender capability."],
-                    "required_capabilities": ["media.3d.blender"],
-                }
-            ],
+            "requirements": [{
+                "key": "shape",
+                "statement": "Produce one bounded semantic 3D asset.",
+                "acceptance_criteria": ["The asset has deterministic geometry."],
+                "constraints": ["No downstream execution authority is implied."],
+            }],
+            "deliverables": [{
+                "key": "model",
+                "objective": "Produce the accepted semantic Blender asset.",
+                "acceptance_criteria": ["The model is exportable as GLB."],
+                "constraints": ["Use the governed Blender capability."],
+                "required_capabilities": ["media.3d.blender"],
+            }],
         },
         separators=(",", ":"),
         sort_keys=True,
@@ -89,30 +74,26 @@ def _semantic_value() -> dict[str, object]:
         "project": {
             "schema_version": 1,
             "project_name": "governed-hero",
-            "bones": [
-                {
-                    "bone_id": "root",
-                    "name": "Root",
-                    "pivot": [0, 0, 0],
-                    "rotation": [0, 0, 0],
-                    "parent_bone_id": None,
-                }
-            ],
-            "cuboids": [
-                {
-                    "element_id": "body",
-                    "name": "Body",
-                    "from": [-1, 0, -1],
-                    "to": [1, 2, 1],
-                    "origin": [0, 1, 0],
-                    "rotation": [0, 0, 0],
-                    "parent_bone_id": "root",
-                    "inflate": 0,
-                    "uv_offset": [0, 0],
-                    "mirror_uv": False,
-                    "visible": True,
-                }
-            ],
+            "bones": [{
+                "bone_id": "root",
+                "name": "Root",
+                "pivot": [0, 0, 0],
+                "rotation": [0, 0, 0],
+                "parent_bone_id": None,
+            }],
+            "cuboids": [{
+                "element_id": "body",
+                "name": "Body",
+                "from": [-1, 0, -1],
+                "to": [1, 2, 1],
+                "origin": [0, 1, 0],
+                "rotation": [0, 0, 0],
+                "parent_bone_id": "root",
+                "inflate": 0,
+                "uv_offset": [0, 0],
+                "mirror_uv": False,
+                "visible": True,
+            }],
             "textures": [],
             "animations": [],
         },
@@ -134,7 +115,6 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
             success_criteria=("A governed 3D asset can be produced.",),
             constraints=("Semantic request publication remains human-gated.",),
         )
-
         self.capabilities = ProductionCapabilityStore(self.runtime)
         self.catalog = build_builtin_capability_catalog()
         self.capabilities.publish_catalog(self.catalog)
@@ -161,9 +141,7 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
             capability_store=self.capabilities,
             evidence_store=self.design_evidence,
         ).propose(design_input.design_input_id)
-        design_audit = audit_design_specification(
-            design_input, design_result.specification
-        )
+        design_audit = audit_design_specification(design_input, design_result.specification)
         self.assertIs(design_audit.status, DesignSpecificationAuditStatus.PASS)
         self.design_evidence.publish_audit(design_audit)
         acceptance = GovernedDesignSpecificationAcceptor(self.runtime).accept(
@@ -179,29 +157,26 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
         self.plan_proposal = PlanProposal.create(
             planning_input=self.planning_input,
             summary="Materialize the accepted Blender production Task.",
-            steps=(
-                PlanStep(
-                    step_key="model",
-                    objective="Produce the accepted semantic Blender asset.",
-                    acceptance_criteria=("The model is exportable as GLB.",),
-                    constraints=("Use the governed Blender capability.",),
-                    required_capabilities=("media.3d.blender",),
-                    priority=0,
-                    max_attempts=1,
-                ),
-            ),
+            steps=(PlanStep(
+                step_key="model",
+                objective="Produce the accepted semantic Blender asset.",
+                acceptance_criteria=("The model is exportable as GLB.",),
+                constraints=("Use the governed Blender capability.",),
+                required_capabilities=("media.3d.blender",),
+                priority=0,
+                max_attempts=1,
+            ),),
         )
         self.planning_evidence.publish_proposal(self.plan_proposal)
         self.plan_audit = audit_plan(self.planning_input, self.plan_proposal)
         self.assertIs(self.plan_audit.status, PlanAuditStatus.PASS)
         self.planning_evidence.publish_audit(self.plan_audit)
-        materialization = self.planning_evidence.materialize(
-            self.planning_input.planning_input_id,
-            self.plan_proposal.proposal_id,
-            self.plan_audit.audit_id,
+        self.materialization = self.planning_evidence.materialize(
+            planning_input_id=self.planning_input.planning_input_id,
+            proposal_id=self.plan_proposal.proposal_id,
+            audit_id=self.plan_audit.audit_id,
         )
-        self.materialization = materialization
-        self.task_id = materialization.task_bindings[0].task_id
+        self.task_id = self.materialization.task_bindings[0].task_id
         self.evidence = Model3DRequestAuthoringEvidenceStore(self.runtime)
 
     def tearDown(self) -> None:
@@ -219,7 +194,6 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
         inspection = inspect_model3d_request_input(
             self.runtime, first.request_input_id, evidence_store=self.evidence
         )
-
         self.assertEqual(second, first)
         self.assertTrue(inspection.current)
         self.assertIsNone(inspection.stale_reason)
@@ -244,7 +218,6 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
         author = BoundedModel3DRequestAuthor(
             self.runtime, model, evidence_store=self.evidence
         )
-
         result = author.propose(request_input.request_input_id)
         first_audit = audit_model3d_request_proposal(
             self.runtime, result.proposal.proposal_id, evidence_store=self.evidence
@@ -252,7 +225,6 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
         second_audit = audit_model3d_request_proposal(
             self.runtime, result.proposal.proposal_id, evidence_store=self.evidence
         )
-
         self.assertEqual(model.call_count, 1)
         self.assertEqual(first_audit, second_audit)
         self.assertIs(first_audit.status, Model3DRequestAuditStatus.PASS)
@@ -262,18 +234,10 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
         self.assertEqual(first_audit.project_hash, result.proposal.project.content_hash)
         self.assertFalse((self.runtime.state_dir / "model3d-requests").exists())
         with self.runtime.store.session() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM model3d_request_proposals").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM model3d_request_audits").fetchone()[0], 1)
             self.assertEqual(
-                conn.execute("SELECT COUNT(*) FROM model3d_request_proposals").fetchone()[0],
-                1,
-            )
-            self.assertEqual(
-                conn.execute("SELECT COUNT(*) FROM model3d_request_audits").fetchone()[0],
-                1,
-            )
-            self.assertEqual(
-                conn.execute(
-                    "SELECT COUNT(*) FROM runs WHERE role = 'MODEL3D_REQUEST_AUTHOR'"
-                ).fetchone()[0],
+                conn.execute("SELECT COUNT(*) FROM runs WHERE role = 'MODEL3D_REQUEST_AUTHOR'").fetchone()[0],
                 1,
             )
 
@@ -289,21 +253,12 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
         author = BoundedModel3DRequestAuthor(
             self.runtime, model, evidence_store=self.evidence
         )
-
-        with self.assertRaisesRegex(
-            Model3DRequestAuthorError, "unknown or missing fields"
-        ):
+        with self.assertRaisesRegex(Model3DRequestAuthorError, "unknown or missing fields"):
             author.propose(request_input.request_input_id)
-
         self.assertEqual(model.call_count, 1)
         with self.runtime.store.session() as conn:
-            self.assertEqual(
-                conn.execute("SELECT COUNT(*) FROM model3d_request_proposals").fetchone()[0],
-                0,
-            )
-            run = conn.execute(
-                "SELECT status FROM runs WHERE role = 'MODEL3D_REQUEST_AUTHOR'"
-            ).fetchone()
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM model3d_request_proposals").fetchone()[0], 0)
+            run = conn.execute("SELECT status FROM runs WHERE role = 'MODEL3D_REQUEST_AUTHOR'").fetchone()
         self.assertEqual(run["status"], RunStatus.FAILED.value)
         self.assertFalse((self.runtime.state_dir / "model3d-requests").exists())
 
@@ -319,22 +274,18 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
         author = BoundedModel3DRequestAuthor(
             self.runtime, model, evidence_store=self.evidence
         )
-
         self.assertFalse(inspection.current)
         with self.assertRaisesRegex(Model3DRequestAuthorError, "M3DREQIN is stale"):
             author.propose(request_input.request_input_id)
         self.assertEqual(model.call_count, 0)
         with self.runtime.store.session() as conn:
-            self.assertEqual(
-                conn.execute("SELECT COUNT(*) FROM model3d_request_proposals").fetchone()[0],
-                0,
-            )
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM model3d_request_proposals").fetchone()[0], 0)
 
     def test_planning_input_substitution_is_rejected_by_exact_materialization_relation(self) -> None:
         canonical = freeze_model3d_request_input(
             self.runtime, self.task_id, evidence_store=self.evidence
         )
-        wrong_planning_input = PlanningInput.create(
+        wrong = PlanningInput.create(
             project_id=self.planning_input.project_id,
             goal_id=self.planning_input.goal_id,
             goal_revision=self.planning_input.goal_revision,
@@ -347,17 +298,14 @@ class Phase57AModel3DRequestAuthoringTests(unittest.TestCase):
             model_policy_hash=self.planning_input.model_policy_hash,
             resource_policy_hash=self.planning_input.resource_policy_hash,
         )
-        self.planning_evidence.publish_input(wrong_planning_input)
+        self.planning_evidence.publish_input(wrong)
         substituted = replace(
             canonical,
             request_input_id="M3DREQIN-00000000-0000-4000-8000-000000000001",
-            planning_input_id=wrong_planning_input.planning_input_id,
-            planning_input_hash=wrong_planning_input.content_hash,
+            planning_input_id=wrong.planning_input_id,
+            planning_input_hash=wrong.content_hash,
         )
-
-        with self.assertRaisesRegex(
-            Model3DRequestAuthoringEvidenceError, "publication relation failed"
-        ):
+        with self.assertRaisesRegex(Model3DRequestAuthoringEvidenceError, "publication relation failed"):
             self.evidence.publish_input(substituted)
 
     def test_v22_evidence_is_immutable(self) -> None:
