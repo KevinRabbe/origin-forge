@@ -68,6 +68,19 @@ def _sha256(value: str, label: str) -> str:
     return value
 
 
+def _phase51_sha256(value: str, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not value.startswith("sha256:")
+        or len(value) != 71
+        or any(character not in "0123456789abcdef" for character in value[7:])
+    ):
+        raise Model3DRequestAuthoringModelError(
+            f"{label} must be a canonical Phase-51 sha256: digest"
+        )
+    return value
+
+
 def _bounded_text(value: str, label: str, maximum: int) -> str:
     if not isinstance(value, str) or not value.strip():
         raise Model3DRequestAuthoringModelError(f"{label} must be non-empty text")
@@ -163,10 +176,7 @@ class Model3DRequestInput:
 
     @classmethod
     def create(cls, **fields: object) -> "Model3DRequestInput":
-        return cls(
-            request_input_id=new_id(IdKind.MODEL3D_REQUEST_INPUT),
-            **fields,
-        )
+        return cls(request_input_id=new_id(IdKind.MODEL3D_REQUEST_INPUT), **fields)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -334,13 +344,9 @@ class Model3DRequestAudit:
             raise Model3DRequestAuthoringModelError("request_input_id must be an M3DREQIN ID")
         if not validate_id(self.proposal_id, IdKind.MODEL3D_REQUEST_PROPOSAL):
             raise Model3DRequestAuthoringModelError("proposal_id must be an M3DREQPROP ID")
-        for field in (
-            "request_input_hash",
-            "proposal_hash",
-            "response_hash",
-            "project_hash",
-        ):
+        for field in ("request_input_hash", "proposal_hash", "response_hash"):
             _sha256(getattr(self, field), field)
+        _phase51_sha256(self.project_hash, "project_hash")
         if not isinstance(self.status, Model3DRequestAuditStatus):
             raise Model3DRequestAuthoringModelError("audit status is invalid")
         if self.status is Model3DRequestAuditStatus.PASS:
