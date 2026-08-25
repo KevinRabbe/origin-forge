@@ -2,7 +2,7 @@
 
 Status: **POST-v0.5 DEVELOPMENT MAINLINE**
 
-This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch integration, Phase-49 governed Pixelorama production-output adoption, Phase-50 governed Pixelorama production Task acceptance, Phase-51 governed Blender 3D production dispatch, Phase-52 governed Blender production-output adoption, Phase-53 governed Blender production Task acceptance, Phase-54 governed Blender production provenance signing, and Phase-55 governed Pixelorama production provenance signing. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
+This guide describes the current `main` operator surface. Origin Forge v0.5.0 was released on 2026-08-16 and remains immutably identified by annotated tag `v0.5.0` at release commit `8ac46ee5f14654187469e79b021dbbd83992270b`; current `main` is post-v0.5 development and contains the separately gated Phase-48 Pixelorama production-dispatch integration, Phase-49 governed Pixelorama production-output adoption, Phase-50 governed Pixelorama production Task acceptance, Phase-51 governed Blender 3D production dispatch, Phase-52 governed Blender production-output adoption, Phase-53 governed Blender production Task acceptance, Phase-54 governed Blender production provenance signing, Phase-55 governed Pixelorama production provenance signing, and Phase-56 governed design-specification production substrate. For the exact released v0.5.0 surface, see `docs/v0.5-operator-guide.md`.
 
 ## Install
 
@@ -20,7 +20,7 @@ origin-forge-attempt  exactly one bounded coding attempt
 origin-forge-cockpit  read-only local inspection
 ```
 
-Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52/53/54/55 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
+Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52/53/54/55/56 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
 
 ## Initialize a project
 
@@ -113,7 +113,7 @@ from origin_forge.production_goal_bootstrap_operator import (
 
 A successful bootstrap or recovery stops at GOALBOOT `READY` after exact PREPPOL publication/revalidation. It does **not** invoke Manager. Production advancement remains a separate explicit `origin-forge manager advance` authorization.
 
-Phases 47, 48, 49, 50, 51, 52, 53, 54, and 55 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run`, `media.2d.export`, or `media.3d.blender` Tasks.
+Phases 47, 48, 49, 50, 51, 52, 53, 54, 55, and 56 do not widen this bootstrap boundary: Phase-45/46 Goal bootstrap remains exactly code-only (`code.change → originforge.code.bounded-retry → code.bounded-retry@1`). It does not bootstrap `simulation.run`, `media.2d.export`, `media.3d.blender`, or the Phase-56 pre-planning design-specification operation.
 
 ## Inspect or explicitly advance governed Manager work
 
@@ -313,6 +313,31 @@ Governed failures are bounded JSON without exposing the private-key path. Missin
 
 The cockpit/browser/conversation surfaces do not gain signing authority from Phase 55. Any future UI signing path requires a separately reviewed authority boundary; browser/model/conversation project state must not receive a host private-key path.
 
+## Explicitly accept one governed design specification
+
+Phase 56 adds one separate module-only HUMAN_OPERATOR acceptance command for the pre-planning design-specification boundary. It does **not** add a fourth installed package script:
+
+```bash
+python -m origin_forge.design_specification_admin_cli \
+  --project-root /path/to/project \
+  accept-design-specification \
+  --design-specification-id DESIGNSPEC-...
+```
+
+The operator supplies exactly one canonical `DESIGNSPEC-*`. The command accepts no Goal ID, DESIGNIN ID or hash, audit ID/hash/status, DESIGNACC identity, acceptance authority/timestamp, specification replacement text, capability/policy override, model selector, Planner/Task switch, force/bypass flag, signing material, merge/deploy/release flag, retry loop, watcher, or background mode.
+
+Before first acceptance, infrastructure loads and independently validates the exact durable DESIGNSPEC and its DESIGNIN, requires exactly one durable independently recomputed `DESIGNAUD` with status `PASS`, derives the project/Goal and all source hashes, and revalidates current Goal revision/hash, active Design Rules, deterministic Project Intelligence, bounded verified semantic state, and governed capability catalog/routing-policy relation. Missing, stale, ambiguous, tampered, capability-unavailable, or conflicting evidence fails closed before DESIGNACC publication.
+
+Acceptance is serialized and immutable. Infrastructure allocates `DESIGNACC-*`, fixes `acceptance_authority=HUMAN_OPERATOR`, and derives the timestamp. Exact retry returns the same canonical acceptance. If another candidate already owns acceptance for the same exact DESIGNIN relation, the competing candidate cannot replace it.
+
+A successful result reports the canonical DESIGNACC relation and whether that accepted design is currently usable. It does **not** create a Phase-31 PlanningInput automatically, execute the Planner, materialize Tasks, mutate Project Intelligence/Design Rules, invoke Manager, create media, sign provenance, or authorize release.
+
+The accepted-design-to-Phase-31 bridge is a separate infrastructure application boundary. It takes only the exact current `DESIGNACC-*`, revalidates the full immutable acceptance/source relation, and may create or recover the corresponding PlanningInput. The bridge never executes the Planner. There is intentionally no Phase-56 module command that combines semantic acceptance with planning or Task materialization.
+
+Goal, Design Rule, Project Intelligence, verified semantic-state, or required capability drift does not rewrite historical acceptance. The old DESIGNACC remains immutable but becomes stale for new planning use; a new DESIGNIN, proposal, audit, and explicit HUMAN_OPERATOR acceptance are required. Read-only inspection/recovery never reruns the design model or recreates missing capability authority merely to make an acceptance current.
+
+The cockpit/browser/conversation surfaces do not gain Phase-56 semantic acceptance or planning authority. Any future UI must delegate to the same reviewed application boundary after explicit human confirmation; it must not insert DESIGNACC directly, synthesize HUMAN_OPERATOR authority from model/reviewer output, replace source hashes/text, auto-accept, auto-plan, or materialize Tasks client-side.
+
 ## Run exactly one bounded coding attempt
 
 Use explicit context:
@@ -401,6 +426,8 @@ Phase 54 remains downstream of that accepted production history. Signing require
 
 Phase 55 remains downstream of the accepted Pixelorama production history. Signing requires exact terminal Phase-50 currentness and current adopted RGBA8 PNG bytes, never invokes or recovers Task acceptance, and never replays Pixelorama or repairs/re-encodes the PNG. Re-signing happens only through another explicit operator invocation; no restart/recovery path automatically creates another provenance manifest.
 
+Phase 56 follows the same durable-evidence-first rule upstream of Phase 31. Once a DESIGNIN/DESIGNSPEC/DESIGNAUD or DESIGNACC exists, inspection and recovery consume those exact bytes; they do not rerun the design model to reconstruct evidence. A durable HUMAN_OPERATOR acceptance retry reuses the same exact DESIGNACC, while stale semantic/capability state or a competing candidate fails closed instead of regenerating, silently replacing, or auto-planning from the design.
+
 ## Current-development boundary
 
 Current `main` does not grant:
@@ -417,11 +444,15 @@ Current `main` does not grant:
 - caller/model-selected Blender runtime/path/profile/version/runner/budget/workspace/output authority, automatic GLB adoption, or automatic/synthetic Blender Task acceptance;
 - caller/model/browser-selected Blender provenance target, Task/Run/Artifact/Verification/path/hash/parent-manifest authority, automatic signing, trust provisioning, private-key generation/storage, or signing-derived release authority;
 - model-, vision-, specialist-, Pixelorama-, Blender-, Manager-, dispatcher-, conversation-, browser-, or UI-synthesized semantic production acceptance;
-- background Goal bootstrap, Manager scheduling/queue draining, production adoption, production Task acceptance, Blender execution/replay, Pixelorama execution/replay, or provenance signing;
+- caller/model/browser-selected DESIGNIN/Goal/audit/hash/acceptance-authority substitution, automatic design acceptance, automatic PlanningInput creation during acceptance, automatic Planner execution, or Phase-56 Task materialization;
+- Phase-56 mutation of Phase-17 Project Intelligence/Design Rules or use of DESIGNACC as reverse semantic authority;
+- background Goal bootstrap, Manager scheduling/queue draining, production adoption, production Task acceptance, Blender execution/replay, Pixelorama execution/replay, design-specification generation/acceptance replay, or provenance signing;
 - remote/multi-user cockpit hosting.
 
 The Pixelorama post-dispatch mutation surfaces are exactly the explicit module commands documented above: Phase-49 create-only `adopt-production-new`, Phase-50 human-only `accept-production-task`, and Phase-55 explicit `sign-production-provenance`. None executes or replays the editor, selects or rewrites a different source, overwrites the canonical asset, authorizes release, or grants background/automatic authority. Only Phase 50 may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and HUMAN_OPERATOR acceptance are durable; Phase 55 requires that terminal acceptance first and may only create a Phase-18 immutable provenance manifest over the exact still-current adopted Artifact.
 
 The Blender post-dispatch mutation surfaces are exactly the explicit module-only Phase-52 create-only `adopt-production-new`, Phase-53 human-only `accept-production-task`, and Phase-54 explicit `sign-production-provenance` commands documented above. None invokes or replays Blender, selects or rewrites a different source, overwrites the canonical asset, authorizes release, or grants background/automatic authority. Only Phase 53 may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and HUMAN_OPERATOR acceptance are durable; Phase 54 requires that terminal acceptance first and may only create a Phase-18 immutable provenance manifest over the exact still-current adopted Artifact.
 
-Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, 50, 51, 52, 53, 54, and 55 are explicitly post-v0.5 development.
+The Phase-56 design-specification mutation surface is exactly the explicit module-only `accept-design-specification --design-specification-id DESIGNSPEC-*` command documented above. It may only publish or recover the exact HUMAN_OPERATOR DESIGNACC relation after current PASS-audited evidence validation. It does not generate a proposal, create PlanningInput automatically, execute Phase-31 planning, materialize Tasks, mutate semantic truth, sign provenance, or authorize release.
+
+Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, 50, 51, 52, 53, 54, 55, and 56 are explicitly post-v0.5 development.

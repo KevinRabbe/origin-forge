@@ -1215,6 +1215,28 @@ See `docs/phase-55-governed-pixelorama-production-provenance-signing.md` for the
 
 **Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
 
+## Phase 56 — Governed Design Specification Production Substrate — DONE
+
+Completed as the first implementation phase created from the accepted v1.0 R1 gap matrix, closing the earliest representative-lifecycle blocker without replacing Phase-17 semantic truth or Phase-31 planning authority:
+
+- schema v21 adds immutable `DESIGNIN-*`, `DESIGNSPEC-*`, `DESIGNAUD-*`, and reserved/activated `DESIGNACC-*` evidence relations with database-enforced relational validity, one accepted candidate per exact input/spec relation, fixed `HUMAN_OPERATOR` authority, and immutable update/delete rejection;
+- DESIGNIN is infrastructure-derived from one exact current Goal revision/hash, active Design Rules, deterministic Project Intelligence, bounded verified semantic evidence, governed capability catalog/routing policy, and model/resource policy hashes; callers cannot substitute semantic hashes or arbitrary context;
+- one governed Task-less `DESIGN_SPECIFIER` Run may produce one bounded proposal through the accepted scheduled-model boundary or deterministic no-I/O fixture; the model remains proposal-only and cannot select canonical IDs, acceptance, currentness, Task state, signing, or release authority;
+- strict parsing and independent DESIGNAUD recomputation reject duplicate/unknown/authority-bearing fields, unsupported capabilities, malformed/boundedness violations, or proposal/input binding drift; structural PASS is required but is not semantic acceptance;
+- read-only DESIGNACC currentness independently revalidates canonical acceptance/input/spec/audit hashes plus exact Goal, Design Rule, Project Intelligence, semantic Verification, and governed capability authority; stale or missing authority fails closed without recreating state;
+- recovery is durable-evidence-first and never reruns a completed design model call merely to reconstruct a candidate, audit, or acceptance;
+- the accepted-design Phase-31 bridge takes only exact current `DESIGNACC-*`, revalidates the complete source relation, and publishes/reuses one exact PlanningInput without executing the Planner; the 128-ref DESIGNIN bound remains intact because complete semantic evidence is validated before the PlanningInput carries only DESIGNACC + CAPCAT + CAPPOL verified refs while retaining Goal/rule/Project-Intelligence/capability/policy fields independently;
+- explicit HUMAN_OPERATOR acceptance takes only `DESIGNSPEC-*`, requires exactly one current independently recomputed PASS audit, allocates DESIGNACC/authority/timestamp in infrastructure, serializes publication, returns exact retry idempotently, and rejects competing accepted candidates for the same DESIGNIN;
+- the module-only command `python -m origin_forge.design_specification_admin_cli --project-root <project> accept-design-specification --design-specification-id DESIGNSPEC-*` adds no fourth installed package entrypoint and exposes no Goal/input/audit/hash/authority/timestamp/Planner/Task/force/release override;
+- successful acceptance does not automatically create PlanningInput, execute the Planner, materialize a Task DAG, mutate Phase-17 semantic truth, invoke Manager/media production, sign provenance, or authorize release;
+- adversarial acceptance proves stale semantic/capability rejection, canonical-hash tamper rejection, read-only byte stability, zero model replay, competing-candidate handling, idempotent acceptance/bridge behavior, maximal 128-ref compatibility, narrow CLI/service authority, zero automatic planning, and exact DESIGNACC→Phase-31 PlanningInput consumption.
+
+See `docs/phase-56-governed-design-specification-production-substrate.md` for the frozen architecture and `docs/phase-56-implementation-closure.md` for the accepted 56A–56C substrate/currentness/bridge/HUMAN_OPERATOR implementation, authority exclusions, operator command, and exact CI evidence.
+
+**Exit condition met in implementation:** architecture head `3f943929ecd8eda413a64bb067ea903158380bc8` / run `32672973261`, 56A accepted head `41dc73ccfdb5fe79c227ab09cb2c2518e45fae2b` / run `32758404242`, 56B accepted head `5cb7fd58796fcd8960ca3d426fa34816d0900535` / run `32773615675`, and 56C accepted head `dca118f4a223b6818ac3069fb4e546dbaa706f49` / run `32775766311` all passed the canonical Python 3.12/3.13 matrix on their accepted exact heads. Accepted Phase-56 implementation/operator surface is merged through `924232ae8fdcb83b1020b16db9e0fc796b8b4676`.
+
+**Merge gate:** this documentation/operator-guide/roadmap closure head must itself pass the normal Python 3.12/3.13 matrix with `ResourceWarning` treated as error before ready-for-review transition and SHA-guarded merge.
+
 # v1.0 — Integrated Game Production
 
 Representative Goal:
