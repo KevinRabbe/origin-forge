@@ -59,6 +59,19 @@ origin-forge review replace TASK-... --rationale "..."
 These commands record human Decision lineage only. They do not silently rerun,
 replace, adopt, or transition the Task.
 
+After a successful attempt and explicit current human acceptance, code may be
+adopted through the separate guarded boundary:
+
+```text
+origin-forge adopt TASK-... --revision N
+```
+
+Adoption requires exactly one current ACCEPT decision, one VERIFIED workspace,
+a clean project checkout at the workspace base commit, and a staged patch. It
+applies that patch to the project index and records durable change and patch
+Artifact lineage; it never accepts, signs, merges, or releases on behalf of a
+human.
+
 Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52/53/54/55/56 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
 
 ## Initialize a project
