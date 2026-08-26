@@ -13,7 +13,11 @@ from origin_forge.code_adoption import VerifiedCodeAdopter
 from origin_forge.model import ModelRequest, ModelResponse
 from origin_forge.orchestration_cli import main
 from origin_forge.repository import RepositoryReader
-from origin_forge.review import inspect_task_review, record_task_review_decision
+from origin_forge.review import (
+    inspect_task_review,
+    record_task_review_decision,
+    refine_task,
+)
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.sandbox import SandboxGuarantees, SandboxJob, SandboxResult
 from origin_forge.state import FlowStatus, TaskStatus
@@ -167,31 +171,54 @@ class OrchestrationCliTests(unittest.TestCase):
             rationale="the change needs a more explicit review pass",
             expected_revision=revision,
         )
-        refined = record_task_review_decision(
+        refined = refine_task(
             self.runtime,
             self.task,
-            "refine",
             rationale="preserve the verified patch and refine the acceptance wording",
             expected_revision=revision,
         )
+        refined_task = refined.refined_task_id
+        self.runtime.transition_task(
+            refined_task, TaskStatus.READY, expected_revision=0
+        )
+        output = StringIO()
+        with patch(
+            "origin_forge.orchestration_cli.LlamaCppAdapter",
+            return_value=self._model(),
+        ), patch(
+            "origin_forge.orchestration_cli.create_sandbox_backend",
+            return_value=FakeSandbox(),
+        ), redirect_stdout(output):
+            rerun_code = main(
+                [
+                    "--project-root",
+                    str(self.root),
+                    refined_task,
+                    "--file",
+                    "hello.py",
+                ]
+            )
+
+        refined_revision = int(self.runtime.get_task(refined_task)["revision"])
         accepted = record_task_review_decision(
             self.runtime,
-            self.task,
+            refined_task,
             "accept",
             rationale="the verified bounded change is ready for adoption",
-            expected_revision=revision,
+            expected_revision=refined_revision,
         )
 
-        review = inspect_task_review(self.runtime, self.task)
+        review = inspect_task_review(self.runtime, refined_task)
         adoption = VerifiedCodeAdopter(self.runtime).adopt_new(
-            self.task, expected_revision=revision
+            refined_task, expected_revision=refined_revision
         )
 
         self.assertTrue(rejected.startswith("DEC-"))
-        self.assertTrue(refined.startswith("DEC-"))
+        self.assertTrue(refined.decision_id.startswith("DEC-"))
         self.assertTrue(accepted.startswith("DEC-"))
+        self.assertEqual(rerun_code, 0)
         self.assertEqual(review["next_action"], "ADOPT")
-        self.assertEqual(adoption.task_id, self.task)
+        self.assertEqual(adoption.task_id, refined_task)
         self.assertIn("hello.py", adoption.adopted_paths)
         self.assertEqual(self.source.read_text(encoding="utf-8"), "print('new')\n")
 
