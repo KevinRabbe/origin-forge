@@ -85,9 +85,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.runtime.observe",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_DIRECT_RUNTIME_OBSERVATION_REQUEST_READER",
-            "34C found runtime-observation request data operation/workspace-bound with no direct exact OBS reader",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 60 resolves the exact protected OBS request and persists evidence-only output bindings with no-replay recovery",
         ),
         BuiltinBindingReview(
             "originforge.playtest.cooperative",
@@ -130,6 +130,11 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         (phase32.adapter("originforge.audio.piper"),),
     )
     piper_dispatch_catalog = build_builtin_dispatch_catalog(piper_phase32)
+    runtime_phase32 = CapabilityCatalog.create(
+        (phase32.capability("runtime.observe"),),
+        (phase32.adapter("originforge.runtime.observe"),),
+    )
+    runtime_dispatch_catalog = build_builtin_dispatch_catalog(runtime_phase32)
     resolver_registry = build_dispatch_input_resolver_registry()
     binder_registry = build_builtin_dispatch_binder_registry()
 
@@ -149,6 +154,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         *blender_dispatch_catalog.contracts,
         *image_dispatch_catalog.contracts,
         *piper_dispatch_catalog.contracts,
+        *runtime_dispatch_catalog.contracts,
     )
     contract_by_adapter = {value.adapter_id: value for value in reviewed_contracts}
     if len(contract_by_adapter) != len(reviewed_contracts):

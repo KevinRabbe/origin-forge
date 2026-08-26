@@ -51,10 +51,11 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_builtin_owners_exactly_match_reviewed_adapters_and_binders(self) -> None:
         owners = builtin_execution_owner_descriptors()
-        self.assertEqual(len(owners), 6)
-        code_owner, simulation_owner, pixelorama_owner, blender_owner, image_owner, piper_owner = owners
+        self.assertEqual(len(owners), 7)
+        code_owner, simulation_owner, pixelorama_owner, blender_owner, image_owner, piper_owner, runtime_owner = owners
         self.assertEqual(image_owner.owner_id, "originforge.execution.image.generate@1")
         self.assertEqual(piper_owner.owner_id, "originforge.execution.audio.piper-tts@1")
+        self.assertEqual(runtime_owner.owner_id, "originforge.execution.runtime.observe@1")
         adapters = {
             value.adapter_id: value for value in builtin_trusted_production_adapters()
         }

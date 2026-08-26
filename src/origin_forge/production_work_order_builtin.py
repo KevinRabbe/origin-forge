@@ -33,6 +33,11 @@ from .production_work_order_pixelorama import (
     PIXELORAMA_CONTRACT_ID,
     PixeloramaSpritesheetExportDispatchValidator,
 )
+from .production_work_order_runtime import (
+    RUNTIME_ADAPTER_ID,
+    RUNTIME_CONTRACT_ID,
+    RuntimeObservationDispatchValidator,
+)
 from .production_work_order_simulation import (
     SIMULATION_ADAPTER_ID,
     SIMULATION_CONTRACT_ID,
@@ -82,7 +87,6 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
         "originforge.vision.inspect",
         "originforge.audio.ffmpeg",
         "originforge.audio.piper",
-        "originforge.runtime.observe",
         "originforge.playtest.cooperative",
     )
     rows = [
@@ -110,6 +114,11 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
             IMAGE_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
             "ComfyUI generation accepts an exact local-only workflow projection while backend execution and output evidence remain infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            RUNTIME_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "runtime observation accepts one exact protected OBS request while target execution and evidence remain evidence-only infrastructure-owned",
         ),
     ]
     rows.extend(
@@ -291,6 +300,7 @@ def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
         BlenderExportGLBDispatchValidator(),
         ImageGenerationDispatchValidator(),
         PiperSpeechDispatchValidator(),
+        RuntimeObservationDispatchValidator(),
     )
 
 
@@ -400,6 +410,23 @@ def _piper_contract(adapter) -> DispatchContract:
     )
 
 
+def _runtime_contract(adapter) -> DispatchContract:
+    validator = RuntimeObservationDispatchValidator()
+    return DispatchContract(
+        contract_id=RUNTIME_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.RUNTIME_OBSERVATION_REQUEST,),
+        max_payload_bytes=2,
+        max_input_refs=1,
+    )
+
+
 def build_builtin_dispatch_catalog(
     phase32_catalog: CapabilityCatalog,
 ) -> DispatchContractCatalog:
@@ -423,8 +450,9 @@ def build_builtin_dispatch_catalog(
     blender = adapters.get(BLENDER_ADAPTER_ID)
     image = adapters.get(IMAGE_ADAPTER_ID)
     piper = adapters.get(PIPER_ADAPTER_ID)
+    runtime_observer = adapters.get(RUNTIME_ADAPTER_ID)
     reviewed_non_code = tuple(
-        value for value in (simulation, pixelorama, blender, image, piper) if value is not None
+        value for value in (simulation, pixelorama, blender, image, piper, runtime_observer) if value is not None
     )
     if len(reviewed_non_code) > 1:
         raise ValueError(
@@ -452,4 +480,8 @@ def build_builtin_dispatch_catalog(
         )
     if piper is not None:
         return DispatchContractCatalog.create(phase32_catalog, (_piper_contract(piper),))
+    if runtime_observer is not None:
+        return DispatchContractCatalog.create(
+            phase32_catalog, (_runtime_contract(runtime_observer),)
+        )
     raise ValueError("Phase-32 catalog lacks a reviewed Phase-33 dispatch adapter")

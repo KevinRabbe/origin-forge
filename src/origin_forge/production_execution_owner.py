@@ -212,6 +212,9 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
     from .production_execution_owner_image import (
         image_generation_execution_owner_descriptor,
     )
+    from .production_execution_owner_runtime import (
+        runtime_observation_execution_owner_descriptor,
+    )
     try:
         adapter = adapters["originforge.code.bounded-retry"]
     except KeyError as exc:
@@ -332,6 +335,7 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         blender_owner,
         image_generation_execution_owner_descriptor(),
         piper_execution_owner_descriptor(),
+        runtime_observation_execution_owner_descriptor(),
     )
 
 
