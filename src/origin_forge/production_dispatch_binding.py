@@ -12,7 +12,6 @@ from .production_dispatch_binding_core import (
     _require_bundle_revalidates,
 )
 from .production_dispatch_binding_blender import BlenderExportGLBInputBinder
-from .production_dispatch_binding_image import ImageGenerationInputBinder
 from .production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
 
@@ -25,7 +24,6 @@ def builtin_dispatch_binders() -> tuple[DispatchInputBinder, ...]:
         DeterministicSimulationInputBinder(),
         PixeloramaSpritesheetExportInputBinder(),
         BlenderExportGLBInputBinder(),
-        ImageGenerationInputBinder(),
     )
 
 

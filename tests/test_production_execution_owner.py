@@ -45,9 +45,8 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_builtin_owners_exactly_match_reviewed_adapters_and_binders(self) -> None:
         owners = builtin_execution_owner_descriptors()
-        self.assertEqual(len(owners), 5)
-        code_owner, simulation_owner, pixelorama_owner, blender_owner, image_owner = owners
-        self.assertEqual(image_owner.owner_id, "originforge.execution.image.generate@1")
+        self.assertEqual(len(owners), 4)
+        code_owner, simulation_owner, pixelorama_owner, blender_owner = owners
         adapters = {
             value.adapter_id: value for value in builtin_trusted_production_adapters()
         }

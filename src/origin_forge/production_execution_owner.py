@@ -207,9 +207,6 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
     adapters = {
         value.adapter_id: value for value in builtin_trusted_production_adapters()
     }
-    from .production_execution_owner_image import (
-        image_generation_execution_owner_descriptor,
-    )
     try:
         adapter = adapters["originforge.code.bounded-retry"]
     except KeyError as exc:
@@ -323,13 +320,7 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         requires_sandbox=False,
         requires_workspace_manager=False,
     )
-    return (
-        code_owner,
-        simulation_owner,
-        pixelorama_owner,
-        blender_owner,
-        image_generation_execution_owner_descriptor(),
-    )
+    return (code_owner, simulation_owner, pixelorama_owner, blender_owner)
 
 
 def build_builtin_execution_owner_registry() -> ProductionExecutionOwnerRegistry:

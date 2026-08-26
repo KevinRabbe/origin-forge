@@ -11,11 +11,6 @@ from .production_work_order_blender import (
     BLENDER_CONTRACT_ID,
     BlenderExportGLBDispatchValidator,
 )
-from .production_work_order_image import (
-    IMAGE_ADAPTER_ID,
-    IMAGE_CONTRACT_ID,
-    ImageGenerationDispatchValidator,
-)
 from .production_work_order_models import (
     DispatchContract,
     DispatchContractCatalog,
@@ -101,11 +96,6 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
             BLENDER_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
             "Blender GLB export accepts one exact protected MODEL3D_REQUEST ref and an inert payload while operation/workspace/path/profile/process authority remains downstream and infrastructure-owned",
-        ),
-        BuiltinDispatchReview(
-            IMAGE_ADAPTER_ID,
-            BuiltinDispatchReviewStatus.SUPPORTED,
-            "ComfyUI generation accepts an exact local-only workflow projection while backend execution and output evidence remain infrastructure-owned",
         ),
     ]
     rows.extend(
@@ -285,7 +275,6 @@ def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
         DeterministicSimulationDispatchValidator(),
         PixeloramaSpritesheetExportDispatchValidator(),
         BlenderExportGLBDispatchValidator(),
-        ImageGenerationDispatchValidator(),
     )
 
 
@@ -361,23 +350,6 @@ def _blender_contract(adapter) -> DispatchContract:
     )
 
 
-def _image_contract(adapter) -> DispatchContract:
-    validator = ImageGenerationDispatchValidator()
-    return DispatchContract(
-        contract_id=IMAGE_CONTRACT_ID,
-        contract_version="1",
-        adapter_id=adapter.adapter_id,
-        adapter_fingerprint=adapter.implementation_fingerprint,
-        validator_id=validator.validator_id,
-        validator_fingerprint=validator.validator_fingerprint,
-        payload_schema_id=validator.payload_schema_id,
-        payload_schema_hash=validator.payload_schema_hash,
-        allowed_input_ref_types=(),
-        max_payload_bytes=256 * 1024,
-        max_input_refs=0,
-    )
-
-
 def build_builtin_dispatch_catalog(
     phase32_catalog: CapabilityCatalog,
 ) -> DispatchContractCatalog:
@@ -399,9 +371,8 @@ def build_builtin_dispatch_catalog(
     simulation = adapters.get(SIMULATION_ADAPTER_ID)
     pixelorama = adapters.get(PIXELORAMA_ADAPTER_ID)
     blender = adapters.get(BLENDER_ADAPTER_ID)
-    image = adapters.get(IMAGE_ADAPTER_ID)
     reviewed_non_code = tuple(
-        value for value in (simulation, pixelorama, blender, image) if value is not None
+        value for value in (simulation, pixelorama, blender) if value is not None
     )
     if len(reviewed_non_code) > 1:
         raise ValueError(
@@ -421,10 +392,5 @@ def build_builtin_dispatch_catalog(
         return DispatchContractCatalog.create(
             phase32_catalog,
             (_blender_contract(blender),),
-        )
-    if image is not None:
-        return DispatchContractCatalog.create(
-            phase32_catalog,
-            (_image_contract(image),),
         )
     raise ValueError("Phase-32 catalog lacks a reviewed Phase-33 dispatch adapter")
