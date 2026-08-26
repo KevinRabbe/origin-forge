@@ -9,7 +9,6 @@ from .production_manager_advance_once import (
     advance_production_manager_once,
 )
 
-
 MAX_MANAGER_ADVANCE_STEPS = 6
 
 MANAGER_ADVANCE_CONTINUATION_STATUSES = frozenset(
