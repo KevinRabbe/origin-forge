@@ -141,6 +141,20 @@ be a regular non-symlink file. Run `origin-forge doctor --strict` to see each
 tool’s status; unconfigured optional tools are reported as `SKIP`, while a
 missing or aliased configured path is an actionable failure.
 
+Piper TTS also requires explicit absolute paths for its complete governed
+runtime. Set `ORIGIN_FORGE_PIPER_RUNTIME_ROOT`,
+`ORIGIN_FORGE_PIPER_EXECUTABLE`, `ORIGIN_FORGE_PIPER_ESPEAK_DATA`,
+`ORIGIN_FORGE_PIPER_MODEL`, `ORIGIN_FORGE_PIPER_MODEL_CONFIG`, and
+`ORIGIN_FORGE_PIPER_LICENSE`. The runtime tree, executable version, voice
+model, JSON config, and license bytes are independently hashed and checked at
+execution. A missing path, changed hash, invalid voice sample rate, malformed
+WAV, timeout, or output-budget failure stops the Task and explains the
+recovery/inspection action; it does not trigger an unbounded retry.
+
+The governed Piper path is persisted in schema v25. Its output binding can be
+inspected through the correlated production trace and is recoverable without
+running Piper a second time. See `phase-59-governed-piper-production-dispatch.md`.
+
 ## Create durable work state
 
 The control-plane CLI exposes explicit Goal / Flow / Task lifecycle operations:
