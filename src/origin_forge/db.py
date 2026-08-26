@@ -6,6 +6,9 @@ from pathlib import Path
 from .conversation_gate_c_migration import CONVERSATION_GATE_C_MIGRATION
 from .conversation_migration import CONVERSATION_GATE_A_MIGRATION
 from .migrations import MIGRATIONS as BASE_MIGRATIONS
+from .production_audio_dispatch_output_binding_migration import (
+    AUDIO_DISPATCH_OUTPUT_BINDING_MIGRATION,
+)
 from .production_blender_adoption_migration import (
     BLENDER_PRODUCTION_ADOPTION_MIGRATION,
 )
@@ -16,17 +19,14 @@ from .production_blender_task_acceptance_migration import (
     BLENDER_PRODUCTION_TASK_ACCEPTANCE_MIGRATION,
 )
 from .production_design_specification_migration import DESIGN_SPECIFICATION_MIGRATION
+from .production_image_dispatch_output_binding_migration import (
+    IMAGE_DISPATCH_OUTPUT_BINDING_MIGRATION,
+)
 from .production_model3d_request_authoring_migration import (
     MODEL3D_REQUEST_AUTHORING_MIGRATION,
 )
 from .production_model3d_request_publication_migration import (
     MODEL3D_REQUEST_PUBLICATION_MIGRATION,
-)
-from .production_image_dispatch_output_binding_migration import (
-    IMAGE_DISPATCH_OUTPUT_BINDING_MIGRATION,
-)
-from .production_audio_dispatch_output_binding_migration import (
-    AUDIO_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
 from .production_pixelorama_adoption_migration import (
     PIXELORAMA_PRODUCTION_ADOPTION_MIGRATION,
@@ -36,6 +36,9 @@ from .production_pixelorama_dispatch_output_binding_migration import (
 )
 from .production_pixelorama_task_acceptance_migration import (
     PIXELORAMA_PRODUCTION_TASK_ACCEPTANCE_MIGRATION,
+)
+from .production_runtime_dispatch_output_binding_migration import (
+    RUNTIME_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
 
 MIGRATIONS = (
@@ -53,6 +56,7 @@ MIGRATIONS = (
     MODEL3D_REQUEST_PUBLICATION_MIGRATION,
     IMAGE_DISPATCH_OUTPUT_BINDING_MIGRATION,
     AUDIO_DISPATCH_OUTPUT_BINDING_MIGRATION,
+    RUNTIME_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
