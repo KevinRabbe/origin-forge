@@ -92,7 +92,11 @@ class RepositoryReader:
                 f"file exceeds context file limit ({len(data)} > {self.max_file_bytes} bytes): {display_path}"
             )
         try:
-            content = data.decode("utf-8")
+            # Canonical text content uses LF across platforms. The evidence
+            # hash remains over the original bytes so byte-level integrity is
+            # still reconstructable and newline normalization cannot hide
+            # binary or encoding drift.
+            content = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         except UnicodeDecodeError as exc:
             raise RepositoryAccessError(
                 f"repository file is not UTF-8 text: {display_path}"
