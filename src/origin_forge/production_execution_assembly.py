@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .adapters.comfyui import ComfyUiProfile
 from .blender_adapter import BlenderRuntimeProfile
 from .config import ProjectConfig, load_config
+from .image_workflows import GovernedComfyWorkflowTemplate, ImageWorkflowStore
 from .managed_llamacpp_loader import ManagedLlamaCppCpuLoader
 from .model_runtime_registry import (
     ModelRuntimeBinding,
@@ -24,11 +26,13 @@ from .production_dispatch_claim_read import (
     inspect_dispatch_claim_currentness_readonly,
     read_dispatch_claim,
 )
+from .production_dispatch_invocation_image import ImageGenerationInvocationRequest
 from .production_dispatch_read import read_dispatch_binding
 from .production_execution_owner import (
     ProductionExecutionOwnerDescriptor,
     build_builtin_execution_owner_registry,
 )
+from .production_execution_owner_image import IMAGE_EXECUTION_OWNER_ID
 from .production_pixelorama_profile import (
     ProductionPixeloramaProfileError,
     load_infrastructure_pixelorama_cli_profile,
@@ -178,11 +182,55 @@ class BlenderExportGLBExecutionPayload:
             )
 
 
+@dataclass(frozen=True)
+class ImageGenerationExecutionPayload:
+    request: ImageGenerationInvocationRequest
+    profile: ComfyUiProfile
+    template: GovernedComfyWorkflowTemplate
+    profile_dependency_hash: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, ImageGenerationInvocationRequest):
+            raise TypeError("request must be an ImageGenerationInvocationRequest")
+        if not isinstance(self.profile, ComfyUiProfile):
+            raise TypeError("profile must be a ComfyUiProfile")
+        if not isinstance(self.template, GovernedComfyWorkflowTemplate):
+            raise TypeError("template must be a governed image workflow template")
+        expected = content_hash(
+            {
+                "base_url": self.profile.base_url,
+                "expected_version": self.profile.expected_version,
+                "allow_remote": self.profile.allow_remote,
+                "request_timeout_seconds": self.profile.request_timeout_seconds,
+                "poll_interval_seconds": self.profile.poll_interval_seconds,
+                "max_json_bytes": self.profile.max_json_bytes,
+                "max_image_bytes": self.profile.max_image_bytes,
+                "workflow_id": self.template.workflow_id,
+                "workflow_hash": self.template.workflow_hash,
+            }
+        )
+        if self.profile_dependency_hash != expected:
+            raise ProductionExecutionAssemblyError(
+                "ComfyUI profile/workflow dependency hash is not current"
+            )
+        if (
+            self.template.workflow_id != self.request.workflow_id
+            or self.template.workflow_hash != self.request.workflow_hash
+            or self.template.model_id != self.request.model_id
+            or self.template.model_hash != self.request.model_hash
+            or self.template.backend_version != self.request.backend_version
+        ):
+            raise ProductionExecutionAssemblyError(
+                "trusted image workflow does not match the frozen invocation"
+            )
+
+
 ExecutionDependencyPayload = (
     BoundedRetryExecutionPayload
     | DeterministicSimulationExecutionPayload
     | PixeloramaSpritesheetExportExecutionPayload
     | BlenderExportGLBExecutionPayload
+    | ImageGenerationExecutionPayload
 )
 
 
@@ -224,6 +272,11 @@ class ProductionExecutionDependencies:
             if not isinstance(self.payload, BlenderExportGLBExecutionPayload):
                 raise ProductionExecutionAssemblyError(
                     "Blender owner requires trusted runtime profile payload"
+                )
+        elif self.owner.owner_id == IMAGE_EXECUTION_OWNER_ID:
+            if not isinstance(self.payload, ImageGenerationExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "image owner requires trusted ComfyUI workflow/profile payload"
                 )
         else:
             raise ProductionExecutionAssemblyError(
@@ -506,6 +559,73 @@ def _assemble_blender_dependencies(
     )
 
 
+def _assemble_image_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != IMAGE_EXECUTION_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "image dependency assembler received an unexpected owner"
+        )
+    if owner.model_strategy_roles or owner.requires_sandbox or owner.requires_workspace_manager:
+        raise ProductionExecutionAssemblyError(
+            "image generation owner must not require coding model or workspace authority"
+        )
+    try:
+        request = ImageGenerationInvocationRequest.from_projection(
+            binding.request_projection,
+            binding.request_content_hash,
+        )
+        template = ImageWorkflowStore(runtime).get(
+            request.workflow_id,
+            request.workflow_hash,
+        )
+        profile = ComfyUiProfile(expected_version=template.backend_version)
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted ComfyUI workflow/profile dependencies are unavailable"
+        ) from exc
+    dependency_hash = content_hash(
+        {
+            "base_url": profile.base_url,
+            "expected_version": profile.expected_version,
+            "allow_remote": profile.allow_remote,
+            "request_timeout_seconds": profile.request_timeout_seconds,
+            "poll_interval_seconds": profile.poll_interval_seconds,
+            "max_json_bytes": profile.max_json_bytes,
+            "max_image_bytes": profile.max_image_bytes,
+            "workflow_id": template.workflow_id,
+            "workflow_hash": template.workflow_hash,
+        }
+    )
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=dependency_hash,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=ImageGenerationExecutionPayload(
+            request=request,
+            profile=profile,
+            template=template,
+            profile_dependency_hash=dependency_hash,
+        ),
+    )
+
+
 def _assemble_bounded_retry_dependencies(
     runtime: OriginForgeRuntime,
     claim,
@@ -664,6 +784,14 @@ def assemble_production_execution_dependencies(
 
     if owner.owner_id == _BLENDER_OWNER_ID:
         return _assemble_blender_dependencies(
+            runtime,
+            claim,
+            binding,
+            owner,
+            owner_registry,
+        )
+    if owner.owner_id == IMAGE_EXECUTION_OWNER_ID:
+        return _assemble_image_dependencies(
             runtime,
             claim,
             binding,
