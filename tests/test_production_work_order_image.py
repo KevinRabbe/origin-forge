@@ -7,6 +7,7 @@ from origin_forge.production_work_order_image import (
     ImageGenerationDispatchValidator,
 )
 from origin_forge.production_dispatch_binding_image import ImageGenerationInputBinder
+from origin_forge.production_execution_owner_image import image_generation_execution_owner_descriptor
 from origin_forge.production_work_order_validators import DispatchValidatorError
 
 
@@ -43,6 +44,14 @@ class ImageWorkOrderValidatorTests(unittest.TestCase):
             "ImageGenerationService.execute@production-v1",
         )
         self.assertEqual(descriptor.accepted_input_roles, ())
+
+    def test_image_execution_owner_freezes_exact_binder_relation(self) -> None:
+        owner = image_generation_execution_owner_descriptor()
+        self.assertEqual(owner.owner_id, "originforge.execution.image.generate@1")
+        self.assertEqual(owner.adapter_id, "originforge.image.generate")
+        self.assertEqual(owner.binder_id, "binder.image.generate@1")
+        self.assertFalse(owner.requires_sandbox)
+        self.assertFalse(owner.requires_workspace_manager)
 
     def test_valid_generation_payload_is_normalized_for_later_request_assembly(self) -> None:
         validator = ImageGenerationDispatchValidator()
