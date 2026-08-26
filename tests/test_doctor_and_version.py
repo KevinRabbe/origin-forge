@@ -241,6 +241,8 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(inspected.byte_count, len(b"pixelorama-source"))
             self.assertIn(result.verification_id, inspected.verification_ids)
             self.assertTrue(inspected.to_dict()["read_only"])
+            repeated = import_pixelorama_source(runtime, "assets/player.pxo")
+            self.assertEqual(repeated, result)
             with self.assertRaisesRegex(PixeloramaSourceImportError, r"\.pxo"):
                 import_pixelorama_source(runtime, "assets/player.png")
 

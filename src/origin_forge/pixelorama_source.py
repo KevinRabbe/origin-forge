@@ -76,6 +76,31 @@ def import_pixelorama_source(
         raise PixeloramaSourceImportError("Pixelorama source byte count is outside bounds")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     lineage = OriginForgeLineage(runtime)
+    with runtime.store.session() as conn:
+        existing = conn.execute(
+            """SELECT id FROM artifacts
+               WHERE project_id = ? AND type = 'PIXELORAMA_PROJECT'
+                 AND path_or_uri = ? AND content_hash = ?
+               ORDER BY rowid DESC LIMIT 1""",
+            (runtime.project_id(), relative.as_posix(), digest),
+        ).fetchone()
+        if existing is not None:
+            verification = conn.execute(
+                """SELECT id FROM verifications
+                   WHERE target_type = 'ARTIFACT' AND target_id = ?
+                     AND verification_type = 'pixelorama-source-import-integrity'
+                     AND status = 'PASS'
+                   ORDER BY rowid DESC LIMIT 1""",
+                (existing["id"],),
+            ).fetchone()
+            if verification is not None:
+                return PixeloramaSourceImportResult(
+                    str(existing["id"]),
+                    relative.as_posix(),
+                    digest,
+                    byte_count,
+                    str(verification["id"]),
+                )
     artifact_id = create_artifact(
         runtime.store,
         runtime.project_id(),
