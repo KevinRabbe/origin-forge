@@ -5,11 +5,20 @@ import unittest
 from pathlib import Path
 
 from origin_forge import __version__
+from origin_forge.cli import build_parser
 from origin_forge.doctor import inspect_project
 from origin_forge.runtime import OriginForgeRuntime
 
 
 class DoctorTests(unittest.TestCase):
+    def test_cli_exposes_read_only_doctor_and_run_inspect(self) -> None:
+        parser = build_parser()
+        doctor = parser.parse_args(["doctor", "--strict"])
+        inspect = parser.parse_args(["run", "inspect", "RUN-EXAMPLE"])
+        self.assertTrue(doctor.strict)
+        self.assertEqual(inspect.run_command, "inspect")
+        self.assertEqual(inspect.run_id, "RUN-EXAMPLE")
+
     def test_package_version_matches_v05_release(self) -> None:
         self.assertEqual(__version__, "0.5.0")
 
@@ -27,4 +36,3 @@ class DoctorTests(unittest.TestCase):
             result = inspect_project(root)
             self.assertTrue(result["ready"])
             self.assertEqual(result["schema_version"], result["expected_schema_version"])
-
