@@ -40,6 +40,9 @@ from .production_pixelorama_task_acceptance_migration import (
 from .production_runtime_dispatch_output_binding_migration import (
     RUNTIME_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
+from .production_playtest_dispatch_output_binding_migration import (
+    PLAYTEST_DISPATCH_OUTPUT_BINDING_MIGRATION,
+)
 
 MIGRATIONS = (
     *BASE_MIGRATIONS,
@@ -57,6 +60,7 @@ MIGRATIONS = (
     IMAGE_DISPATCH_OUTPUT_BINDING_MIGRATION,
     AUDIO_DISPATCH_OUTPUT_BINDING_MIGRATION,
     RUNTIME_DISPATCH_OUTPUT_BINDING_MIGRATION,
+    PLAYTEST_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 

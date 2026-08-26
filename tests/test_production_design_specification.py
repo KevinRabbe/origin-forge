@@ -97,7 +97,7 @@ class GovernedDesignSpecificationTests(unittest.TestCase):
         )
 
     def test_schema_v21_reserves_immutable_design_evidence_family(self) -> None:
-        self.assertEqual(SCHEMA_VERSION, 26)
+        self.assertEqual(SCHEMA_VERSION, 27)
         with self.runtime.store.session() as conn:
             tables = {
                 row["name"]

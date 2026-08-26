@@ -330,7 +330,7 @@ class ConversationGateC1ProductionAdmissionTests(unittest.TestCase):
         self.assertEqual(self.runtime.list_goals()[0]["id"], admitted.goal_id)
 
     def test_gate_c1_schema_is_v19_and_contains_handoff_constraints(self) -> None:
-        self.assertEqual(SCHEMA_VERSION, 26)
+        self.assertEqual(SCHEMA_VERSION, 27)
         with self.runtime.store.session() as conn:
             tables = {
                 row["name"]
