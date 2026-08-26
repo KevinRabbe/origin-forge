@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import json
-from typing import Protocol, Sequence
+from collections.abc import Sequence
+from typing import ClassVar, Protocol
 
 from .dream_evidence import canonical_verification_record
 from .production_dispatch_resolution_models import (
     DispatchResolutionModelError,
     InputResolverDescriptor,
-    ResolvedInputCurrentness,
     ResolvedWorkOrderInput,
     ResolverClaim,
 )
 from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import production_read_connection
-from .production_work_order_models import WorkOrderInputRef, WorkOrderRefType, content_hash
+from .production_work_order_models import (
+    WorkOrderInputRef,
+    WorkOrderRefType,
+    content_hash,
+)
 from .project_intelligence_read import ProjectIntelligenceReadService
 from .runtime import OriginForgeRuntime
 
@@ -66,19 +70,20 @@ def _project_id(runtime: OriginForgeRuntime, conn) -> str:
 
 class ArtifactInputResolver:
     _CLAIM = ResolverClaim(WorkOrderRefType.ARTIFACT, "ART-", "ARTIFACT")
-    _PROJECTION = {
-        "fields": [
-            "id",
-            "change_id",
-            "type",
-            "path_or_uri",
-            "content_hash",
-            "parent_artifact_id",
-            "created_by_run_id",
-            "model_id",
-            "status",
-            "created_at",
-        ],
+    _FIELDS = (
+        "id",
+        "change_id",
+        "type",
+        "path_or_uri",
+        "content_hash",
+        "parent_artifact_id",
+        "created_by_run_id",
+        "model_id",
+        "status",
+        "created_at",
+    )
+    _PROJECTION: ClassVar[dict[str, object]] = {
+        "fields": _FIELDS,
         "artifact_bytes": False,
     }
     _DESCRIPTOR = InputResolverDescriptor(
@@ -114,7 +119,7 @@ class ArtifactInputResolver:
             raise DispatchInputResolutionError("Artifact content hash drifted")
         safe_projection = {
             key: projection[key]
-            for key in self._PROJECTION["fields"]
+            for key in self._FIELDS
         }
         return ResolvedWorkOrderInput.create(
             ref,
@@ -132,7 +137,7 @@ class VerificationInputResolver:
         "VERIFY-",
         "VERIFICATION",
     )
-    _PROJECTION = {
+    _PROJECTION: ClassVar[dict[str, object]] = {
         "fields": [
             "id",
             "target_type",
@@ -268,7 +273,7 @@ class ProjectEntityInputResolver:
         "ENTITY-",
         "PROJECT_ENTITY",
     )
-    _PROJECTION = {
+    _PROJECTION: ClassVar[dict[str, object]] = {
         "fields": [
             "id",
             "kind",
@@ -328,7 +333,7 @@ class DesignRuleInputResolver:
         "RULE-",
         "DESIGN_RULE",
     )
-    _PROJECTION = {
+    _PROJECTION: ClassVar[dict[str, object]] = {
         "fields": [
             "id",
             "category",
