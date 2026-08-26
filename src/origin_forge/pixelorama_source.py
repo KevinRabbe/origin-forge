@@ -6,6 +6,15 @@ from pathlib import Path
 
 from .lineage import OriginForgeLineage
 from .path_policy import portable_relative_path
+from .pixelorama_bridge import PixeloramaBridgeProfile
+from .pixelorama_media import PixeloramaMediaResult, PixeloramaMediaService
+from .pixelorama_models import (
+    BridgeBudget,
+    BridgeOperation,
+    ExportSpec,
+    PixeloramaBridgeRequest,
+    SpriteProjectSpec,
+)
 from .production_evidence_read import ProductionEvidenceReadService
 from .records import create_artifact
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
@@ -13,6 +22,31 @@ from .runtime import OriginForgeRuntime, RuntimeInvariantError
 
 class PixeloramaSourceImportError(RuntimeError):
     pass
+
+
+def create_pixelorama_source(
+    runtime: OriginForgeRuntime,
+    task_id: str,
+    profile: PixeloramaBridgeProfile,
+    sprite_spec: SpriteProjectSpec,
+    *,
+    export_specs: tuple[ExportSpec, ...] = (),
+    budget: BridgeBudget | None = None,
+) -> PixeloramaMediaResult:
+    """Create a governed Pixelorama source through the bounded bridge service."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    if not isinstance(profile, PixeloramaBridgeProfile):
+        raise TypeError("profile must be a PixeloramaBridgeProfile")
+    if not isinstance(sprite_spec, SpriteProjectSpec):
+        raise TypeError("sprite_spec must be a SpriteProjectSpec")
+    request = PixeloramaBridgeRequest.create(
+        operation=BridgeOperation.CREATE_SPRITE_PROJECT,
+        sprite_spec=sprite_spec,
+        export_specs=export_specs,
+        budget=budget,
+    )
+    return PixeloramaMediaService(runtime, profile).execute(task_id, request)
 
 
 @dataclass(frozen=True)

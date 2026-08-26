@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import sys
 import tempfile
 import textwrap
@@ -19,15 +18,16 @@ from origin_forge.pixelorama_models import (
     BridgeBudget,
     BridgeOperation,
     BridgeOutputType,
+    BridgeResultStatus,
     ExportSpec,
     FrameSpec,
     PixeloramaBridgeRequest,
     RasterLayerSpec,
     SpriteProjectSpec,
 )
+from origin_forge.pixelorama_source import create_pixelorama_source
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import FlowStatus, RunStatus, TaskStatus
-
 
 BRIDGE = r'''import binascii
 import hashlib
@@ -218,6 +218,26 @@ class PixeloramaMediaTests(unittest.TestCase):
         run_verifications = self.runtime.list_verifications("RUN", result.run_id)
         self.assertEqual(len(run_verifications), 1)
         self.assertEqual(run_verifications[0]["status"], "PASS")
+
+    def test_governed_source_creation_uses_bounded_bridge_and_returns_project_evidence(self) -> None:
+        script = self._script("create-source-bridge.py")
+        request = self._request()
+        result = create_pixelorama_source(
+            self.runtime,
+            self.task,
+            self._profile(script),
+            request.sprite_spec,
+            export_specs=request.export_specs,
+            budget=request.budget,
+        )
+        project_outputs = [
+            value
+            for value in result.output_evidence
+            if value.output_type is BridgeOutputType.PIXELORAMA_PROJECT
+        ]
+        self.assertEqual(len(project_outputs), 1)
+        self.assertEqual(result.operation.bridge_result.status, BridgeResultStatus.SUCCEEDED)
+        self.assertFalse(result.to_dict()["canonical_asset_adopted"])
         self.assertFalse(result.to_dict()["task_status_changed"])
         self.assertFalse(result.to_dict()["canonical_asset_adopted"])
 
