@@ -171,7 +171,12 @@ class DreamReadTests(unittest.TestCase):
             runtime.initialize("dream-read-symlink-test")
             outside = root / "outside"
             outside.mkdir()
-            (runtime.state_dir / "dream").symlink_to(outside, target_is_directory=True)
+            try:
+                (runtime.state_dir / "dream").symlink_to(
+                    outside, target_is_directory=True
+                )
+            except OSError as exc:
+                self.skipTest(f"symlink capability unavailable: {exc}")
             with self.assertRaises(DreamReadError):
                 DreamReadService(runtime).counts()
 

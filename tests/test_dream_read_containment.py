@@ -18,7 +18,10 @@ class DreamReadContainmentTests(unittest.TestCase):
             dream.mkdir()
             outside = root / "outside-memory"
             outside.mkdir()
-            (dream / "memory").symlink_to(outside, target_is_directory=True)
+            try:
+                (dream / "memory").symlink_to(outside, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlink capability unavailable: {exc}")
             reader = DreamReadService(runtime)
             with self.assertRaises(DreamReadError):
                 reader.memory_entry_ids()

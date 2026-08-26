@@ -32,7 +32,6 @@ from origin_forge.ids import IdKind, new_id
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.runtime_observation_models import canonical_bytes
 
-
 HASH_A = "sha256:" + "a" * 64
 HASH_B = "sha256:" + "b" * 64
 HASH_C = "sha256:" + "c" * 64
@@ -153,7 +152,10 @@ class HarnessWorkshopStoreTests(unittest.TestCase):
         workshop.mkdir()
         target = self.runtime.state_dir / "outside-workshop-category"
         target.mkdir()
-        (workshop / "candidates").symlink_to(target, target_is_directory=True)
+        try:
+            (workshop / "candidates").symlink_to(target, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"symlink capability unavailable: {exc}")
         with self.assertRaisesRegex(HarnessWorkshopStoreError, "may not be a symlink"):
             self.store.publish_candidate(candidate)
 
@@ -163,7 +165,10 @@ class HarnessWorkshopStoreTests(unittest.TestCase):
         directory.mkdir(parents=True)
         target = self.runtime.state_dir / "outside-workshop-object.json"
         target.write_text("{}", encoding="utf-8")
-        (directory / f"{candidate.candidate_id}.json").symlink_to(target)
+        try:
+            (directory / f"{candidate.candidate_id}.json").symlink_to(target)
+        except OSError as exc:
+            self.skipTest(f"symlink capability unavailable: {exc}")
         with self.assertRaisesRegex(HarnessWorkshopStoreError, "already exists"):
             self.store.publish_candidate(candidate)
         with self.assertRaisesRegex(HarnessWorkshopStoreError, "may not be a symlink"):
