@@ -517,3 +517,29 @@ Only after a large corpus of verified trajectories exists should fine-tuning or 
 The permanent invariant is:
 
 > The model may reason, propose, create, and repair. The infrastructure owns identity, authority, state, history, and truth.
+
+## 20. Governed image-generation vertical
+
+The integrated image path is now a first-class production vertical:
+
+```text
+WorkOrder → resolution → binding → claim → dependency assembly
+→ DISPATCH_EXECUTION_STARTED → ComfyUI adapter
+→ PNG Artifacts/Verifications → image output binding → RETURNED
+```
+
+The WorkOrder freezes the exact workflow, model identity, prompt, dimensions,
+seed, generation limits, output paths, and request hash. The protected
+`ImageWorkflowStore` supplies the immutable workflow graph and local-only
+ComfyUI profile. Runtime operation and workspace IDs are allocated only after
+the durable STARTED boundary. The image service validates request bytes,
+workspace containment, PNG bytes, dimensions, pixel hashes, Artifact parentage,
+and Verification evidence before the output binding is published.
+
+Image output bindings are stored in schema v24, one row per declared output,
+so multi-output generations retain exact per-output lineage. Recovery consumes
+that binding and revalidates its relations; it may finish terminalization but
+never invokes ComfyUI again. An interrupted STARTED execution without complete
+durable output evidence fails closed and requires explicit operator recovery.
+Image generation and visual inspection remain evidence production only: neither
+can accept a Task, adopt an Artifact, sign provenance, merge, or release.

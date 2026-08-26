@@ -580,4 +580,25 @@ The Blender post-dispatch mutation surfaces are exactly the explicit module-only
 
 The Phase-56 design-specification mutation surface is exactly the explicit module-only `accept-design-specification --design-specification-id DESIGNSPEC-*` command documented above. It may only publish or recover the exact HUMAN_OPERATOR DESIGNACC relation after current PASS-audited evidence validation. It does not generate a proposal, create PlanningInput automatically, execute Phase-31 planning, materialize Tasks, mutate semantic truth, sign provenance, or authorize release.
 
+## Governed image generation
+
+Image generation is available as a governed production dispatch vertical when
+the project has an exact protected ComfyUI workflow template. A WorkOrder must
+freeze the workflow and model hashes, prompts, dimensions, seed, output paths,
+and byte/time budgets. The default backend profile is local-only ComfyUI at
+`127.0.0.1:8188`; Origin Forge does not download workflows, models, or hidden
+runtime state.
+
+The dispatch lifecycle publishes request/result Artifacts, one verified PNG
+Artifact per declared output, and a durable image output binding before the
+execution is returned. Inspect the correlated dispatch/run evidence to see
+those relationships. If an operation stops after `STARTED`, do not rerun the
+backend: recovery first validates the exact binding and evidence. Missing,
+conflicting, stale, or tampered evidence is reported as recovery-required and
+must be resolved explicitly.
+
+Image and vision evidence does not grant semantic acceptance or canonical
+adoption. Human review and the existing acceptance/adoption services remain
+the only authority for those transitions.
+
 Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, 50, 51, 52, 53, 54, 55, and 56 are explicitly post-v0.5 development.
