@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from typing import cast
+
 from .adapters.comfyui import ComfyUiAdapter
-from .image_vision_service import ImageGenerationService, ImageGenerationServiceResult
+from .image_vision_service import (
+    ImageBackendAdapter,
+    ImageGenerationService,
+    ImageGenerationServiceResult,
+)
 from .lineage import OriginForgeLineage
 from .production_dispatch_binding_image import ImageGenerationInputBinder
 from .production_dispatch_claim_models import DispatchClaimStatus
@@ -23,7 +29,6 @@ from .production_image_dispatch_output_binding import (
 )
 from .service import utc_now
 from .state import TaskStatus
-
 
 IMAGE_RETURNED_DETAIL = "trusted image-generation execution owner returned normally"
 
@@ -76,8 +81,13 @@ def dispatch_image_claim_once_if_applicable(
         expected_binder_id=descriptor.binder_id,
         expected_request_type_id=descriptor.request_type_id,
     )
+    projection = binding.request_projection
+    if not isinstance(projection, dict):
+        raise ProductionDispatchInvocationRecoveryRequired(
+            claim_id, "REQUEST_PROJECTION_INVALID"
+        )
     request = ImageGenerationInvocationRequest.from_projection(
-        binding.request_projection,
+        projection,
         binding.request_content_hash,
     )
     started = legacy.begin_dispatch_execution(runtime, claim_id, expected_claim_revision)
@@ -93,7 +103,10 @@ def dispatch_image_claim_once_if_applicable(
         operation_request = request.to_operation_request(template=payload.template)
         result = ImageGenerationService(
             runtime,
-            ComfyUiAdapter(runtime, payload.profile, payload.template),
+            cast(
+                ImageBackendAdapter,
+                ComfyUiAdapter(runtime, payload.profile, payload.template),
+            ),
         ).execute(request.task_id, operation_request)
         if not isinstance(result, ImageGenerationServiceResult):
             raise ProductionDispatchInvocationError("image service returned an invalid result")
