@@ -9,9 +9,11 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from origin_forge.code_adoption import VerifiedCodeAdopter
 from origin_forge.model import ModelRequest, ModelResponse
 from origin_forge.orchestration_cli import main
 from origin_forge.repository import RepositoryReader
+from origin_forge.review import inspect_task_review, record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.sandbox import SandboxGuarantees, SandboxJob, SandboxResult
 from origin_forge.state import FlowStatus, TaskStatus
@@ -136,6 +138,62 @@ class OrchestrationCliTests(unittest.TestCase):
         self.assertEqual(
             self.runtime.get_task(self.task)["status"], TaskStatus.SUCCEEDED.value
         )
+
+    def test_daily_loop_requires_review_before_guarded_adoption(self) -> None:
+        output = StringIO()
+        with patch(
+            "origin_forge.orchestration_cli.LlamaCppAdapter",
+            return_value=self._model(),
+        ), patch(
+            "origin_forge.orchestration_cli.create_sandbox_backend",
+            return_value=FakeSandbox(),
+        ), redirect_stdout(output):
+            code = main(
+                [
+                    "--project-root",
+                    str(self.root),
+                    self.task,
+                    "--file",
+                    "hello.py",
+                ]
+            )
+
+        self.assertEqual(code, 0)
+        revision = int(self.runtime.get_task(self.task)["revision"])
+        rejected = record_task_review_decision(
+            self.runtime,
+            self.task,
+            "reject",
+            rationale="the change needs a more explicit review pass",
+            expected_revision=revision,
+        )
+        refined = record_task_review_decision(
+            self.runtime,
+            self.task,
+            "refine",
+            rationale="preserve the verified patch and refine the acceptance wording",
+            expected_revision=revision,
+        )
+        accepted = record_task_review_decision(
+            self.runtime,
+            self.task,
+            "accept",
+            rationale="the verified bounded change is ready for adoption",
+            expected_revision=revision,
+        )
+
+        review = inspect_task_review(self.runtime, self.task)
+        adoption = VerifiedCodeAdopter(self.runtime).adopt_new(
+            self.task, expected_revision=revision
+        )
+
+        self.assertTrue(rejected.startswith("DEC-"))
+        self.assertTrue(refined.startswith("DEC-"))
+        self.assertTrue(accepted.startswith("DEC-"))
+        self.assertEqual(review["next_action"], "ADOPT")
+        self.assertEqual(adoption.task_id, self.task)
+        self.assertIn("hello.py", adoption.adopted_paths)
+        self.assertEqual(self.source.read_text(encoding="utf-8"), "print('new')\n")
 
     def test_attempt_cli_returns_blocked_code_when_preflight_cannot_verify(self) -> None:
         output = StringIO()
