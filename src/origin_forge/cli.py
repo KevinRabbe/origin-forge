@@ -475,11 +475,13 @@ def _main(argv: list[str] | None = None) -> int:
             )
             return 0 if available else 1
         if args.sandbox_command == "verify":
-            result = SandboxedWorkspaceVerifier(runtime, backend).verify(args.workspace_id)
+            verification_result = SandboxedWorkspaceVerifier(runtime, backend).verify(
+                args.workspace_id
+            )
             _print(
                 {
-                    "workspace_id": result.workspace_id,
-                    "passed": result.passed,
+                    "workspace_id": verification_result.workspace_id,
+                    "passed": verification_result.passed,
                     "results": [
                         {
                             "category": item.category,
@@ -490,11 +492,11 @@ def _main(argv: list[str] | None = None) -> int:
                             if item.sandbox_result is not None
                             else None,
                         }
-                        for item in result.results
+                        for item in verification_result.results
                     ],
                 }
             )
-            return 0 if result.passed else 1
+            return 0 if verification_result.passed else 1
 
     if args.command == "worker" and args.worker_command == "propose":
         adapter = LlamaCppAdapter(
@@ -506,16 +508,16 @@ def _main(argv: list[str] | None = None) -> int:
             temperature=args.temperature,
             allow_remote=args.allow_remote,
         )
-        result = LocalPatchWorker(runtime, adapter).execute(
+        worker_result = LocalPatchWorker(runtime, adapter).execute(
             args.task_id, selected_paths=args.files, model_profile=args.model
         )
         _print(
             {
-                "run_id": result.run_id,
-                "context_artifact_id": result.context_artifact_id,
-                "response_artifact_id": result.response_artifact_id,
-                "proposal_artifact_id": result.proposal_artifact_id,
-                "proposal": result.proposal.to_dict(),
+                "run_id": worker_result.run_id,
+                "context_artifact_id": worker_result.context_artifact_id,
+                "response_artifact_id": worker_result.response_artifact_id,
+                "proposal_artifact_id": worker_result.proposal_artifact_id,
+                "proposal": worker_result.proposal.to_dict(),
                 "applied": False,
             }
         )

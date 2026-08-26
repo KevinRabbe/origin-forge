@@ -18,3 +18,13 @@ origin-forge-cockpit = "origin_forge.production_interface_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.mypy]
+python_version = "3.12"
+files = [
+    "src/origin_forge/runtime.py",
+    "src/origin_forge/db.py",
+    "src/origin_forge/cli.py",
+    "src/origin_forge/service.py",
+]
+ignore_missing_imports = true
