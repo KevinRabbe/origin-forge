@@ -27,6 +27,7 @@ from origin_forge.production_work_order_image import (
 )
 from origin_forge.production_work_order_models import content_hash
 from origin_forge.production_work_order_validators import DispatchValidatorError
+from tests.test_image_workflows import _bindings, _template
 
 
 def _payload() -> dict[str, object]:
@@ -123,6 +124,36 @@ class ImageWorkOrderValidatorTests(unittest.TestCase):
         projection["unexpected"] = True
         with self.assertRaisesRegex(ImageGenerationInvocationError, "unknown or missing"):
             ImageGenerationInvocationRequest.from_projection(projection, "0" * 64)
+
+    def test_post_start_operation_request_requires_exact_trusted_template(self) -> None:
+        template = _template()
+        payload = _payload()
+        payload.update(
+            {
+                "backend_version": template.backend_version,
+                "workflow_id": template.workflow_id,
+                "workflow_hash": template.workflow_hash,
+                "model_id": template.model_id,
+                "model_hash": template.model_hash,
+            }
+        )
+        task_id = new_id(IdKind.TASK)
+        projection = {
+            "task_id": task_id,
+            **ImageGenerationDispatchValidator().validate(payload, ()),
+        }
+        projection.pop("budget")
+        request = ImageGenerationInvocationRequest.from_projection(
+            projection, content_hash(projection)
+        )
+        operation = request.to_operation_request(template=template)
+        self.assertNotEqual(operation.operation_id, operation.workspace_id)
+        self.assertEqual(operation.workflow_hash, template.workflow_hash)
+        self.assertEqual(operation.model_hash, template.model_hash)
+        self.assertEqual(operation.output_relative_paths, ("exports/robot.png",))
+        drifted = _template(bindings=_bindings(prompt_node="2"))
+        with self.assertRaises(ImageGenerationInvocationError):
+            request.to_operation_request(template=drifted)
 
     def test_image_output_binding_requires_distinct_verified_outputs(self) -> None:
         ids = {kind: new_id(kind) for kind in (
