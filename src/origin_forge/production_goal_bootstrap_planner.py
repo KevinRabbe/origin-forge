@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from dataclasses import dataclass
 
 from .config import load_config
 from .ids import IdKind, new_id
 from .managed_llamacpp_loader import ManagedLlamaCppCpuLoader
 from .model import ModelAdapter, ModelRequest, ModelResponse
-from .model_runtime_registry import ModelRuntimeBinding, ModelRuntimeRegistry, RuntimeDispatchLoader
+from .model_runtime_config import ManagedModelRuntimeProviderConfig
+from .model_runtime_registry import (
+    ModelRuntimeBinding,
+    ModelRuntimeRegistry,
+    RuntimeDispatchLoader,
+)
 from .model_scheduler import (
     ModelCapacityUnavailable,
     ModelRole,
@@ -38,14 +44,17 @@ from .production_planning_evidence import (
     ProductionPlanningEvidenceStore,
     goal_planning_hash,
 )
-from .production_planning_models import PlanProposal, PlanningInput, ProductionPlanningModelError
+from .production_planning_models import (
+    PlanningInput,
+    PlanProposal,
+    ProductionPlanningModelError,
+)
 from .production_planning_proposal import parse_plan_proposal
 from .production_read_guard import existing_config_path
 from .runs import finish_run
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision, utc_now
 from .state import RunStatus
-
 
 _PLANNER_ROLE = "PLANNER"
 _PLANNER_GENERATION_VERIFIER = "OriginForge.GoalBootstrapPlanner"
@@ -360,7 +369,7 @@ def assemble_goal_bootstrap_planner_environment(
     except (KeyError, RuntimeError, TypeError, ValueError) as exc:
         raise GoalBootstrapPlannerError("protected Goal-planner scheduling is unavailable") from exc
 
-    provider_by_runtime: dict[str, object] = {}
+    provider_by_runtime: dict[str, ManagedModelRuntimeProviderConfig] = {}
     profile_fingerprints: list[tuple[str, str]] = []
     for profile_id in policy.ordered_profile_ids:
         profile = scheduling.registry.profile(profile_id)
@@ -611,7 +620,7 @@ def _claim_or_load_dispatch_marker(
         ):
             raise StaleRevision(receipt.bootstrap_id)
 
-        matches: list[tuple[object, dict[str, object]]] = []
+        matches: list[tuple[sqlite3.Row, dict[str, object]]] = []
         marker_rows = conn.execute(
             """SELECT * FROM verifications
                WHERE verification_type = ? AND verifier = ? AND status = 'PASS'
@@ -885,7 +894,7 @@ def _invoke_reserved_planner(
                     RunStatus.FAILED,
                     failure_reason=f"{type(exc).__name__}: {exc}"[:1000],
                 )
-        except Exception:
+        except (KeyError, RuntimeError, TypeError, ValueError, sqlite3.Error):
             pass
         raise
     finally:
@@ -944,7 +953,7 @@ def _interrupt_run_if_running(runtime: OriginForgeRuntime, run_id: str, reason: 
                 RunStatus.INTERRUPTED,
                 failure_reason=reason[:1000],
             )
-    except Exception:
+    except (KeyError, RuntimeError, TypeError, ValueError, sqlite3.Error):
         pass
 
 
@@ -1170,9 +1179,9 @@ def _recover_started(
         raise
     except Exception as exc:
         marker_rows = _dispatch_marker_rows(runtime, receipt.bootstrap_id)
-        run_id = str(marker_rows[0]["target_id"]) if marker_rows else None
-        if run_id is not None:
-            _interrupt_run_if_running(runtime, run_id, f"Planner recovery failed closed: {exc}")
+        recovered_run_id = str(marker_rows[0]["target_id"]) if marker_rows else None
+        if recovered_run_id is not None:
+            _interrupt_run_if_running(runtime, recovered_run_id, f"Planner recovery failed closed: {exc}")
         interrupted = _interrupt_started(runtime, receipt, f"Planner recovery failed closed: {exc}")
         if interrupted.stage is GoalBootstrapStage.PLANNER_RETURNED:
             return _load_returned(runtime, interrupted)
