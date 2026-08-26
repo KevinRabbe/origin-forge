@@ -68,6 +68,9 @@ class RuntimeObservationDispatchValidator:
             )
         return self._base.validate(payload, input_refs)
 
+    def schema_dict(self) -> dict[str, object]:
+        return self._base.schema_dict()
+
 
 def runtime_observation_contract_dict() -> dict[str, object]:
     validator = RuntimeObservationDispatchValidator()
@@ -80,5 +83,5 @@ def runtime_observation_contract_dict() -> dict[str, object]:
         "validator_fingerprint": validator.validator_fingerprint,
         "payload_schema_id": validator.payload_schema_id,
         "payload_schema_hash": validator.payload_schema_hash,
-        "contract_hash": content_hash(validator._base.schema_dict()),
+        "contract_hash": content_hash(validator.schema_dict()),
     }
