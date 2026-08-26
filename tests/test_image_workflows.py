@@ -166,7 +166,10 @@ class ImageWorkflowTests(unittest.TestCase):
         for child in workflow_root.iterdir():
             child.unlink()
         workflow_root.rmdir()
-        workflow_root.symlink_to(other_root, target_is_directory=True)
+        try:
+            workflow_root.symlink_to(other_root, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"symlink capability unavailable: {exc}")
         with self.assertRaises(ImageWorkflowError):
             store.list()
 
