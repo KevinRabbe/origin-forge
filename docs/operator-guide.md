@@ -89,8 +89,13 @@ origin-forge review refine TASK-... --rationale "..."
 origin-forge review replace TASK-... --rationale "..."
 ```
 
-These commands record human Decision lineage only. They do not silently rerun,
-replace, adopt, or transition the Task.
+These commands record human Decision lineage. They do not silently rerun,
+replace, adopt, or transition the reviewed Task.
+
+`review refine` additionally creates a new queued child Task linked to the
+reviewed Task. The original Task and its evidence remain immutable; the child
+Task carries the human rationale as a constraint and is the only Task eligible
+for the refined rerun.
 
 After a successful attempt and explicit current human acceptance, code may be
 adopted through the separate guarded boundary:
