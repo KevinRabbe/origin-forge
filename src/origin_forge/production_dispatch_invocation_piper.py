@@ -91,15 +91,37 @@ class PiperInvocationRequest:
             raise PiperInvocationError("Piper request projection has unknown or missing fields")
         if projection["operation"] != AudioOperation.SYNTHESIZE_SPEECH.value:
             raise PiperInvocationError("Piper request operation drifted")
+        task_id = projection["task_id"]
+        profile_id = projection["profile_id"]
+        profile_hash = projection["profile_hash"]
+        text = projection["text"]
+        max_duration_ms = projection["max_duration_ms"]
+        timeout_seconds = projection["timeout_seconds"]
+        output_relative_path = projection["output_relative_path"]
+        if (
+            not isinstance(task_id, str)
+            or not isinstance(profile_id, str)
+            or not isinstance(profile_hash, str)
+            or not isinstance(text, str)
+            or not isinstance(output_relative_path, str)
+        ):
+            raise PiperInvocationError("Piper request text or identity fields are invalid")
+        if (
+            isinstance(max_duration_ms, bool)
+            or not isinstance(max_duration_ms, int)
+            or isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, int)
+        ):
+            raise PiperInvocationError("Piper request duration or timeout fields are invalid")
         try:
             request = cls(
-                task_id=projection["task_id"],
-                profile_id=projection["profile_id"],
-                profile_hash=projection["profile_hash"],
-                text=projection["text"],
-                max_duration_ms=projection["max_duration_ms"],
-                timeout_seconds=projection["timeout_seconds"],
-                output_relative_path=projection["output_relative_path"],
+                task_id=task_id,
+                profile_id=profile_id,
+                profile_hash=profile_hash,
+                text=text,
+                max_duration_ms=max_duration_ms,
+                timeout_seconds=timeout_seconds,
+                output_relative_path=output_relative_path,
                 request_content_hash=request_content_hash,
             )
         except (TypeError, ValueError) as exc:
