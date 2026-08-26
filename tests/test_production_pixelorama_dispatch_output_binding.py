@@ -137,7 +137,7 @@ class PixeloramaDispatchOutputBindingTests(unittest.TestCase):
         )
 
     def test_schema_13_binding_table_survives_schema_14_with_unique_output_identities(self) -> None:
-        self.assertEqual(SCHEMA_VERSION, 24)
+        self.assertEqual(SCHEMA_VERSION, 25)
         with self.runtime.store.session() as conn:
             sql = conn.execute(
                 "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
