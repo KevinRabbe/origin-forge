@@ -92,6 +92,9 @@ def build_parser() -> argparse.ArgumentParser:
     manager.add_parser(
         "advance", help="perform exactly one fixed bounded Manager invocation"
     )
+    sub.add_parser(
+        "advance", help="perform exactly one fixed bounded Manager invocation"
+    )
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -250,6 +253,9 @@ def _main(argv: list[str] | None = None) -> int:
         if args.manager_command == "advance":
             _print(advance_production_manager_bounded(runtime).to_dict())
             return 0
+    if args.command == "advance":
+        _print(advance_production_manager_bounded(runtime).to_dict())
+        return 0
 
     if args.command == "goal":
         if args.goal_command == "bootstrap":

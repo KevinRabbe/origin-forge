@@ -124,6 +124,15 @@ origin-forge --project-root /path/to/project manager status
 origin-forge --project-root /path/to/project manager advance
 ```
 
+The equivalent top-level command is available for the daily workflow:
+
+```text
+origin-forge --project-root /path/to/project advance
+```
+
+It invokes the same fixed bounded Manager driver exactly once and accepts no
+caller-selected budget or fallback authority.
+
 `manager status` performs the non-creating Manager admission/selection projection once and prints its typed JSON result. `manager advance` invokes the fixed bounded Manager driver once and prints its exact typed trace. The bounded driver owns a hard code-defined maximum of six one-shot Manager steps and stops on the first non-continuable result, including the first dispatch result; the CLI provides no budget override.
 
 A typed Manager result with process exit code `0` means the operator command ran and returned Manager mechanics. It is not Task success/failure, verification truth, merge authority, or release authority.
