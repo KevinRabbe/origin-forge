@@ -14,11 +14,12 @@ permissions:
 
 jobs:
   unittest:
-    name: Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.12", "3.13"]
 
     steps:
@@ -29,6 +30,24 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Run strict doctor preflight
+        env:
+          PYTHONPATH: src
+        shell: python
+        run: |
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+
+          from origin_forge.doctor import inspect_project
+          from origin_forge.runtime import OriginForgeRuntime
+
+          with TemporaryDirectory() as directory:
+              root = Path(directory)
+              OriginForgeRuntime(root).initialize("ci-doctor")
+              report = inspect_project(root)
+              if not report["ready"]:
+                  raise SystemExit(f"strict doctor preflight failed: {report}")
 
       - name: Run unit tests
         env:
