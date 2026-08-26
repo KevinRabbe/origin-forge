@@ -17,10 +17,10 @@ from origin_forge.ids import IdKind, new_id
 from origin_forge.provenance_crypto import OpenSslEd25519Backend
 from origin_forge.provenance_models import OperationalKeyPurpose
 from origin_forge.runtime import OriginForgeRuntime
-from test_phase54a_blender_production_provenance_signer import (
+from .test_phase54a_blender_production_provenance_signer import (
     Phase54ABlenderProductionProvenanceSignerTests,
 )
-from test_phase55a_pixelorama_production_provenance_signer import (
+from .test_phase55a_pixelorama_production_provenance_signer import (
     Phase55APixeloramaProductionProvenanceSignerTests,
 )
 

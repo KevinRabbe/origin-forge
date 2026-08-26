@@ -7,8 +7,8 @@ from unittest.mock import patch
 import origin_forge.production_manager_advance_bounded as bounded_module
 import origin_forge.production_manager_dispatch_tick as dispatch_tick_module
 import origin_forge.production_preparation_tick as preparation_tick_module
-import test_phase40_manager_advance_acceptance as phase40
-import test_phase42c_manager_recovery_acceptance as phase42
+from . import test_phase40_manager_advance_acceptance as phase40
+from . import test_phase42c_manager_recovery_acceptance as phase42
 from origin_forge.ids import IdKind, new_id
 from origin_forge.orchestration_policy import PolicyOutcome
 from origin_forge.production_dispatch_claims import acquire_dispatch_claim

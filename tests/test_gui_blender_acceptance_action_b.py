@@ -31,7 +31,7 @@ from origin_forge.production_blender_task_acceptance_currentness import (
     inspect_blender_production_task_acceptance_currentness_readonly,
 )
 from origin_forge.production_blender_task_acceptor import GovernedBlenderProductionTaskAcceptor
-from test_phase53a_blender_production_task_acceptance import (
+from .test_phase53a_blender_production_task_acceptance import (
     Phase53ABlenderProductionTaskAcceptanceTests,
 )
 

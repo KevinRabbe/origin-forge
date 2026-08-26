@@ -18,7 +18,7 @@ from origin_forge.production_blender_task_acceptor import (
     GovernedBlenderProductionTaskAcceptor,
 )
 from origin_forge.service import StaleRevision
-from test_phase53a_blender_production_task_acceptance import (
+from .test_phase53a_blender_production_task_acceptance import (
     Phase53ABlenderProductionTaskAcceptanceTests,
 )
 

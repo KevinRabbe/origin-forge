@@ -15,8 +15,8 @@ from origin_forge.production_pixelorama_export import PixeloramaCliExportService
 from origin_forge.provenance_crypto import OpenSslEd25519Backend
 from origin_forge.provenance_models import OperationalKeyPurpose
 from origin_forge.runtime import OriginForgeRuntime
-from test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
-from test_phase54a_blender_production_provenance_signer import (
+from .test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
+from .test_phase54a_blender_production_provenance_signer import (
     Phase54ABlenderProductionProvenanceSignerTests,
 )
 

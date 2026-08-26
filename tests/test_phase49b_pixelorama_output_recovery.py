@@ -24,7 +24,7 @@ from origin_forge.production_pixelorama_dispatch_output_currentness import (
     inspect_pixelorama_dispatch_output_currentness_readonly,
 )
 from origin_forge.production_pixelorama_export import PixeloramaCliExportService
-from test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
+from .test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
 
 
 class Phase49BPixeloramaOutputRecoveryTests(unittest.TestCase):

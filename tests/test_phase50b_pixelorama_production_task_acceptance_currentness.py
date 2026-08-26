@@ -28,7 +28,7 @@ from origin_forge.production_pixelorama_task_acceptor import (
     GovernedPixeloramaProductionTaskAcceptor,
     PixeloramaProductionTaskAcceptorError,
 )
-from test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
+from .test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
 
 
 class Phase50BPixeloramaProductionTaskAcceptanceCurrentnessTests(unittest.TestCase):

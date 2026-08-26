@@ -76,7 +76,10 @@ class Phase48FPixeloramaMaterializerSecurityTests(unittest.TestCase):
         digest = hashlib.sha256(real.read_bytes()).hexdigest()
 
         alias = self.root / "assets" / "alias.pxo"
-        alias.symlink_to(real.name)
+        try:
+            alias.symlink_to(real.name)
+        except OSError as exc:
+            self.skipTest(f"symlink capability unavailable: {exc}")
         request = self._request("assets/alias.pxo", digest=digest)
         with self.assertRaisesRegex(ProductionDispatchInvocationError, "symlink"):
             _safe_source_path(self.runtime, request)
@@ -85,7 +88,10 @@ class Phase48FPixeloramaMaterializerSecurityTests(unittest.TestCase):
         outside.mkdir()
         (outside / "source.pxo").write_bytes(b"opaque\n")
         parent_alias = self.root / "linked"
-        parent_alias.symlink_to(outside, target_is_directory=True)
+        try:
+            parent_alias.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlink capability unavailable: {exc}")
         linked_digest = hashlib.sha256((outside / "source.pxo").read_bytes()).hexdigest()
         request = self._request("linked/source.pxo", digest=linked_digest)
         with self.assertRaisesRegex(ProductionDispatchInvocationError, "symlink"):

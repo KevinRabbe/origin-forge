@@ -11,7 +11,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-import test_phase49c_pixelorama_production_adoption as phase49c
+from . import test_phase49c_pixelorama_production_adoption as phase49c
 from origin_forge.ids import IdKind, new_id
 from origin_forge.lineage import OriginForgeLineage
 from origin_forge.pixelorama_admin_cli import main as pixelorama_admin_main

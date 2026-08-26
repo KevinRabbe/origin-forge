@@ -27,7 +27,7 @@ from origin_forge.production_pixelorama_task_acceptance import (
     publish_pixelorama_production_task_acceptance,
     read_pixelorama_production_task_acceptance,
 )
-from test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
+from .test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
 
 
 class Phase50APixeloramaProductionTaskAcceptanceTests(unittest.TestCase):

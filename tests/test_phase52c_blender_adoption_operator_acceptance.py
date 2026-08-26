@@ -25,7 +25,7 @@ from origin_forge.production_blender_dispatch_output_binding import (
     read_blender_dispatch_output_binding,
 )
 from origin_forge.production_blender_export import BlenderExportService
-from test_phase52b_blender_production_adoption import Phase52BBlenderProductionAdoptionTests
+from .test_phase52b_blender_production_adoption import Phase52BBlenderProductionAdoptionTests
 
 
 class Phase52CBlenderAdoptionOperatorAcceptanceTests(unittest.TestCase):
