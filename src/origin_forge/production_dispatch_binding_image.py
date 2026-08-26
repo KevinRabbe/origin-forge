@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from .production_dispatch_binding_models import DispatchBinderDescriptor
 from .production_dispatch_resolution_models import InputResolutionBundle
 from .production_work_order_image import (
@@ -19,7 +21,7 @@ class ImageDispatchBindingError(ValueError):
 class ImageGenerationInputBinder:
     """Bind one validated image GENERATE WorkOrder without invoking ComfyUI."""
 
-    _REQUEST_SCHEMA = {
+    _REQUEST_SCHEMA: ClassVar[dict[str, object]] = {
         "request_type": IMAGE_REQUEST_TYPE_ID,
         "fields": "validated ImageGenerationDispatchValidator payload plus exact task_id",
         "input_refs": "none",
@@ -71,6 +73,10 @@ class ImageGenerationInputBinder:
             payload = ImageGenerationDispatchValidator().validate(work_order.payload, ())
         except (RuntimeError, TypeError, ValueError) as exc:
             raise ImageDispatchBindingError("image WorkOrder payload no longer reconstructs exact generation request") from exc
+        # Keep the frozen request projection at the public scalar contract. The
+        # validator's ``budget`` object is derived evidence stored in the
+        # WorkOrder, not a second request field.
+        payload.pop("budget", None)
         projection = {"task_id": work_order.task_id, **payload}
         canonical_bytes(projection)
         return projection

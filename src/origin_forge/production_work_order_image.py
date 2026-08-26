@@ -3,7 +3,11 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from .image_vision_models import ImageOperationBudget, validate_sha256, workspace_relative_path
+from .image_vision_models import (
+    ImageOperationBudget,
+    validate_sha256,
+    workspace_relative_path,
+)
 from .production_work_order_models import WorkOrderInputRef, content_hash
 from .production_work_order_validators import (
     DispatchValidatorError,
@@ -11,7 +15,6 @@ from .production_work_order_validators import (
     PayloadFieldRule,
     StaticObjectPayloadValidator,
 )
-
 
 IMAGE_ADAPTER_ID = "originforge.image.generate"
 IMAGE_CONTRACT_ID = "image.generate@1"
@@ -104,7 +107,19 @@ class ImageGenerationDispatchValidator:
     ) -> dict[str, Any]:
         if input_refs:
             raise DispatchValidatorError("image GENERATE WorkOrder accepts no input refs")
-        normalized = self._base.validate(payload, input_refs)
+        # WorkOrder construction stores the validator's normalized budget.  Frozen
+        # re-audits therefore receive that derived field back; accept it only when
+        # it exactly recomputes from the three canonical scalar limits.
+        supplied_budget = payload.get("budget")
+        base_payload = dict(payload)
+        base_payload.pop("budget", None)
+        # The canonical stored projection contains the normalized float, while
+        # the external WorkOrder contract accepts a decimal text representation.
+        if isinstance(base_payload.get("guidance_scale"), (int, float)) and not isinstance(
+            base_payload.get("guidance_scale"), bool
+        ):
+            base_payload["guidance_scale"] = str(base_payload["guidance_scale"])
+        normalized = self._base.validate(base_payload, input_refs)
         if normalized["operation"] != IMAGE_OPERATION:
             raise DispatchValidatorError("image WorkOrder operation must be GENERATE")
         normalized["workflow_id"] = _token(normalized["workflow_id"], "workflow_id")
@@ -137,5 +152,7 @@ class ImageGenerationDispatchValidator:
             )
         except (TypeError, ValueError) as exc:
             raise DispatchValidatorError("image operation budget is invalid") from exc
+        if supplied_budget is not None and supplied_budget != budget.to_dict():
+            raise DispatchValidatorError("image operation budget is not canonical")
         normalized["budget"] = budget.to_dict()
         return normalized

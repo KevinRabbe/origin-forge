@@ -28,11 +28,11 @@ from .task_readiness import (
     resolve_task_dependency_readiness_connection,
 )
 
-
 _MAX_DETAIL_CHARS = 4096
 _SIMULATION_EXECUTION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 _PIXELORAMA_EXECUTION_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
 _BLENDER_EXECUTION_OWNER_ID = "originforge.execution.blender.export-glb@1"
+_IMAGE_EXECUTION_OWNER_ID = "originforge.execution.image.generate@1"
 
 
 class ProductionDispatchExecutionError(RuntimeError):
@@ -360,6 +360,55 @@ def _transition_blender_task_running_connection(
     return new_revision, updated_hash
 
 
+def _transition_image_task_running_connection(
+    runtime: OriginForgeRuntime,
+    conn,
+    claim: DispatchClaim,
+    execution_id: str,
+    now: str,
+) -> tuple[int, str]:
+    """Bind image execution to the exact READY -> RUNNING Task revision."""
+    ensure_transition(TaskStatus.READY, TaskStatus.RUNNING, TASK_TRANSITIONS)
+    new_revision = claim.task_revision + 1
+    cursor = conn.execute(
+        """UPDATE tasks
+           SET status = ?, revision = ?, updated_at = ?
+           WHERE id = ? AND status = ? AND revision = ?""",
+        (
+            TaskStatus.RUNNING.value,
+            new_revision,
+            now,
+            claim.task_id,
+            TaskStatus.READY.value,
+            claim.task_revision,
+        ),
+    )
+    if cursor.rowcount != 1:
+        raise StaleRevision(f"task {claim.task_id} changed concurrently")
+    updated = conn.execute("SELECT * FROM tasks WHERE id = ?", (claim.task_id,)).fetchone()
+    if updated is None:
+        raise ProductionDispatchExecutionError(
+            "image Task disappeared during execution begin"
+        )
+    try:
+        updated_status = TaskStatus(updated["status"])
+        updated_revision = int(updated["revision"])
+        updated_hash = task_routing_hash(updated)
+    except (TypeError, ValueError) as exc:
+        raise ProductionDispatchExecutionError(
+            "image Task failed canonical validation after RUNNING transition"
+        ) from exc
+    if updated_status is not TaskStatus.RUNNING or updated_revision != new_revision:
+        raise ProductionDispatchExecutionError(
+            "image Task did not enter exact RUNNING revision"
+        )
+    if updated_hash == claim.task_content_hash:
+        raise ProductionDispatchExecutionError(
+            "image Task RUNNING transition did not change revision-bound content hash"
+        )
+    return new_revision, updated_hash
+
+
 def _claim_matches_execution(claim: DispatchClaim, execution: DispatchExecution) -> bool:
     return (
         claim.project_id == execution.project_id
@@ -548,6 +597,15 @@ def begin_dispatch_execution(
                 now,
             )
             task_transition_reason = "BLENDER_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _IMAGE_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime,
+                conn,
+                claim,
+                execution_id,
+                now,
+            )
+            task_transition_reason = "IMAGE_DISPATCH_EXECUTION_STARTED"
 
         runtime.store._append_event(
             conn,
