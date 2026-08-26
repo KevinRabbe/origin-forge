@@ -31,7 +31,7 @@ def inspect_project(project_root: str | Path) -> dict[str, object]:
     checks.append(_check("state_directory", state.is_dir() and not state.is_symlink(), f"state directory: {state}"))
     checks.append(_check("config", config_path.is_file() and not config_path.is_symlink(), f"config: {config_path}"))
 
-    if config_path.is_file() and not config_path.is_symlink():
+    if state.is_dir() and not state.is_symlink() and config_path.is_file() and not config_path.is_symlink():
         try:
             config = load_config(root)
         except (OSError, ValueError) as exc:
@@ -74,4 +74,3 @@ def inspect_project(project_root: str | Path) -> dict[str, object]:
         "expected_schema_version": SCHEMA_VERSION,
         "checks": [asdict(item) for item in checks],
     }
-
