@@ -278,7 +278,10 @@ class Phase50DPixeloramaProductionTaskAcceptanceAdversarialTests(unittest.TestCa
         alternate = runtime.project_root / "assets" / "production" / "phase50d-symlink-target.png"
         alternate.write_bytes(original)
         destination.unlink()
-        os.symlink(alternate, destination)
+        try:
+            os.symlink(alternate, destination)
+        except OSError as exc:
+            self.skipTest(f"symlink capability unavailable: {exc}")
         detail = self._assert_stale_rejected(execution_id, binding.task_id)
         self.assertIn("symlink", detail)
 
