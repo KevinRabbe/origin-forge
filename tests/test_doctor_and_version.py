@@ -25,7 +25,7 @@ class DoctorTests(unittest.TestCase):
             ["review", "reject", "TASK-EXAMPLE", "--rationale", "needs revision"]
         )
         review_accept = parser.parse_args(
-            ["review", "accept", "TASK-EXAMPLE", "--rationale", "looks good"]
+            ["review", "accept", "TASK-EXAMPLE", "--rationale", "looks good", "--revision", "3"]
         )
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
@@ -42,6 +42,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(review.review_command, "inspect")
         self.assertEqual(review_reject.review_command, "reject")
         self.assertEqual(review_accept.review_command, "accept")
+        self.assertEqual(review_accept.revision, 3)
         self.assertEqual(
             [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
             ["inspect", "inspect", "inspect"],
@@ -126,6 +127,7 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(result["runs"], [])
             self.assertEqual(result["workspaces"], [])
             self.assertEqual(result["artifacts"], [])
+            self.assertEqual(result["decisions"], [])
 
     def test_review_decision_is_human_lineage_without_task_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -154,4 +156,20 @@ class DoctorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "SUCCEEDED Task"):
                 record_task_review_decision(
                     runtime, task_id, "accept", rationale="looks good"
+                )
+
+    def test_review_decision_rejects_stale_task_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("review-revision-test")
+            goal_id = runtime.create_goal("build a game")
+            flow_id = runtime.create_flow(goal_id)
+            task_id = runtime.create_task(flow_id, "implement movement")
+            with self.assertRaisesRegex(ValueError, "revision is stale"):
+                record_task_review_decision(
+                    runtime,
+                    task_id,
+                    "refine",
+                    rationale="revise movement",
+                    expected_revision=99,
                 )

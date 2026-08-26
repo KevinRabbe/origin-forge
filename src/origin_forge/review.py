@@ -22,6 +22,11 @@ def inspect_task_review(runtime: OriginForgeRuntime, task_id: str) -> dict[str, 
         for artifact in ProductionEvidenceReadService(runtime).list_artifacts()
         if artifact.get("created_by_run_id") in run_ids
     ]
+    decisions = [
+        decision
+        for decision in OriginForgeLineage(runtime).list_decisions()
+        if decision.get("task_id") == task_id
+    ]
     if task["status"] == "QUEUED":
         next_action = "WAIT_FOR_READINESS"
     elif task["status"] == "READY":
@@ -38,6 +43,7 @@ def inspect_task_review(runtime: OriginForgeRuntime, task_id: str) -> dict[str, 
         "workspaces": workspaces,
         "verifications": verifications,
         "artifacts": artifacts,
+        "decisions": decisions,
         "next_action": next_action,
     }
 
@@ -48,6 +54,7 @@ def record_task_review_decision(
     action: str,
     *,
     rationale: str,
+    expected_revision: int | None = None,
 ) -> str:
     """Record an explicit human review decision without changing Task state."""
     if action not in {"accept", "reject", "refine", "replace"}:
@@ -55,6 +62,14 @@ def record_task_review_decision(
     if not isinstance(rationale, str) or not rationale.strip():
         raise ValueError("review rationale must be non-empty")
     task = runtime.get_task(task_id)
+    if expected_revision is not None:
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ValueError("review expected_revision must be a non-negative integer")
+        if int(task["revision"]) != expected_revision:
+            raise ValueError(
+                f"review task revision is stale: expected {expected_revision}; "
+                f"current {task['revision']}"
+            )
     if action == "accept":
         if task["status"] != "SUCCEEDED":
             raise ValueError("review accept requires a SUCCEEDED Task")
