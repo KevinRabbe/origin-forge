@@ -126,3 +126,43 @@ class ImageDispatchRecoveryTests(unittest.TestCase):
             with self.assertRaises(ProductionDispatchInvocationRecoveryRequired):
                 recover_image_dispatch_execution_once(object(), execution.execution_id)
 
+    def test_started_execution_with_binding_is_terminalized_without_reinvocation(self) -> None:
+        execution = _execution(DispatchExecutionStatus.STARTED)
+        binding = _binding(execution)
+        returned = _execution(DispatchExecutionStatus.RETURNED)
+        returned = DispatchExecution(
+            **{
+                **returned.__dict__,
+                "execution_id": execution.execution_id,
+                "project_id": execution.project_id,
+                "claim_id": execution.claim_id,
+                "task_id": execution.task_id,
+                "work_order_id": execution.work_order_id,
+                "input_resolution_id": execution.input_resolution_id,
+                "dispatch_binding_id": execution.dispatch_binding_id,
+                "binding_audit_id": execution.binding_audit_id,
+            }
+        )
+        with (
+            patch(
+                "origin_forge.production_dispatch_invocation_image_owner.read_dispatch_execution",
+                return_value=execution,
+            ),
+            patch(
+                "origin_forge.production_dispatch_invocation_image_owner.read_image_dispatch_output_binding",
+                return_value=binding,
+            ),
+            patch(
+                "origin_forge.production_dispatch_invocation_image_owner._require_started_image_authority",
+            ),
+            patch(
+                "origin_forge.production_dispatch_invocation_image_owner.mark_dispatch_execution_returned",
+                return_value=returned,
+            ) as terminalize,
+        ):
+            recovered = recover_image_dispatch_execution_once(
+                object(), execution.execution_id
+            )
+        terminalize.assert_called_once()
+        self.assertEqual(recovered.execution.status, DispatchExecutionStatus.RETURNED)
+        self.assertEqual(recovered.image_result.run_id, binding.run_id)
