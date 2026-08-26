@@ -167,6 +167,7 @@ class DoctorTests(unittest.TestCase):
             task_id = runtime.create_task(flow_id, "implement movement")
             result = inspect_task_review(runtime, task_id)
             self.assertEqual(result["task"]["id"], task_id)
+            self.assertEqual(result["production_trace"]["task"]["id"], task_id)
             self.assertEqual(result["next_action"], "WAIT_FOR_READINESS")
             self.assertEqual(result["runs"], [])
             self.assertEqual(result["workspaces"], [])

@@ -6,9 +6,9 @@ from typing import Any
 from .lineage import OriginForgeLineage
 from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import ensure_production_runtime_readable
+from .production_trace import inspect_task_production_trace
 from .runtime import OriginForgeRuntime
 from .workspaces import GitWorkspaceManager
-
 
 _ACCEPT_CONTEXT = re.compile(
     r"^task_id=(?P<task_id>[^;]+); task_revision=(?P<revision>[0-9]+)$"
@@ -66,6 +66,7 @@ def inspect_task_review(runtime: OriginForgeRuntime, task_id: str) -> dict[str, 
         next_action = "INSPECT"
     return {
         "task": task,
+        "production_trace": inspect_task_production_trace(runtime, task_id),
         "runs": runs,
         "workspaces": workspaces,
         "verifications": verifications,
