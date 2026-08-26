@@ -23,6 +23,7 @@ from origin_forge.production_dispatch_phase_resolvers import (
 )
 from origin_forge.production_dispatch_resolvers import DispatchInputResolutionError
 from origin_forge.production_work_order_models import WorkOrderInputRef, WorkOrderRefType
+from origin_forge.pixelorama_source import import_pixelorama_source
 from origin_forge.runtime import OriginForgeRuntime
 
 
@@ -92,6 +93,24 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
         self.assertEqual(resolved.resolution_class, "PROTECTED_AUDIO_PROFILE")
         self.assertEqual(resolved.projection, profile.to_dict())
         self.assertEqual(before, _state_snapshot(self.runtime.state_dir))
+
+    def test_explicit_pixelorama_source_import_resolves_through_existing_artifact_path(self) -> None:
+        source = self.root / "assets" / "player.pxo"
+        source.parent.mkdir()
+        source.write_bytes(b"explicit-pixelorama-source")
+        imported = import_pixelorama_source(self.runtime, "assets/player.pxo")
+        ref = WorkOrderInputRef(
+            WorkOrderRefType.ARTIFACT,
+            imported.artifact_id,
+            imported.content_hash.removeprefix("sha256:"),
+            "pixelorama_project",
+            None,
+        )
+        resolved = build_dispatch_input_resolver_registry().resolve(self.runtime, ref)
+        self.assertEqual(resolved.source_id, imported.artifact_id)
+        self.assertEqual(resolved.source_content_hash, imported.content_hash.removeprefix("sha256:"))
+        self.assertEqual(resolved.projection["type"], "PIXELORAMA_PROJECT")
+        self.assertEqual(resolved.projection["status"], "PRODUCED")
 
     def test_missing_audio_profile_read_is_noncreating_and_cross_project_ref_fails_closed(self) -> None:
         profile = self._profile()

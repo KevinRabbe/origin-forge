@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
 from .lineage import OriginForgeLineage
 from .path_policy import portable_relative_path
+from .records import create_artifact
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
 
 
@@ -56,15 +58,19 @@ def import_pixelorama_source(
     byte_count = path.stat().st_size
     if byte_count <= 0 or byte_count > 256 * 1024 * 1024:
         raise PixeloramaSourceImportError("Pixelorama source byte count is outside bounds")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
     lineage = OriginForgeLineage(runtime)
-    artifact_id = lineage.create_artifact(
+    artifact_id = create_artifact(
+        runtime.store,
+        runtime.project_id(),
         artifact_type="PIXELORAMA_PROJECT",
         path_or_uri=relative.as_posix(),
         status="PRODUCED",
+        content_hash=digest,
     )
     artifact = lineage.get_artifact(artifact_id)
     content_hash = artifact.get("content_hash")
-    if not isinstance(content_hash, str) or not content_hash.startswith("sha256:"):
+    if not isinstance(content_hash, str) or len(content_hash) != 64:
         raise RuntimeInvariantError("imported Pixelorama source did not receive a content hash")
     verification_id = lineage.record_artifact_verification(
         artifact_id,
