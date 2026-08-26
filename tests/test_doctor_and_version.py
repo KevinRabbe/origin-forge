@@ -5,13 +5,17 @@ import unittest
 from pathlib import Path
 
 from origin_forge import __version__
-from origin_forge.code_adoption import CodeAdoptionError, VerifiedCodeAdopter
 from origin_forge.cli import build_parser
+from origin_forge.code_adoption import CodeAdoptionError, VerifiedCodeAdopter
 from origin_forge.context_preview import build_context_preview
 from origin_forge.doctor import inspect_project
+from origin_forge.pixelorama_source import (
+    PixeloramaSourceImportError,
+    import_pixelorama_source,
+    inspect_pixelorama_source,
+)
 from origin_forge.plan import inspect_goal_plan
 from origin_forge.production_trace import inspect_task_production_trace
-from origin_forge.pixelorama_source import PixeloramaSourceImportError, import_pixelorama_source
 from origin_forge.review import inspect_task_review, record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.task_dependencies import add_task_dependency
@@ -233,6 +237,10 @@ class DoctorTests(unittest.TestCase):
             self.assertTrue(result.artifact_id.startswith("ART-"))
             self.assertTrue(result.verification_id.startswith("VER"))
             self.assertEqual(result.relative_path, "assets/player.pxo")
+            inspected = inspect_pixelorama_source(runtime, result.artifact_id)
+            self.assertEqual(inspected.byte_count, len(b"pixelorama-source"))
+            self.assertIn(result.verification_id, inspected.verification_ids)
+            self.assertTrue(inspected.to_dict()["read_only"])
             with self.assertRaisesRegex(PixeloramaSourceImportError, r"\.pxo"):
                 import_pixelorama_source(runtime, "assets/player.png")
 

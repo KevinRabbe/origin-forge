@@ -8,13 +8,14 @@ from enum import StrEnum
 from pathlib import Path
 
 from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
-from .config import load_config
 from .code_adoption import VerifiedCodeAdopter
+from .config import load_config
 from .context_preview import build_context_preview
 from .doctor import inspect_project
 from .orchestration_cli import main as bounded_attempt_main
-from .plan import inspect_goal_plan
 from .patches import PatchValidationError
+from .pixelorama_source import import_pixelorama_source, inspect_pixelorama_source
+from .plan import inspect_goal_plan
 from .production_goal_bootstrap_operator import (
     GoalBootstrapOperatorBlocked,
     GoalBootstrapOperatorError,
@@ -25,7 +26,6 @@ from .production_goal_bootstrap_operator import (
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .production_trace import inspect_task_production_trace
-from .pixelorama_source import import_pixelorama_source
 from .repository import RepositoryAccessError
 from .review import inspect_task_review, record_task_review_decision
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
@@ -157,6 +157,8 @@ def build_parser() -> argparse.ArgumentParser:
     source_sub = source.add_subparsers(dest="source_command", required=True)
     source_import = source_sub.add_parser("import", help="register one explicit project source")
     source_import.add_argument("path")
+    source_inspect = source_sub.add_parser("inspect", help="inspect one governed source read-only")
+    source_inspect.add_argument("artifact_id")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -381,6 +383,9 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "production" and args.production_command == "source":
         if args.source_command == "import":
             _print(import_pixelorama_source(runtime, args.path).to_dict())
+            return 0
+        if args.source_command == "inspect":
+            _print(inspect_pixelorama_source(runtime, args.artifact_id).to_dict())
             return 0
 
     if args.command == "goal":
