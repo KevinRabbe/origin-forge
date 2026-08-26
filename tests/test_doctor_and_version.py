@@ -15,9 +15,17 @@ class DoctorTests(unittest.TestCase):
         parser = build_parser()
         doctor = parser.parse_args(["doctor", "--strict"])
         inspect = parser.parse_args(["run", "inspect", "RUN-EXAMPLE"])
+        graph_inspects = [
+            parser.parse_args([kind, "inspect", "EXAMPLE"])
+            for kind in ("goal", "flow", "task")
+        ]
         self.assertTrue(doctor.strict)
         self.assertEqual(inspect.run_command, "inspect")
         self.assertEqual(inspect.run_id, "RUN-EXAMPLE")
+        self.assertEqual(
+            [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
+            ["inspect", "inspect", "inspect"],
+        )
 
     def test_package_version_matches_v05_release(self) -> None:
         self.assertEqual(__version__, "0.5.0")

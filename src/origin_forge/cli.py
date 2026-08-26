@@ -104,6 +104,8 @@ def build_parser() -> argparse.ArgumentParser:
     goal.add_parser("list")
     goal_show = goal.add_parser("show")
     goal_show.add_argument("goal_id")
+    goal_inspect = goal.add_parser("inspect", help="inspect one goal (read-only alias for show)")
+    goal_inspect.add_argument("goal_id")
     goal_transition = goal.add_parser("transition")
     goal_transition.add_argument("goal_id")
     goal_transition.add_argument("status", type=_goal_status)
@@ -134,6 +136,8 @@ def build_parser() -> argparse.ArgumentParser:
     flow_list.add_argument("--goal")
     flow_show = flow.add_parser("show")
     flow_show.add_argument("flow_id")
+    flow_inspect = flow.add_parser("inspect", help="inspect one flow (read-only alias for show)")
+    flow_inspect.add_argument("flow_id")
     flow_transition = flow.add_parser("transition")
     flow_transition.add_argument("flow_id")
     flow_transition.add_argument("status", type=_flow_status)
@@ -154,6 +158,8 @@ def build_parser() -> argparse.ArgumentParser:
     task_list.add_argument("--flow")
     task_show = task.add_parser("show")
     task_show.add_argument("task_id")
+    task_inspect = task.add_parser("inspect", help="inspect one task (read-only alias for show)")
+    task_inspect.add_argument("task_id")
     task_transition = task.add_parser("transition")
     task_transition.add_argument("task_id")
     task_transition.add_argument("status", type=_task_status)
@@ -268,7 +274,7 @@ def _main(argv: list[str] | None = None) -> int:
         if args.goal_command == "list":
             _print(runtime.list_goals())
             return 0
-        if args.goal_command == "show":
+        if args.goal_command in {"show", "inspect"}:
             _print(runtime.get_goal(args.goal_id))
             return 0
         if args.goal_command == "transition":
@@ -284,7 +290,7 @@ def _main(argv: list[str] | None = None) -> int:
         if args.flow_command == "list":
             _print(runtime.list_flows(args.goal))
             return 0
-        if args.flow_command == "show":
+        if args.flow_command in {"show", "inspect"}:
             _print(runtime.get_flow(args.flow_id))
             return 0
         if args.flow_command == "transition":
@@ -308,7 +314,7 @@ def _main(argv: list[str] | None = None) -> int:
         if args.task_command == "list":
             _print(runtime.list_tasks(args.flow))
             return 0
-        if args.task_command == "show":
+        if args.task_command in {"show", "inspect"}:
             _print(runtime.get_task(args.task_id))
             return 0
         if args.task_command == "transition":
