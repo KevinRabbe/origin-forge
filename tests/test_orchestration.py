@@ -47,6 +47,13 @@ class FakeModel:
         return ModelResponse(self.response_text, self.model_id)
 
 
+class InterruptingModel(FakeModel):
+    def generate(self, request: ModelRequest) -> ModelResponse:
+        self.calls += 1
+        self.requests.append(request)
+        raise KeyboardInterrupt("simulated operator interruption")
+
+
 class FakeSandbox:
     backend_id = "fake-secure"
     guarantees = SandboxGuarantees(True, True, True, True)
@@ -161,6 +168,32 @@ class BoundedOrchestrationTests(unittest.TestCase):
         )
         verifications = self.runtime.list_verifications("TASK", self.task)
         self.assertEqual(verifications[-1]["status"], "PASS")
+
+    def test_interrupted_attempt_recovers_without_replaying_model(self) -> None:
+        model = InterruptingModel("")
+        orchestrator = BoundedTaskOrchestrator(
+            self.runtime,
+            model,
+            FakeSandbox([SandboxResult(0, "unused", "", False, 1)]),
+            workspaces=self.workspaces,
+        )
+
+        with self.assertRaisesRegex(KeyboardInterrupt, "simulated operator interruption"):
+            orchestrator.execute(self.task, selected_paths=["hello.py"])
+
+        findings = self.runtime.recover()
+        self.assertTrue(findings)
+        self.assertEqual(
+            self.runtime.get_task(self.task)["status"], TaskStatus.BLOCKED.value
+        )
+        runs = self.runtime.list_runs(self.task)
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0]["status"], "INTERRUPTED")
+        self.assertEqual(model.calls, 1)
+
+        with self.assertRaisesRegex(RuntimeInvariantError, "requires READY task"):
+            orchestrator.execute(self.task, selected_paths=["hello.py"])
+        self.assertEqual(model.calls, 1)
 
     def test_executor_reads_workspace_snapshot_not_dirty_user_checkout(self) -> None:
         committed = b"print('old')\n"
