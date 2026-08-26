@@ -8,8 +8,10 @@ from origin_forge import __version__
 from origin_forge.cli import build_parser
 from origin_forge.context_preview import build_context_preview
 from origin_forge.doctor import inspect_project
+from origin_forge.plan import inspect_goal_plan
 from origin_forge.review import inspect_task_review, record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
+from origin_forge.task_dependencies import add_task_dependency
 
 
 class DoctorTests(unittest.TestCase):
@@ -27,6 +29,7 @@ class DoctorTests(unittest.TestCase):
         review_accept = parser.parse_args(
             ["review", "accept", "TASK-EXAMPLE", "--rationale", "looks good", "--revision", "3"]
         )
+        plan = parser.parse_args(["plan", "inspect", "GOAL-EXAMPLE"])
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
             for kind in ("goal", "flow", "task")
@@ -43,6 +46,8 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(review_reject.review_command, "reject")
         self.assertEqual(review_accept.review_command, "accept")
         self.assertEqual(review_accept.revision, 3)
+        self.assertEqual(plan.plan_command, "inspect")
+        self.assertEqual(plan.goal_id, "GOAL-EXAMPLE")
         self.assertEqual(
             [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
             ["inspect", "inspect", "inspect"],
@@ -149,6 +154,30 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(result["workspaces"], [])
             self.assertEqual(result["artifacts"], [])
             self.assertEqual(result["decisions"], [])
+
+    def test_plan_projection_is_read_only_and_exposes_dependency_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("plan-test")
+            goal_id = runtime.create_goal("build a game")
+            flow_id = runtime.create_flow(goal_id)
+            first = runtime.create_task(flow_id, "implement movement")
+            second = runtime.create_task(flow_id, "add movement tests")
+            add_task_dependency(runtime.store, second, first)
+            before = runtime.status()
+            result = inspect_goal_plan(runtime, goal_id)
+            after = runtime.status()
+            self.assertEqual(result["goal"]["id"], goal_id)
+            self.assertEqual(result["summary"]["flow_count"], 1)
+            self.assertEqual(result["summary"]["task_count"], 2)
+            flow_view = result["flows"][0]
+            self.assertEqual(flow_view["dependency_graph"]["topological_task_ids"], [first, second])
+            task_views = {item["task"]["id"]: item for item in flow_view["tasks"]}
+            self.assertEqual(task_views[first]["next_action"], "ACTIVATE")
+            self.assertEqual(task_views[second]["next_action"], "WAIT_FOR_DEPENDENCIES")
+            self.assertEqual(result["summary"]["next_action"], "ACTIVATE")
+            self.assertEqual(before["tasks"], after["tasks"])
+            self.assertEqual(before["runs"], after["runs"])
 
     def test_review_decision_is_human_lineage_without_task_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

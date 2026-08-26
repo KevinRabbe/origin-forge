@@ -12,6 +12,7 @@ from .config import load_config
 from .context_preview import build_context_preview
 from .doctor import inspect_project
 from .orchestration_cli import main as bounded_attempt_main
+from .plan import inspect_goal_plan
 from .patches import PatchValidationError
 from .production_goal_bootstrap_operator import (
     GoalBootstrapOperatorBlocked,
@@ -135,6 +136,11 @@ def build_parser() -> argparse.ArgumentParser:
         review_action.add_argument("task_id")
         review_action.add_argument("--rationale", required=True)
         review_action.add_argument("--revision", type=int)
+
+    plan = sub.add_parser("plan", help="inspect governed production plans")
+    plan_sub = plan.add_subparsers(dest="plan_command", required=True)
+    plan_inspect = plan_sub.add_parser("inspect", help="inspect one Goal plan read-only")
+    plan_inspect.add_argument("goal_id")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -346,6 +352,9 @@ def _main(argv: list[str] | None = None) -> int:
             expected_revision=args.revision,
         )
         _print({"decision_id": decision_id, "action": args.review_command})
+        return 0
+    if args.command == "plan" and args.plan_command == "inspect":
+        _print(inspect_goal_plan(runtime, args.goal_id))
         return 0
 
     if args.command == "goal":
