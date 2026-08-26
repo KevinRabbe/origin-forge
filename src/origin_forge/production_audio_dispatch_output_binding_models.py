@@ -75,7 +75,7 @@ class AudioDispatchOutputBinding:
             raise AudioDispatchOutputBindingModelError("audio binding owner is not Piper")
         if type(self.task_revision) is not int or self.task_revision < 0:
             raise AudioDispatchOutputBindingModelError("task_revision is invalid")
-        for value, label in (
+        for digest_value, label in (
             (self.task_content_hash, "task_content_hash"),
             (self.work_order_hash, "work_order_hash"),
             (self.dispatch_binding_hash, "dispatch_binding_hash"),
@@ -83,15 +83,15 @@ class AudioDispatchOutputBinding:
             (self.output_pcm_hash, "output_pcm_hash"),
             (self.backend_result_hash, "backend_result_hash"),
         ):
-            _digest(value, label)
+            _digest(digest_value, label)
         if not isinstance(self.output_relative_path, str) or not self.output_relative_path.startswith("exports/") or not self.output_relative_path.lower().endswith(".wav"):
             raise AudioDispatchOutputBindingModelError("audio output path is invalid")
-        for value, label in (
+        for metric_value, label in (
             (self.output_byte_count, "output_byte_count"),
             (self.output_frame_count, "output_frame_count"),
             (self.output_sample_rate, "output_sample_rate"),
         ):
-            if type(value) is not int or value <= 0:
+            if type(metric_value) is not int or metric_value <= 0:
                 raise AudioDispatchOutputBindingModelError(f"{label} is invalid")
         if self.output_channels not in {1, 2} or not 0 <= self.output_peak_abs_sample <= 32768:
             raise AudioDispatchOutputBindingModelError("audio output format metrics are invalid")
