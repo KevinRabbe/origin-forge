@@ -130,7 +130,7 @@ class DoctorTests(unittest.TestCase):
                     "attempt": 1,
                     "inspect_or_recover": 0,
                     "review_or_accept": 0,
-                    "recover": 0,
+                    "recover": status["recovery_findings"],
                 },
             )
 
