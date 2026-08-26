@@ -44,8 +44,14 @@ from .production_pixelorama_profile import (
     load_infrastructure_pixelorama_cli_profile,
     pixelorama_cli_profile_dependency_hash,
 )
+from .production_runtime_observation_store import RuntimeObservationRequestStore
+from .production_runtime_profile import (
+    RuntimeObservationInfrastructure,
+    load_runtime_observation_infrastructure,
+)
 from .production_work_order_models import content_hash
 from .runtime import OriginForgeRuntime
+from .runtime_observation_models import RuntimeObservationRequest
 from .sandbox import SandboxBackend
 from .sandbox_factory import create_sandbox_backend
 from .scheduled_model_adapter import RuntimeModelScheduleRecorder, ScheduledModelAdapter
@@ -56,6 +62,7 @@ _SIMULATION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 _PIXELORAMA_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
 _BLENDER_OWNER_ID = "originforge.execution.blender.export-glb@1"
 _PIPER_OWNER_ID = "originforge.execution.audio.piper-tts@1"
+_RUNTIME_OBSERVER_OWNER_ID = "originforge.execution.runtime.observe@1"
 _NOT_REQUIRED_RESOURCE_MODEL_HASH = content_hash(
     {"kind": "NO_MODEL_RESOURCE_CONFIG", "version": 1}
 )
@@ -249,6 +256,22 @@ class PiperExecutionPayload:
             raise ProductionExecutionAssemblyError("Piper profile does not match frozen request")
 
 
+@dataclass(frozen=True)
+class RuntimeObservationExecutionPayload:
+    request: RuntimeObservationRequest
+    infrastructure: RuntimeObservationInfrastructure
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, RuntimeObservationRequest):
+            raise TypeError("request must be a RuntimeObservationRequest")
+        if not isinstance(self.infrastructure, RuntimeObservationInfrastructure):
+            raise TypeError("infrastructure must be RuntimeObservationInfrastructure")
+        if self.request.executable_hash != self.infrastructure.executable_hash:
+            raise ProductionExecutionAssemblyError(
+                "runtime executable does not match frozen observation request"
+            )
+
+
 ExecutionDependencyPayload = (
     BoundedRetryExecutionPayload
     | DeterministicSimulationExecutionPayload
@@ -256,6 +279,7 @@ ExecutionDependencyPayload = (
     | BlenderExportGLBExecutionPayload
     | ImageGenerationExecutionPayload
     | PiperExecutionPayload
+    | RuntimeObservationExecutionPayload
 )
 
 
@@ -307,6 +331,11 @@ class ProductionExecutionDependencies:
             if not isinstance(self.payload, PiperExecutionPayload):
                 raise ProductionExecutionAssemblyError(
                     "Piper owner requires trusted profile/infrastructure payload"
+                )
+        elif self.owner.owner_id == _RUNTIME_OBSERVER_OWNER_ID:
+            if not isinstance(self.payload, RuntimeObservationExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "runtime observer owner requires trusted request/infrastructure payload"
                 )
         else:
             raise ProductionExecutionAssemblyError(
@@ -701,6 +730,52 @@ def _assemble_piper_dependencies(
     )
 
 
+def _assemble_runtime_observation_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _RUNTIME_OBSERVER_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "runtime observer assembler received an unexpected owner"
+        )
+    try:
+        projection = binding.request_projection
+        request = RuntimeObservationRequestStore(runtime).get(
+            projection["request_id"], "sha256:" + projection["request_hash"]
+        )
+        infrastructure = load_runtime_observation_infrastructure()
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted runtime observation request/infrastructure is unavailable"
+        ) from exc
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=content_hash(
+            {
+                "request_hash": request.content_hash,
+                "infrastructure_hash": infrastructure.dependency_hash,
+            }
+        ),
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=RuntimeObservationExecutionPayload(request, infrastructure),
+    )
+
+
 def _assemble_bounded_retry_dependencies(
     runtime: OriginForgeRuntime,
     claim,
@@ -875,6 +950,10 @@ def assemble_production_execution_dependencies(
         )
     if owner.owner_id == _PIPER_OWNER_ID:
         return _assemble_piper_dependencies(runtime, claim, binding, owner, owner_registry)
+    if owner.owner_id == _RUNTIME_OBSERVER_OWNER_ID:
+        return _assemble_runtime_observation_dependencies(
+            runtime, claim, binding, owner, owner_registry
+        )
     if owner.owner_id == _PIXELORAMA_OWNER_ID:
         return _assemble_pixelorama_dependencies(
             runtime,
