@@ -23,6 +23,7 @@ from .production_dispatch_invocation import (
     ProductionDispatchInvocationRecoveryRequired,
 )
 from .production_dispatch_invocation_piper import PiperInvocationRequest
+from .production_execution_assembly import PiperExecutionPayload
 from .production_execution_owner_audio import PIPER_EXECUTION_OWNER_ID
 from .service import utc_now
 from .state import TaskStatus
@@ -42,11 +43,20 @@ def dispatch_piper_claim_once_if_applicable(runtime, claim_id: str, expected_cla
         expected_adapter_id="originforge.audio.piper", expected_contract_id="audio.piper-tts@1",
         expected_binder_id=descriptor.binder_id, expected_request_type_id=descriptor.request_type_id,
     )
-    request = PiperInvocationRequest.from_projection(binding.request_projection, binding.request_content_hash)
+    projection = binding.request_projection
+    if not isinstance(projection, dict):
+        raise ProductionDispatchInvocationRecoveryRequired(
+            claim_id, "REQUEST_PROJECTION_INVALID"
+        )
+    request = PiperInvocationRequest.from_projection(projection, binding.request_content_hash)
     started = legacy.begin_dispatch_execution(runtime, claim_id, expected_claim_revision)
     if started.execution.execution_owner_id != PIPER_EXECUTION_OWNER_ID or started.dependencies.plan.request_content_hash != request.request_content_hash:
         raise ProductionDispatchInvocationRecoveryRequired(started.execution.execution_id, "STARTED_RELATION_MISMATCH")
     payload = started.dependencies.payload
+    if not isinstance(payload, PiperExecutionPayload):
+        raise ProductionDispatchInvocationRecoveryRequired(
+            started.execution.execution_id, "STARTED_RELATION_MISMATCH"
+        )
     try:
         operation_request = request.to_operation_request(payload.profile)
         result = AudioOperationService(
