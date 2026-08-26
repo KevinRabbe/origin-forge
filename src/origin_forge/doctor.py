@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -28,11 +29,12 @@ def _tool_check(tool_id: str, tool_config: ExternalToolConfig) -> DoctorCheck:
             "not configured; capability is unavailable unless its adapter supplies a safe fallback",
         )
     path = Path(configured)
-    if path.is_symlink() or not path.is_file():
+    executable = os.name == "nt" or os.access(path, os.X_OK)
+    if path.is_symlink() or not path.is_file() or not executable:
         return DoctorCheck(
             f"tool:{tool_id}",
             "FAIL",
-            f"configured path is missing, not a regular file, or is an alias: {path}",
+            f"configured path is missing, inaccessible, not executable, or is an alias: {path}",
         )
     return DoctorCheck(
         f"tool:{tool_id}",
