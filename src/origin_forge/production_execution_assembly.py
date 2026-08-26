@@ -44,6 +44,11 @@ from .production_pixelorama_profile import (
     load_infrastructure_pixelorama_cli_profile,
     pixelorama_cli_profile_dependency_hash,
 )
+from .production_playtest_profile import (
+    CooperativePlaytestInfrastructure,
+    load_cooperative_playtest_infrastructure,
+)
+from .production_playtest_scenario_store import PlaytestScenarioStore
 from .production_runtime_observation_store import RuntimeObservationRequestStore
 from .production_runtime_profile import (
     RuntimeObservationInfrastructure,
@@ -63,6 +68,7 @@ _PIXELORAMA_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
 _BLENDER_OWNER_ID = "originforge.execution.blender.export-glb@1"
 _PIPER_OWNER_ID = "originforge.execution.audio.piper-tts@1"
 _RUNTIME_OBSERVER_OWNER_ID = "originforge.execution.runtime.observe@1"
+_PLAYTEST_OWNER_ID = "originforge.execution.playtest.cooperative@1"
 _NOT_REQUIRED_RESOURCE_MODEL_HASH = content_hash(
     {"kind": "NO_MODEL_RESOURCE_CONFIG", "version": 1}
 )
@@ -272,6 +278,24 @@ class RuntimeObservationExecutionPayload:
             )
 
 
+@dataclass(frozen=True)
+class CooperativePlaytestExecutionPayload:
+    scenario: object
+    infrastructure: CooperativePlaytestInfrastructure
+
+    def __post_init__(self) -> None:
+        from .playtest_models import PlaytestScenario
+
+        if not isinstance(self.scenario, PlaytestScenario):
+            raise TypeError("scenario must be a PlaytestScenario")
+        if not isinstance(self.infrastructure, CooperativePlaytestInfrastructure):
+            raise TypeError("infrastructure must be CooperativePlaytestInfrastructure")
+        if self.scenario.harness_hash != self.infrastructure.executable_hash:
+            raise ProductionExecutionAssemblyError(
+                "playtest harness does not match frozen scenario"
+            )
+
+
 ExecutionDependencyPayload = (
     BoundedRetryExecutionPayload
     | DeterministicSimulationExecutionPayload
@@ -280,6 +304,7 @@ ExecutionDependencyPayload = (
     | ImageGenerationExecutionPayload
     | PiperExecutionPayload
     | RuntimeObservationExecutionPayload
+    | CooperativePlaytestExecutionPayload
 )
 
 
@@ -336,6 +361,11 @@ class ProductionExecutionDependencies:
             if not isinstance(self.payload, RuntimeObservationExecutionPayload):
                 raise ProductionExecutionAssemblyError(
                     "runtime observer owner requires trusted request/infrastructure payload"
+                )
+        elif self.owner.owner_id == _PLAYTEST_OWNER_ID:
+            if not isinstance(self.payload, CooperativePlaytestExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "playtest owner requires trusted scenario/infrastructure payload"
                 )
         else:
             raise ProductionExecutionAssemblyError(
@@ -776,6 +806,34 @@ def _assemble_runtime_observation_dependencies(
     )
 
 
+def _assemble_playtest_dependencies(
+    runtime: OriginForgeRuntime, claim, binding, owner, owner_registry
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _PLAYTEST_OWNER_ID:
+        raise ProductionExecutionAssemblyError("playtest assembler received an unexpected owner")
+    try:
+        projection = binding.request_projection
+        scenario = PlaytestScenarioStore(runtime).get(
+            projection["scenario_id"], "sha256:" + projection["scenario_hash"]
+        )
+        infrastructure = load_cooperative_playtest_infrastructure()
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted playtest scenario/harness infrastructure is unavailable"
+        ) from exc
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(), model_profile_ids=(), runtime_ids=(),
+        runtime_provider_fingerprints=(), sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=content_hash({"scenario_hash": scenario.content_hash, "infrastructure_hash": infrastructure.dependency_hash}),
+    )
+    return ProductionExecutionDependencies(plan, owner, CooperativePlaytestExecutionPayload(scenario, infrastructure))
+
+
 def _assemble_bounded_retry_dependencies(
     runtime: OriginForgeRuntime,
     claim,
@@ -954,6 +1012,8 @@ def assemble_production_execution_dependencies(
         return _assemble_runtime_observation_dependencies(
             runtime, claim, binding, owner, owner_registry
         )
+    if owner.owner_id == _PLAYTEST_OWNER_ID:
+        return _assemble_playtest_dependencies(runtime, claim, binding, owner, owner_registry)
     if owner.owner_id == _PIXELORAMA_OWNER_ID:
         return _assemble_pixelorama_dependencies(
             runtime,

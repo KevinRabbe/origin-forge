@@ -9,6 +9,7 @@ from .ids import IdKind, validate_id
 from .image_vision_service import ImageGenerationServiceResult
 from .lineage import OriginForgeLineage
 from .orchestration_policy import PolicyResult
+from .playtest_service import PlaytestServiceResult
 from .production_dispatch_binding import CodeBoundedRetryInputBinder
 from .production_dispatch_binding_models import BindingAuditStatus, DispatchBinding
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
@@ -291,6 +292,7 @@ class CompletedDispatchInvocation:
     image_result: ImageGenerationServiceResult | None = None
     audio_result: AudioOperationServiceResult | None = None
     runtime_result: RuntimeObservationServiceResult | None = None
+    playtest_result: PlaytestServiceResult | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.execution, DispatchExecution):
@@ -305,7 +307,8 @@ class CompletedDispatchInvocation:
         has_image = self.image_result is not None
         has_audio = self.audio_result is not None
         has_runtime = self.runtime_result is not None
-        if sum((has_policy, has_simulation, has_pixelorama, has_image, has_audio, has_runtime)) != 1:
+        has_playtest = self.playtest_result is not None
+        if sum((has_policy, has_simulation, has_pixelorama, has_image, has_audio, has_runtime, has_playtest)) != 1:
             raise ProductionDispatchInvocationError(
                 "completed invocation requires exactly one reviewed owner result"
             )
@@ -366,6 +369,14 @@ class CompletedDispatchInvocation:
             ):
                 raise ProductionDispatchInvocationError(
                     "runtime observation execution requires exactly one RuntimeObservationServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.playtest.cooperative@1":
+            if (
+                not isinstance(self.playtest_result, PlaytestServiceResult)
+                or has_policy or has_simulation or has_pixelorama or has_image or has_audio or has_runtime
+            ):
+                raise ProductionDispatchInvocationError(
+                    "playtest execution requires exactly one PlaytestServiceResult"
                 )
         else:
             raise ProductionDispatchInvocationError(
