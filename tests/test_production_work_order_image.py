@@ -6,6 +6,7 @@ from origin_forge.production_work_order_image import (
     IMAGE_REQUEST_TYPE_ID,
     ImageGenerationDispatchValidator,
 )
+from origin_forge.production_dispatch_binding_image import ImageGenerationInputBinder
 from origin_forge.production_work_order_validators import DispatchValidatorError
 
 
@@ -32,6 +33,17 @@ def _payload() -> dict[str, object]:
 
 
 class ImageWorkOrderValidatorTests(unittest.TestCase):
+    def test_image_binder_freezes_the_planned_owner_relation(self) -> None:
+        descriptor = ImageGenerationInputBinder().descriptor
+        self.assertEqual(descriptor.binder_id, "binder.image.generate@1")
+        self.assertEqual(descriptor.adapter_id, "originforge.image.generate")
+        self.assertEqual(descriptor.dispatch_contract_id, "image.generate@1")
+        self.assertEqual(
+            descriptor.request_type_id,
+            "ImageGenerationService.execute@production-v1",
+        )
+        self.assertEqual(descriptor.accepted_input_roles, ())
+
     def test_valid_generation_payload_is_normalized_for_later_request_assembly(self) -> None:
         validator = ImageGenerationDispatchValidator()
         result = validator.validate(_payload(), ())
