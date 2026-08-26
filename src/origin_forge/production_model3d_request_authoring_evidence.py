@@ -30,11 +30,15 @@ from .production_planning_evidence import (
     ProductionPlanningEvidenceError,
     ProductionPlanningEvidenceStore,
 )
-from .production_planning_models import PlanAuditStatus, PlanProposal, PlanningInput
+from .production_planning_models import (
+    PlanAuditStatus,
+    PlanningInput,
+    PlanProposal,
+    PlanStep,
+)
 from .production_read_guard import production_read_connection
 from .runtime import OriginForgeRuntime
 from .service import utc_now
-
 
 _SCHEMA_VERSION = 1
 _MAX_PAYLOAD_BYTES = 1024 * 1024
@@ -199,7 +203,9 @@ def _materialization_from_payload(value: dict[str, Any]) -> PlanMaterialization:
         ) from exc
 
 
-def _assert_task_matches_step(task_payload: dict[str, object], step: object, flow_id: str) -> None:
+def _assert_task_matches_step(
+    task_payload: dict[str, object], step: PlanStep, flow_id: str
+) -> None:
     expected = {
         "flow_id": flow_id,
         "parent_task_id": None,
