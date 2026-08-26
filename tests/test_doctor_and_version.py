@@ -8,6 +8,7 @@ from origin_forge import __version__
 from origin_forge.cli import build_parser
 from origin_forge.context_preview import build_context_preview
 from origin_forge.doctor import inspect_project
+from origin_forge.review import inspect_task_review
 from origin_forge.runtime import OriginForgeRuntime
 
 
@@ -19,6 +20,7 @@ class DoctorTests(unittest.TestCase):
         advance = parser.parse_args(["advance"])
         context = parser.parse_args(["context", "preview", "TASK-EXAMPLE", "--file", "game.py"])
         attempt = parser.parse_args(["attempt", "TASK-EXAMPLE", "--auto-context"])
+        review = parser.parse_args(["review", "inspect", "TASK-EXAMPLE"])
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
             for kind in ("goal", "flow", "task")
@@ -31,6 +33,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(context.files, ["game.py"])
         self.assertEqual(attempt.command, "attempt")
         self.assertTrue(attempt.auto_context)
+        self.assertEqual(review.review_command, "inspect")
         self.assertEqual(
             [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
             ["inspect", "inspect", "inspect"],
@@ -72,3 +75,17 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(result["context"]["files"][0]["path"], "game.py")
             self.assertEqual(before["tasks"], after["tasks"])
             self.assertEqual(before["runs"], after["runs"])
+
+    def test_review_projection_is_read_only_for_ready_task(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("review-test")
+            goal_id = runtime.create_goal("build a game")
+            flow_id = runtime.create_flow(goal_id)
+            task_id = runtime.create_task(flow_id, "implement movement")
+            result = inspect_task_review(runtime, task_id)
+            self.assertEqual(result["task"]["id"], task_id)
+            self.assertEqual(result["next_action"], "WAIT_FOR_READINESS")
+            self.assertEqual(result["runs"], [])
+            self.assertEqual(result["workspaces"], [])
+            self.assertEqual(result["artifacts"], [])

@@ -23,6 +23,7 @@ from .production_goal_bootstrap_operator import (
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .repository import RepositoryAccessError
+from .review import inspect_task_review
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .sandbox import SandboxPolicyError, SandboxUnavailable
 from .sandbox_factory import create_sandbox_backend
@@ -125,6 +126,10 @@ def build_parser() -> argparse.ArgumentParser:
     attempt.add_argument("--max-tokens", type=int, default=4096)
     attempt.add_argument("--temperature", type=float, default=0.2)
     attempt.add_argument("--allow-remote", action="store_true")
+    review = sub.add_parser("review", help="inspect reviewable Task evidence")
+    review_sub = review.add_subparsers(dest="review_command", required=True)
+    review_inspect = review_sub.add_parser("inspect", help="inspect one Task review projection")
+    review_inspect.add_argument("task_id")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -324,6 +329,9 @@ def _main(argv: list[str] | None = None) -> int:
             ]
         )
         return bounded_attempt_main(forwarded)
+    if args.command == "review" and args.review_command == "inspect":
+        _print(inspect_task_review(runtime, args.task_id))
+        return 0
 
     if args.command == "goal":
         if args.goal_command == "bootstrap":
