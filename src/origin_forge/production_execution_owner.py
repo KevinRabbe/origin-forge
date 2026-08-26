@@ -212,6 +212,9 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
     from .production_execution_owner_image import (
         image_generation_execution_owner_descriptor,
     )
+    from .production_execution_owner_playtest import (
+        cooperative_playtest_execution_owner_descriptor,
+    )
     from .production_execution_owner_runtime import (
         runtime_observation_execution_owner_descriptor,
     )
@@ -336,6 +339,7 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         image_generation_execution_owner_descriptor(),
         piper_execution_owner_descriptor(),
         runtime_observation_execution_owner_descriptor(),
+        cooperative_playtest_execution_owner_descriptor(),
     )
 
 

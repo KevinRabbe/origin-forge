@@ -35,6 +35,7 @@ _BLENDER_EXECUTION_OWNER_ID = "originforge.execution.blender.export-glb@1"
 _IMAGE_EXECUTION_OWNER_ID = "originforge.execution.image.generate@1"
 _PIPER_EXECUTION_OWNER_ID = "originforge.execution.audio.piper-tts@1"
 _RUNTIME_EXECUTION_OWNER_ID = "originforge.execution.runtime.observe@1"
+_PLAYTEST_EXECUTION_OWNER_ID = "originforge.execution.playtest.cooperative@1"
 
 
 class ProductionDispatchExecutionError(RuntimeError):
@@ -618,6 +619,11 @@ def begin_dispatch_execution(
                 runtime, conn, claim, execution_id, now
             )
             task_transition_reason = "RUNTIME_OBSERVATION_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _PLAYTEST_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime, conn, claim, execution_id, now
+            )
+            task_transition_reason = "PLAYTEST_DISPATCH_EXECUTION_STARTED"
 
         runtime.store._append_event(
             conn,

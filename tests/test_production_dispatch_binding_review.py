@@ -64,6 +64,11 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             (phase32.adapter("originforge.runtime.observe"),),
         )
         runtime_dispatch = build_builtin_dispatch_catalog(runtime_phase32)
+        playtest_phase32 = CapabilityCatalog.create(
+            (phase32.capability("runtime.playtest"),),
+            (phase32.adapter("originforge.playtest.cooperative"),),
+        )
+        playtest_dispatch = build_builtin_dispatch_catalog(playtest_phase32)
         binder_registry = build_builtin_dispatch_binder_registry()
         rows = builtin_binding_review()
 
@@ -82,6 +87,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             "originforge.image.generate",
             "originforge.audio.piper",
             "originforge.runtime.observe",
+            "originforge.playtest.cooperative",
             },
         )
         reviewed_contracts = (
@@ -92,6 +98,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             *image_dispatch.contracts,
             *piper_dispatch.contracts,
             *runtime_dispatch.contracts,
+            *playtest_dispatch.contracts,
         )
         self.assertEqual(
             bindable,
@@ -166,7 +173,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             for value in rows
             if value.status is BuiltinBindingReviewStatus.DEFERRED
         ]
-        self.assertEqual(len(deferred), 3)
+        self.assertEqual(len(deferred), 2)
         self.assertTrue(all(value.blocker for value in deferred))
         self.assertEqual(
             len({value.blocker for value in deferred}),

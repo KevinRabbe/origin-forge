@@ -33,6 +33,7 @@ class BuiltinProductionWorkOrderTests(unittest.TestCase):
             "originforge.pixelorama.export",
             "originforge.blender.model3d",
             "originforge.runtime.observe",
+            "originforge.playtest.cooperative",
         ):
             self.assertEqual(
                 rows[adapter_id].status,
@@ -42,7 +43,6 @@ class BuiltinProductionWorkOrderTests(unittest.TestCase):
             "originforge.vision.inspect",
             "originforge.audio.ffmpeg",
             "originforge.audio.piper",
-            "originforge.playtest.cooperative",
         ):
             self.assertEqual(
                 rows[adapter_id].status,

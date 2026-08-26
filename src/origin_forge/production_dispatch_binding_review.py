@@ -91,9 +91,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.playtest.cooperative",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_DIRECT_PLAYTEST_SCENARIO_READER",
-            "34C found PLAYSCEN data inside playtest workspaces/artifacts with no direct exact PLAYSCEN reader",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 61 resolves the exact protected PLAYSCEN scenario and persists evidence-only output bindings with no-replay recovery",
         ),
         BuiltinBindingReview(
             "originforge.simulation.deterministic",
@@ -130,6 +130,11 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         (phase32.adapter("originforge.audio.piper"),),
     )
     piper_dispatch_catalog = build_builtin_dispatch_catalog(piper_phase32)
+    playtest_phase32 = CapabilityCatalog.create(
+        (phase32.capability("runtime.playtest"),),
+        (phase32.adapter("originforge.playtest.cooperative"),),
+    )
+    playtest_dispatch_catalog = build_builtin_dispatch_catalog(playtest_phase32)
     runtime_phase32 = CapabilityCatalog.create(
         (phase32.capability("runtime.observe"),),
         (phase32.adapter("originforge.runtime.observe"),),
@@ -155,6 +160,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         *image_dispatch_catalog.contracts,
         *piper_dispatch_catalog.contracts,
         *runtime_dispatch_catalog.contracts,
+        *playtest_dispatch_catalog.contracts,
     )
     contract_by_adapter = {value.adapter_id: value for value in reviewed_contracts}
     if len(contract_by_adapter) != len(reviewed_contracts):

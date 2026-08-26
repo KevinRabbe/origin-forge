@@ -415,7 +415,17 @@ def inspect_dispatch_binding_currentness_readonly(
             and resolved[0].source_object_type == "RUNTIME_OBSERVATION_REQUEST"
             and resolved[0].resolution_class == "PROTECTED_RUNTIME_OBSERVATION_REQUEST"
         )
-        if not (pixelorama_input or blender_input or piper_input or runtime_input):
+        playtest_input = (
+            binding.selected_adapter_id == "originforge.playtest.cooperative"
+            and binding.dispatch_contract_id == "playtest.cooperative@1"
+            and binding.binder_id == "binder.playtest.cooperative@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "PLAYTEST_SCENARIO"
+            and resolved[0].original_ref.role == "playtest_scenario"
+            and resolved[0].source_object_type == "PLAYTEST_SCENARIO"
+            and resolved[0].resolution_class == "PROTECTED_PLAYTEST_SCENARIO"
+        )
+        if not (pixelorama_input or blender_input or piper_input or runtime_input or playtest_input):
             return result(
                 DispatchBindingCurrentnessStatus.STALE_INPUT,
                 "current read-only nonzero-ref eligibility is limited to exact reviewed production contracts",

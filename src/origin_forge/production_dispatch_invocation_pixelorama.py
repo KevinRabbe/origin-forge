@@ -189,6 +189,9 @@ def _dispatch_claim_once_three_owner(
     from .production_dispatch_invocation_piper_owner import (
         dispatch_piper_claim_once_if_applicable,
     )
+    from .production_dispatch_invocation_playtest_owner import (
+        dispatch_playtest_claim_once_if_applicable,
+    )
     from .production_dispatch_invocation_runtime_owner import (
         dispatch_runtime_claim_once_if_applicable,
     )
@@ -208,6 +211,12 @@ def _dispatch_claim_once_three_owner(
     )
     if runtime_observation is not None:
         return runtime_observation
+
+    playtest = dispatch_playtest_claim_once_if_applicable(
+        runtime, claim_id, expected_claim_revision
+    )
+    if playtest is not None:
+        return playtest
 
     image = dispatch_image_claim_once_if_applicable(
         runtime,

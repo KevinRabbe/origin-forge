@@ -33,6 +33,11 @@ from .production_work_order_pixelorama import (
     PIXELORAMA_CONTRACT_ID,
     PixeloramaSpritesheetExportDispatchValidator,
 )
+from .production_work_order_playtest import (
+    PLAYTEST_ADAPTER_ID,
+    PLAYTEST_CONTRACT_ID,
+    CooperativePlaytestDispatchValidator,
+)
 from .production_work_order_runtime import (
     RUNTIME_ADAPTER_ID,
     RUNTIME_CONTRACT_ID,
@@ -87,7 +92,6 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
         "originforge.vision.inspect",
         "originforge.audio.ffmpeg",
         "originforge.audio.piper",
-        "originforge.playtest.cooperative",
     )
     rows = [
         BuiltinDispatchReview(
@@ -119,6 +123,11 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
             RUNTIME_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
             "runtime observation accepts one exact protected OBS request while target execution and evidence remain evidence-only infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            PLAYTEST_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "cooperative playtesting accepts one exact protected PLAYSCEN request while harness execution and evidence remain evidence-only infrastructure-owned",
         ),
     ]
     rows.extend(
@@ -301,6 +310,7 @@ def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
         ImageGenerationDispatchValidator(),
         PiperSpeechDispatchValidator(),
         RuntimeObservationDispatchValidator(),
+        CooperativePlaytestDispatchValidator(),
     )
 
 
@@ -427,6 +437,23 @@ def _runtime_contract(adapter) -> DispatchContract:
     )
 
 
+def _playtest_contract(adapter) -> DispatchContract:
+    validator = CooperativePlaytestDispatchValidator()
+    return DispatchContract(
+        contract_id=PLAYTEST_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.PLAYTEST_SCENARIO,),
+        max_payload_bytes=2,
+        max_input_refs=1,
+    )
+
+
 def build_builtin_dispatch_catalog(
     phase32_catalog: CapabilityCatalog,
 ) -> DispatchContractCatalog:
@@ -451,8 +478,9 @@ def build_builtin_dispatch_catalog(
     image = adapters.get(IMAGE_ADAPTER_ID)
     piper = adapters.get(PIPER_ADAPTER_ID)
     runtime_observer = adapters.get(RUNTIME_ADAPTER_ID)
+    playtest = adapters.get(PLAYTEST_ADAPTER_ID)
     reviewed_non_code = tuple(
-        value for value in (simulation, pixelorama, blender, image, piper, runtime_observer) if value is not None
+        value for value in (simulation, pixelorama, blender, image, piper, runtime_observer, playtest) if value is not None
     )
     if len(reviewed_non_code) > 1:
         raise ValueError(
@@ -484,4 +512,6 @@ def build_builtin_dispatch_catalog(
         return DispatchContractCatalog.create(
             phase32_catalog, (_runtime_contract(runtime_observer),)
         )
+    if playtest is not None:
+        return DispatchContractCatalog.create(phase32_catalog, (_playtest_contract(playtest),))
     raise ValueError("Phase-32 catalog lacks a reviewed Phase-33 dispatch adapter")
