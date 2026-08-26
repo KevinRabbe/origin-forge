@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stdout
 
 import origin_forge.blender_admin_cli as blender_admin_cli
-from .test_phase53a_blender_production_task_acceptance import (
+from test_phase53a_blender_production_task_acceptance import (
     Phase53ABlenderProductionTaskAcceptanceTests,
 )
 

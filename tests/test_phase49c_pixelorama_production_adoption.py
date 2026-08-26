@@ -27,7 +27,7 @@ from origin_forge.production_pixelorama_dispatch_output_binding_read import (
 )
 from origin_forge.production_pixelorama_export import PixeloramaCliExportService
 from origin_forge.service import utc_now
-from .test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
+from test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
 
 
 class Phase49CPixeloramaProductionAdoptionTests(unittest.TestCase):

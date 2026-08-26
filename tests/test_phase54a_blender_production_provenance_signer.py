@@ -24,7 +24,7 @@ from origin_forge.production_blender_provenance_signer import (
 from origin_forge.provenance_crypto import OpenSslEd25519Backend
 from origin_forge.provenance_models import OperationalKeyPurpose
 from origin_forge.provenance_service import ProvenanceService
-from .test_phase53a_blender_production_task_acceptance import (
+from test_phase53a_blender_production_task_acceptance import (
     Phase53ABlenderProductionTaskAcceptanceTests,
 )
 

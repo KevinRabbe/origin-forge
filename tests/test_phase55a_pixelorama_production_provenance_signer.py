@@ -24,10 +24,10 @@ from origin_forge.production_pixelorama_task_acceptor import (
 from origin_forge.provenance_crypto import OpenSslEd25519Backend
 from origin_forge.provenance_models import OperationalKeyPurpose
 from origin_forge.provenance_service import ProvenanceService
-from .test_phase50a_pixelorama_production_task_acceptance import (
+from test_phase50a_pixelorama_production_task_acceptance import (
     Phase50APixeloramaProductionTaskAcceptanceTests,
 )
-from .test_phase54a_blender_production_provenance_signer import (
+from test_phase54a_blender_production_provenance_signer import (
     Phase54ABlenderProductionProvenanceSignerTests,
 )
 

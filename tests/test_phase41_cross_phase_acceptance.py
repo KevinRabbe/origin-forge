@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 import origin_forge.production_preparation_planner_resume as planner_resume_module
-from . import test_phase39_preparation_acceptance as phase39
+import test_phase39_preparation_acceptance as phase39
 from origin_forge.production_preparation_admission import (
     PreparationAdmissionStatus,
     inspect_materialization_preparation_eligibility_readonly,

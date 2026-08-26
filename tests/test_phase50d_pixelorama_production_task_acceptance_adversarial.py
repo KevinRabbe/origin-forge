@@ -34,7 +34,7 @@ from origin_forge.production_pixelorama_task_acceptor import (
 )
 from origin_forge.service import StaleRevision
 from origin_forge.state import RunStatus
-from .test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
+from test_phase48f_pixelorama_invocation import Phase48FPixeloramaInvocationTests
 
 
 class Phase50DPixeloramaProductionTaskAcceptanceAdversarialTests(unittest.TestCase):

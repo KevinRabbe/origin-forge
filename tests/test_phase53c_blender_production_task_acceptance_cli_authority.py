@@ -9,7 +9,7 @@ from pathlib import Path
 
 import origin_forge.blender_admin_cli as blender_admin_cli
 import origin_forge.production_blender_task_acceptor as acceptor_module
-from .test_phase53a_blender_production_task_acceptance import (
+from test_phase53a_blender_production_task_acceptance import (
     Phase53ABlenderProductionTaskAcceptanceTests,
 )
 

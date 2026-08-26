@@ -110,7 +110,10 @@ class MediaFingerprintStoreTests(unittest.TestCase):
         root.mkdir()
         target = self.runtime.state_dir / "outside-fingerprints"
         target.mkdir()
-        (root / "fingerprints").symlink_to(target, target_is_directory=True)
+        try:
+            (root / "fingerprints").symlink_to(target, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlink capability unavailable: {exc}")
         with self.assertRaisesRegex(MediaFingerprintStoreError, "may not be a symlink"):
             self.store.publish_fingerprint(left)
 

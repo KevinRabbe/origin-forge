@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import patch
 
-from . import test_phase49b_pixelorama_output_recovery as phase49b
+import test_phase49b_pixelorama_output_recovery as phase49b
 from origin_forge.pixelorama_admin_cli import main as pixelorama_admin_main
 from origin_forge.production_dispatch_claim_models import DispatchClaimStatus
 from origin_forge.production_dispatch_claim_read import read_dispatch_claim

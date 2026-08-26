@@ -24,7 +24,7 @@ from origin_forge.production_blender_dispatch_output_binding import (
 from origin_forge.production_blender_export import BlenderExportService
 from origin_forge.production_dispatch_invocation import dispatch_claim_once
 from origin_forge.service import utc_now
-from .test_phase51e_blender_invocation import Phase51EBlenderInvocationTests
+from test_phase51e_blender_invocation import Phase51EBlenderInvocationTests
 
 
 class Phase52BBlenderProductionAdoptionTests(unittest.TestCase):

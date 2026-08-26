@@ -27,7 +27,7 @@ from origin_forge.production_blender_task_acceptance import (
     read_blender_production_task_acceptance,
 )
 from origin_forge.production_dispatch_read import read_dispatch_binding
-from .test_phase52b_blender_production_adoption import (
+from test_phase52b_blender_production_adoption import (
     Phase52BBlenderProductionAdoptionTests,
 )
 

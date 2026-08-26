@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 import origin_forge.production_manager_advance_once as advance_module
-from . import test_phase40_manager_advance_acceptance as phase40
+import test_phase40_manager_advance_acceptance as phase40
 from origin_forge.production_manager_advance_admission import (
     ManagerAdvanceActionKind,
     ManagerAdvanceAdmissionStatus,
