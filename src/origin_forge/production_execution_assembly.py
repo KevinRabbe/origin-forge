@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypedDict
 
 from .adapters.comfyui import ComfyUiProfile
 from .audio_profiles import AudioProfileStore, GovernedAudioProfile
@@ -8,6 +9,7 @@ from .blender_adapter import BlenderRuntimeProfile
 from .config import ProjectConfig, load_config
 from .image_workflows import GovernedComfyWorkflowTemplate, ImageWorkflowStore
 from .managed_llamacpp_loader import ManagedLlamaCppCpuLoader
+from .model_runtime_config import ManagedModelRuntimeProviderConfig
 from .model_runtime_registry import (
     ModelRuntimeBinding,
     ModelRuntimeRegistry,
@@ -32,6 +34,7 @@ from .production_dispatch_invocation_piper import PiperInvocationRequest
 from .production_dispatch_read import read_dispatch_binding
 from .production_execution_owner import (
     ProductionExecutionOwnerDescriptor,
+    ProductionExecutionOwnerRegistry,
     build_builtin_execution_owner_registry,
 )
 from .production_execution_owner_image import IMAGE_EXECUTION_OWNER_ID
@@ -147,6 +150,22 @@ class ProductionExecutionDependencyPlan:
     @property
     def plan_hash(self) -> str:
         return content_hash(self.to_dict())
+
+
+class _CommonPlanFields(TypedDict):
+    claim_id: str
+    claim_revision: int
+    task_id: str
+    task_revision: int
+    task_content_hash: str
+    dispatch_binding_id: str
+    dispatch_binding_hash: str
+    request_type_id: str
+    request_schema_hash: str
+    request_content_hash: str
+    owner_id: str
+    owner_fingerprint: str
+    owner_registry_fingerprint: str
 
 
 @dataclass(frozen=True)
@@ -494,7 +513,12 @@ def _role_policies(
     return tuple(result)
 
 
-def _common_plan_fields(claim, binding, owner, owner_registry) -> dict[str, object]:
+def _common_plan_fields(
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry: ProductionExecutionOwnerRegistry,
+) -> _CommonPlanFields:
     return {
         "claim_id": claim.claim_id,
         "claim_revision": claim.revision,
@@ -864,7 +888,7 @@ def _assemble_bounded_retry_dependencies(
 
     profile_ids: list[str] = []
     runtime_ids: set[str] = set()
-    provider_by_runtime: dict[str, object] = {}
+    provider_by_runtime: dict[str, ManagedModelRuntimeProviderConfig] = {}
     for policy in policies:
         for profile_id in policy.ordered_profile_ids:
             profile = scheduling.registry.profile(profile_id)
