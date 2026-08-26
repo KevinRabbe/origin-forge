@@ -44,6 +44,19 @@ The plan projection shows the Goal's Flows, dependency order, Task revisions,
 dependency readiness, and the next bounded operator action. It does not create
 Runs or Workspaces, publish evidence, or transition any lifecycle record.
 
+For a project-wide operator summary, use:
+
+```text
+origin-forge status
+```
+
+In addition to durable Goal, Flow, Task, and Run counts, status reports
+`task_readiness` counts (`READY`, dependency-waiting, active, terminal, and
+fail-closed states) and `operator_actions` counts for attempts, inspection or
+recovery, review, and recovery findings. This projection is read-only and is
+intended to show where the next supervised action is needed without reading
+SQLite or raw logs.
+
 To inspect one correlated production lifecycle across planning, execution,
 workspaces, dispatch, evidence, verification, and review:
 
