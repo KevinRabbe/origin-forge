@@ -14,7 +14,12 @@ from .production_model3d_request_authoring_evidence import (
     Model3DRequestAuthoringEvidenceStore,
     inspect_model3d_request_input,
 )
-from .production_model3d_request_authoring_models import Model3DRequestAuditStatus
+from .production_model3d_request_authoring_models import (
+    Model3DRequestAudit,
+    Model3DRequestAuditStatus,
+    Model3DRequestInput,
+    Model3DRequestProposal,
+)
 from .production_model3d_request_publication_models import (
     Model3DRequestApproval,
     Model3DRequestPublication,
@@ -197,7 +202,7 @@ def _request_for_approval(
     *,
     proposal_id: str,
     audit_id: str,
-) -> tuple[object, object, object, Model3DProductionRequest]:
+) -> tuple[Model3DRequestInput, Model3DRequestProposal, Model3DRequestAudit, Model3DProductionRequest]:
     evidence = Model3DRequestAuthoringEvidenceStore(runtime)
     proposal = evidence.load_proposal(proposal_id)
     audit = evidence.load_audit(audit_id)
