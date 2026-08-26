@@ -182,6 +182,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
                 "resolver.core.verification@1",
                 "resolver.phase.audio-profile@1",
                 "resolver.phase.model3d-request@1",
+                "resolver.phase.runtime-observation-request@1",
             ),
         )
         phase_claims = [
@@ -190,7 +191,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
             if descriptor.resolver_id.startswith("resolver.phase.")
             for claim in descriptor.claims
         ]
-        self.assertEqual(len(phase_claims), 2)
+        self.assertEqual(len(phase_claims), 3)
         claims = {claim.ref_type: claim for claim in phase_claims}
         audio_claim = claims[WorkOrderRefType.AUDIO_PROFILE]
         self.assertEqual(audio_claim.source_id_prefix, "AUDPROF-")
@@ -221,12 +222,20 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
             for value in rows
             if value.status is PhaseSpecificResolverReviewStatus.SUPPORTED
         ]
-        self.assertEqual(supported, ["audio-profile", "model3d-request"])
+        self.assertEqual(
+            supported,
+            ["audio-profile", "model3d-request", "runtime-observation-request"],
+        )
         self.assertTrue(
             all(
                 value.status is not PhaseSpecificResolverReviewStatus.SUPPORTED
                 for value in rows
-                if value.evidence_family not in {"audio-profile", "model3d-request"}
+                if value.evidence_family
+                not in {
+                    "audio-profile",
+                    "model3d-request",
+                    "runtime-observation-request",
+                }
             )
         )
 

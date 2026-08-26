@@ -21,6 +21,10 @@ from .production_dispatch_resolvers import (
 )
 from .production_work_order_models import WorkOrderInputRef, WorkOrderRefType, content_hash
 from .runtime import OriginForgeRuntime
+from .production_runtime_observation_store import (
+    RuntimeObservationRequestStore,
+    RuntimeObservationRequestStoreError,
+)
 
 
 class PhaseSpecificResolverReviewStatus(StrEnum):
@@ -199,6 +203,68 @@ class Model3DRequestInputResolver:
         )
 
 
+class RuntimeObservationRequestInputResolver:
+    """Resolve one exact immutable OBS request without launching the target."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.RUNTIME_OBSERVATION_REQUEST,
+        "OBS-",
+        "RUNTIME_OBSERVATION_REQUEST",
+        "runtime_observation_request",
+    )
+    _PROJECTION_CONTRACT = {
+        "source": "RuntimeObservationRequestStore.get",
+        "hash_semantics": "WorkOrder digest equals RuntimeObservationRequest.content_hash",
+        "revision": None,
+        "backend_invocation": False,
+        "workspace_allocation": False,
+    }
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.phase.runtime-observation-request@1",
+        content_hash(
+            {
+                "implementation_id": "origin-forge-runtime-observation-request-resolver@1",
+                "claim": _CLAIM.to_dict(),
+                "projection_contract": _PROJECTION_CONTRACT,
+            }
+        ),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(self, runtime: OriginForgeRuntime, ref: WorkOrderInputRef) -> ResolvedWorkOrderInput:
+        if not isinstance(ref, WorkOrderInputRef):
+            raise TypeError("ref must be a WorkOrderInputRef")
+        if (
+            ref.ref_type is not WorkOrderRefType.RUNTIME_OBSERVATION_REQUEST
+            or not ref.ref_id.startswith("OBS-")
+            or ref.role != "runtime_observation_request"
+        ):
+            raise DispatchInputResolutionError("WorkOrder ref does not match runtime-observation request claim")
+        if ref.revision is not None:
+            raise DispatchInputResolutionError("runtime observation request refs are not revision-numbered")
+        exact_hash = "sha256:" + ref.content_hash
+        try:
+            request = RuntimeObservationRequestStore(runtime).get(ref.ref_id, exact_hash)
+        except KeyError as exc:
+            raise DispatchInputResolutionError("runtime observation request is not available under the exact ID/hash") from exc
+        except (RuntimeObservationRequestStoreError, RuntimeError, TypeError, ValueError) as exc:
+            raise DispatchInputResolutionError("runtime observation request failed protected-store revalidation") from exc
+        if request.content_hash != exact_hash:
+            raise DispatchInputResolutionError("runtime observation request content hash drifted")
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="RUNTIME_OBSERVATION_REQUEST",
+            resolution_class="PROTECTED_RUNTIME_OBSERVATION_REQUEST",
+            projection=request.to_dict(),
+        )
+
+
 def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
     """Freeze the evidence-driven resolver inclusion/defer boundary.
 
@@ -239,8 +305,8 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
         ),
         PhaseSpecificResolverReview(
             "runtime-observation-request",
-            PhaseSpecificResolverReviewStatus.DEFERRED_NO_TYPED_READER,
-            "OBS request data is operation/workspace-bound and has no direct exact OBS reader; resolver scanning is forbidden",
+            PhaseSpecificResolverReviewStatus.SUPPORTED,
+            "OBS requests are content-addressed and RuntimeObservationRequestStore.get performs exact non-creating canonical/symlink-safe revalidation",
         ),
         PhaseSpecificResolverReview(
             "phase-specific-evidence",
@@ -252,7 +318,11 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
 
 
 def phase_specific_input_resolvers() -> tuple[WorkOrderInputResolver, ...]:
-    return (AudioProfileInputResolver(), Model3DRequestInputResolver())
+    return (
+        AudioProfileInputResolver(),
+        Model3DRequestInputResolver(),
+        RuntimeObservationRequestInputResolver(),
+    )
 
 
 def build_dispatch_input_resolver_registry() -> WorkOrderInputResolverRegistry:
