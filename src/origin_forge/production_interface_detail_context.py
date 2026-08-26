@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from html import escape
-from typing import Iterable, Mapping
 
 from .production_interface_snapshot import ProductionInterfaceSnapshot
-
 
 _STYLE_MARKER = "</style>"
 _DETAIL_TABLE_MARKER = '<div class="table-shell"><table>'
@@ -219,7 +218,10 @@ def _relationship_items(
         scoped_rules = sum(
             1
             for value in snapshot.design_rules
-            if object_id in value.get("scope_entity_ids", ())
+            if (
+                isinstance(value.get("scope_entity_ids"), (list, tuple))
+                and object_id in value["scope_entity_ids"]
+            )
         )
         items.extend(
             (
