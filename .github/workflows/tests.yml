@@ -13,6 +13,51 @@ permissions:
   contents: read
 
 jobs:
+  fast:
+    name: Fast core / Python 3.12
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run fast core tests
+        env:
+          PYTHONPATH: src
+        run: >-
+          python -W error::ResourceWarning -m unittest -q
+          tests.test_config tests.test_state tests.test_task_dependencies
+          tests.test_doctor_and_version tests.test_worker tests.test_workspaces
+
+  integration-security:
+    name: Integration and security / Python 3.12
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run governed integration and security tests
+        env:
+          PYTHONPATH: src
+        run: >-
+          python -W error::ResourceWarning -m unittest -q
+          tests.test_migrations tests.test_production_dispatch_binding
+          tests.test_production_dispatch_claim_lifecycle
+          tests.test_production_dispatch_execution
+          tests.test_production_dispatch_invocation
+          tests.test_production_execution_assembly
+          tests.test_phase57a_model3d_request_authoring
+          tests.test_phase57b_model3d_request_publication
+
   quality:
     name: Quality / Python 3.12
     runs-on: ubuntu-latest
