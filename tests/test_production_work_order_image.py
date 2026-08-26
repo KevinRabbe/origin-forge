@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import unittest
 
+from origin_forge.ids import IdKind, new_id
+from origin_forge.image_vision_models import ImageOperationBudget
+from origin_forge.production_dispatch_binding_image import ImageGenerationInputBinder
+from origin_forge.production_dispatch_invocation_image import (
+    ImageGenerationInvocationError,
+    ImageGenerationInvocationRequest,
+)
+from origin_forge.production_execution_owner_image import (
+    image_generation_execution_owner_descriptor,
+)
 from origin_forge.production_work_order_image import (
     IMAGE_REQUEST_TYPE_ID,
     ImageGenerationDispatchValidator,
 )
-from origin_forge.production_dispatch_binding_image import ImageGenerationInputBinder
-from origin_forge.production_execution_owner_image import image_generation_execution_owner_descriptor
+from origin_forge.production_work_order_models import content_hash
 from origin_forge.production_work_order_validators import DispatchValidatorError
 
 
@@ -86,3 +95,22 @@ class ImageWorkOrderValidatorTests(unittest.TestCase):
         duplicate["output_relative_paths"] = ["exports/robot.png", "exports/ROBOT.PNG"]
         with self.assertRaisesRegex(DispatchValidatorError, "distinct"):
             validator.validate(duplicate, ())
+
+    def test_typed_invocation_recomputes_the_frozen_projection_hash(self) -> None:
+        task_id = new_id(IdKind.TASK)
+        projection = {"task_id": task_id, **ImageGenerationDispatchValidator().validate(_payload(), ())}
+        # The binder projection stores budget scalars, not the validator's helper object.
+        projection.pop("budget")
+        request_hash = content_hash(projection)
+        request = ImageGenerationInvocationRequest.from_projection(projection, request_hash)
+        self.assertEqual(request.task_id, task_id)
+        self.assertEqual(request.budget, ImageOperationBudget(300, 64 * 1024 * 1024, 4 * 1024 * 1024))
+
+    def test_typed_invocation_rejects_hash_and_projection_drift(self) -> None:
+        task_id = new_id(IdKind.TASK)
+        projection = {"task_id": task_id, **_payload()}
+        with self.assertRaises(ImageGenerationInvocationError):
+            ImageGenerationInvocationRequest.from_projection(projection, "0" * 64)
+        projection["unexpected"] = True
+        with self.assertRaisesRegex(ImageGenerationInvocationError, "unknown or missing"):
+            ImageGenerationInvocationRequest.from_projection(projection, "0" * 64)
