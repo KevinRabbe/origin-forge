@@ -14,7 +14,11 @@ from .context_preview import build_context_preview
 from .doctor import inspect_project
 from .orchestration_cli import main as bounded_attempt_main
 from .patches import PatchValidationError
-from .pixelorama_source import import_pixelorama_source, inspect_pixelorama_source
+from .pixelorama_source import (
+    import_pixelorama_source,
+    inspect_pixelorama_source,
+    replace_pixelorama_source,
+)
 from .plan import inspect_goal_plan
 from .production_goal_bootstrap_operator import (
     GoalBootstrapOperatorBlocked,
@@ -159,6 +163,9 @@ def build_parser() -> argparse.ArgumentParser:
     source_import.add_argument("path")
     source_inspect = source_sub.add_parser("inspect", help="inspect one governed source read-only")
     source_inspect.add_argument("artifact_id")
+    source_replace = source_sub.add_parser("replace", help="replace one source explicitly")
+    source_replace.add_argument("artifact_id")
+    source_replace.add_argument("path")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -386,6 +393,9 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.source_command == "inspect":
             _print(inspect_pixelorama_source(runtime, args.artifact_id).to_dict())
+            return 0
+        if args.source_command == "replace":
+            _print(replace_pixelorama_source(runtime, args.artifact_id, args.path).to_dict())
             return 0
 
     if args.command == "goal":

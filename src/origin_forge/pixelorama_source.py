@@ -48,13 +48,9 @@ class PixeloramaSourceInspection:
         }
 
 
-def import_pixelorama_source(
-    runtime: OriginForgeRuntime,
-    source_path: str,
-) -> PixeloramaSourceImportResult:
-    """Explicitly register an existing project-contained Pixelorama source."""
-    if not isinstance(runtime, OriginForgeRuntime):
-        raise TypeError("runtime must be an OriginForgeRuntime")
+def _read_source_file(
+    runtime: OriginForgeRuntime, source_path: str
+) -> tuple[Path, str, int, str]:
     try:
         relative = portable_relative_path(source_path)
     except ValueError as exc:
@@ -75,6 +71,17 @@ def import_pixelorama_source(
     if byte_count <= 0 or byte_count > 256 * 1024 * 1024:
         raise PixeloramaSourceImportError("Pixelorama source byte count is outside bounds")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    return path, relative.as_posix(), byte_count, digest
+
+
+def import_pixelorama_source(
+    runtime: OriginForgeRuntime,
+    source_path: str,
+) -> PixeloramaSourceImportResult:
+    """Explicitly register an existing project-contained Pixelorama source."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    _, relative_path, byte_count, digest = _read_source_file(runtime, source_path)
     lineage = OriginForgeLineage(runtime)
     with runtime.store.session() as conn:
         existing = conn.execute(
@@ -82,7 +89,7 @@ def import_pixelorama_source(
                WHERE project_id = ? AND type = 'PIXELORAMA_PROJECT'
                  AND path_or_uri = ? AND content_hash = ?
                ORDER BY rowid DESC LIMIT 1""",
-            (runtime.project_id(), relative.as_posix(), digest),
+            (runtime.project_id(), relative_path, digest),
         ).fetchone()
         if existing is not None:
             verification = conn.execute(
@@ -96,7 +103,7 @@ def import_pixelorama_source(
             if verification is not None:
                 return PixeloramaSourceImportResult(
                     str(existing["id"]),
-                    relative.as_posix(),
+                    relative_path,
                     digest,
                     byte_count,
                     str(verification["id"]),
@@ -105,7 +112,7 @@ def import_pixelorama_source(
         runtime.store,
         runtime.project_id(),
         artifact_type="PIXELORAMA_PROJECT",
-        path_or_uri=relative.as_posix(),
+        path_or_uri=relative_path,
         status="PRODUCED",
         content_hash=digest,
     )
@@ -119,14 +126,55 @@ def import_pixelorama_source(
         verifier="OriginForge.PixeloramaSourceImporter",
         status="PASS",
         evidence={
-            "source_path": relative.as_posix(),
+            "source_path": relative_path,
             "content_hash": content_hash,
             "byte_count": byte_count,
             "semantic_acceptance": False,
         },
     )
     return PixeloramaSourceImportResult(
-        artifact_id, relative.as_posix(), content_hash, byte_count, verification_id
+        artifact_id, relative_path, content_hash, byte_count, verification_id
+    )
+
+
+def replace_pixelorama_source(
+    runtime: OriginForgeRuntime,
+    previous_artifact_id: str,
+    source_path: str,
+) -> PixeloramaSourceImportResult:
+    """Register a new immutable source revision linked to an exact predecessor."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    previous = inspect_pixelorama_source(runtime, previous_artifact_id).artifact
+    _, relative_path, byte_count, digest = _read_source_file(runtime, source_path)
+    lineage = OriginForgeLineage(runtime)
+    artifact_id = create_artifact(
+        runtime.store,
+        runtime.project_id(),
+        artifact_type="PIXELORAMA_PROJECT",
+        path_or_uri=relative_path,
+        parent_artifact_id=previous_artifact_id,
+        status="PRODUCED",
+        content_hash=digest,
+    )
+    content_hash = lineage.get_artifact(artifact_id).get("content_hash")
+    if content_hash != digest:
+        raise RuntimeInvariantError("replaced Pixelorama source did not receive a content hash")
+    verification_id = lineage.record_artifact_verification(
+        artifact_id,
+        verification_type="pixelorama-source-replacement-integrity",
+        verifier="OriginForge.PixeloramaSourceReplacer",
+        status="PASS",
+        evidence={
+            "source_path": relative_path,
+            "content_hash": content_hash,
+            "byte_count": byte_count,
+            "supersedes_artifact_id": previous["id"],
+            "semantic_acceptance": False,
+        },
+    )
+    return PixeloramaSourceImportResult(
+        artifact_id, relative_path, content_hash, byte_count, verification_id
     )
 
 
