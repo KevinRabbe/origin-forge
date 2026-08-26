@@ -9,7 +9,10 @@ from dataclasses import replace
 import origin_forge.production_dispatch_binding_core as binding_core_module
 import origin_forge.production_dispatch_binding_pixelorama as pixelorama_binding_module
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
-from origin_forge.production_capability_models import CapabilityCatalog, CapabilityRoutingPolicy
+from origin_forge.production_capability_models import (
+    CapabilityCatalog,
+    CapabilityRoutingPolicy,
+)
 from origin_forge.production_capability_store import ProductionCapabilityStore
 from origin_forge.production_dispatch_binding import (
     CodeBoundedRetryInputBinder,
@@ -29,7 +32,9 @@ from origin_forge.production_dispatch_binding_pixelorama import (
     PIXELORAMA_BINDER_ID,
     PIXELORAMA_REQUEST_TYPE_ID,
 )
-from origin_forge.production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
+from origin_forge.production_dispatch_phase_resolvers import (
+    build_dispatch_input_resolver_registry,
+)
 from origin_forge.production_work_order_audit import audit_work_order_frozen
 from origin_forge.production_work_order_builtin import (
     build_builtin_dispatch_catalog,
@@ -206,23 +211,37 @@ class Phase48BPixeloramaRequestBindingTests(unittest.TestCase):
         self.assertEqual(
             tuple(value.binder_id for value in first.descriptors),
             (
+                "binder.audio.piper-tts@1",
                 "binder.blender.export-glb@1",
                 "binder.code.bounded-retry@1",
+                "binder.image.generate@1",
                 PIXELORAMA_BINDER_ID,
+                "binder.playtest.cooperative@1",
+                "binder.runtime.observe@1",
                 "binder.simulation.deterministic@1",
             ),
         )
-        self.assertEqual(first.descriptors[1], CodeBoundedRetryInputBinder().descriptor)
+        descriptors = {value.binder_id: value for value in first.descriptors}
         self.assertEqual(
-            first.descriptors[2],
+            descriptors["binder.code.bounded-retry@1"],
+            CodeBoundedRetryInputBinder().descriptor,
+        )
+        self.assertEqual(
+            descriptors[PIXELORAMA_BINDER_ID],
             PixeloramaSpritesheetExportInputBinder().descriptor,
         )
         self.assertEqual(
-            first.descriptors[3],
+            descriptors["binder.simulation.deterministic@1"],
             DeterministicSimulationInputBinder().descriptor,
         )
-        self.assertEqual(first.descriptors[2].accepted_input_roles, (PIXELORAMA_SOURCE_ROLE,))
-        self.assertEqual(first.descriptors[2].dispatch_contract_id, PIXELORAMA_CONTRACT_ID)
+        self.assertEqual(
+            descriptors[PIXELORAMA_BINDER_ID].accepted_input_roles,
+            (PIXELORAMA_SOURCE_ROLE,),
+        )
+        self.assertEqual(
+            descriptors[PIXELORAMA_BINDER_ID].dispatch_contract_id,
+            PIXELORAMA_CONTRACT_ID,
+        )
 
     def test_wrong_artifact_type_or_status_fails_before_binding(self) -> None:
         wrong_type_id = create_artifact(
