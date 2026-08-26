@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from .dream_read import DreamReadService
 from .model_resource_read import inspect_model_resources
@@ -69,7 +69,7 @@ def _goal_projection(row: dict[str, Any]) -> dict[str, object]:
     return {
         "id": row["id"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "priority": int(row["priority"]),
         "objective": objective,
         "objective_truncated": truncated,
@@ -85,7 +85,7 @@ def _flow_projection(row: dict[str, Any]) -> dict[str, object]:
         "id": row["id"],
         "goal_id": row["goal_id"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "controller": controller,
         "controller_truncated": controller_truncated,
         "blocked_reason": blocked_reason,
@@ -102,7 +102,7 @@ def _task_projection(row: dict[str, Any]) -> dict[str, object]:
         "flow_id": row["flow_id"],
         "parent_task_id": row["parent_task_id"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "attempt_count": int(row["attempt_count"]),
         "priority": int(row["priority"]),
         "objective": objective,
@@ -155,7 +155,7 @@ def _entity_projection(row: dict[str, object]) -> dict[str, object]:
         "description": description,
         "description_truncated": description_truncated,
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -169,7 +169,7 @@ def _relation_projection(row: dict[str, object]) -> dict[str, object]:
         "relation_type": row["relation_type"],
         "target_entity_id": row["target_entity_id"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "rationale": rationale,
         "rationale_truncated": rationale_truncated,
         "created_at": row["created_at"],
@@ -188,7 +188,7 @@ def _binding_projection(row: dict[str, object]) -> dict[str, object]:
         "target_ref_truncated": target_ref_truncated,
         "target_hash": row["target_hash"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "metadata_disclosed": False,
@@ -214,7 +214,7 @@ def _design_rule_projection(row: dict[str, object]) -> dict[str, object]:
         "authority": row["authority"],
         "scope_entity_ids": scopes,
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "supersedes_rule_id": row["supersedes_rule_id"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
