@@ -449,7 +449,9 @@ def _playtest_contract(adapter) -> DispatchContract:
         payload_schema_id=validator.payload_schema_id,
         payload_schema_hash=validator.payload_schema_hash,
         allowed_input_ref_types=(WorkOrderRefType.PLAYTEST_SCENARIO,),
-        max_payload_bytes=2,
+        # The payload is intentionally only the operation selector; keep a
+        # small bounded envelope while allowing canonical JSON overhead.
+        max_payload_bytes=128,
         max_input_refs=1,
     )
 

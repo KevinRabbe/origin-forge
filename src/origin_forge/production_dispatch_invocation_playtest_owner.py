@@ -5,6 +5,7 @@ import json
 from .playtest_analysis import PlaytestSummary
 from .playtest_harness import CooperativePlaytestHarness
 from .playtest_service import PlaytestService, PlaytestServiceResult
+from .production_dispatch_binding_playtest import CooperativePlaytestInputBinder
 from .production_dispatch_claim_models import DispatchClaimStatus
 from .production_dispatch_claim_read import read_dispatch_claim
 from .production_dispatch_execution import mark_dispatch_execution_returned
@@ -36,8 +37,18 @@ def dispatch_playtest_claim_once_if_applicable(
     frozen_claim, binding = legacy._read_frozen_request_evidence(
         runtime, claim_id, expected_claim_revision
     )
-    if binding.execution_owner_id != PLAYTEST_EXECUTION_OWNER_ID:
+    descriptor = CooperativePlaytestInputBinder().descriptor
+    if binding.request_type_id != descriptor.request_type_id:
         return None
+    legacy._require_trusted_relation(
+        binding,
+        descriptor=descriptor,
+        expected_owner_id=PLAYTEST_EXECUTION_OWNER_ID,
+        expected_adapter_id="originforge.playtest.cooperative",
+        expected_contract_id="playtest.cooperative@1",
+        expected_binder_id=descriptor.binder_id,
+        expected_request_type_id=descriptor.request_type_id,
+    )
     started = legacy.begin_dispatch_execution(
         runtime, claim_id, expected_claim_revision
     )
@@ -87,6 +98,9 @@ def dispatch_playtest_claim_once_if_applicable(
 def _materialize(runtime, binding):
     fields = set(PlaytestSummary.__dataclass_fields__)
     summary_value = json.loads(binding.summary_json)
+    for key in ("incomplete_encounters", "unmatched_encounter_ends"):
+        if key in summary_value:
+            summary_value[key] = tuple(summary_value[key])
     summary = PlaytestSummary(**{key: summary_value[key] for key in fields})
     return PlaytestServiceResult(
         run_id=binding.run_id,

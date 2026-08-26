@@ -4,6 +4,7 @@ import hashlib
 
 from .image_png import inspect_truecolor8_png
 from .lineage import OriginForgeLineage
+from .production_dispatch_binding_runtime import RuntimeObservationInputBinder
 from .production_dispatch_claim_models import DispatchClaimStatus
 from .production_dispatch_claim_read import read_dispatch_claim
 from .production_dispatch_execution import mark_dispatch_execution_returned
@@ -96,8 +97,18 @@ def dispatch_runtime_claim_once_if_applicable(runtime, claim_id: str, expected_c
     import origin_forge.production_dispatch_invocation as legacy
 
     frozen_claim, binding = legacy._read_frozen_request_evidence(runtime, claim_id, expected_claim_revision)
-    if binding.execution_owner_id != RUNTIME_EXECUTION_OWNER_ID:
+    descriptor = RuntimeObservationInputBinder().descriptor
+    if binding.request_type_id != descriptor.request_type_id:
         return None
+    legacy._require_trusted_relation(
+        binding,
+        descriptor=descriptor,
+        expected_owner_id=RUNTIME_EXECUTION_OWNER_ID,
+        expected_adapter_id="originforge.runtime.observe",
+        expected_contract_id="runtime.observe@1",
+        expected_binder_id=descriptor.binder_id,
+        expected_request_type_id=descriptor.request_type_id,
+    )
     started = legacy.begin_dispatch_execution(runtime, claim_id, expected_claim_revision)
     payload = started.dependencies.payload
     if not isinstance(payload, RuntimeObservationExecutionPayload):
