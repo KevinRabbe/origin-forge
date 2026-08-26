@@ -200,6 +200,19 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(runtime.get_task(task_id)["id"], task_id)
             self.assertTrue(decision_id.startswith("DEC-"))
 
+    def test_review_projection_does_not_expose_adoption_before_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("review-adoption-test")
+            goal_id = runtime.create_goal("build a game")
+            flow_id = runtime.create_flow(goal_id)
+            task_id = runtime.create_task(flow_id, "implement movement")
+            with self.assertRaisesRegex(ValueError, "SUCCEEDED Task"):
+                record_task_review_decision(runtime, task_id, "accept", rationale="ready")
+            # A queued Task remains reviewable, but the projection must not
+            # claim adoption eligibility until a current accepted result exists.
+            self.assertEqual(inspect_task_review(runtime, task_id)["next_action"], "WAIT_FOR_READINESS")
+
     def test_review_accept_requires_verified_succeeded_task(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             runtime = OriginForgeRuntime(Path(directory))

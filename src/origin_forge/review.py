@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .lineage import OriginForgeLineage
@@ -7,6 +8,28 @@ from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import ensure_production_runtime_readable
 from .runtime import OriginForgeRuntime
 from .workspaces import GitWorkspaceManager
+
+
+_ACCEPT_CONTEXT = re.compile(
+    r"^task_id=(?P<task_id>[^;]+); task_revision=(?P<revision>[0-9]+)$"
+)
+
+
+def _has_current_accept(decisions: list[dict[str, Any]], task_id: str, revision: int) -> bool:
+    for decision in decisions:
+        if decision.get("decision") != "ACCEPT":
+            continue
+        context = decision.get("context")
+        if not isinstance(context, str):
+            continue
+        parsed = _ACCEPT_CONTEXT.fullmatch(context)
+        if (
+            parsed is not None
+            and parsed.group("task_id") == task_id
+            and int(parsed.group("revision")) == revision
+        ):
+            return True
+    return False
 
 
 def inspect_task_review(runtime: OriginForgeRuntime, task_id: str) -> dict[str, Any]:
@@ -34,7 +57,11 @@ def inspect_task_review(runtime: OriginForgeRuntime, task_id: str) -> dict[str, 
     elif task["status"] == "RUNNING":
         next_action = "INSPECT_OR_RECOVER"
     elif task["status"] == "SUCCEEDED":
-        next_action = "COMPLETE"
+        next_action = (
+            "ADOPT"
+            if _has_current_accept(decisions, task_id, int(task["revision"]))
+            else "REVIEW_OR_ACCEPT"
+        )
     else:
         next_action = "INSPECT"
     return {
