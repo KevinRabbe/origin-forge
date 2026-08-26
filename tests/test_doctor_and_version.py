@@ -65,6 +65,33 @@ class DoctorTests(unittest.TestCase):
             self.assertTrue(result["ready"])
             self.assertEqual(result["schema_version"], result["expected_schema_version"])
 
+    def test_doctor_reports_optional_tools_without_blocking_readiness(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            OriginForgeRuntime(root).initialize("doctor-tools-test")
+            result = inspect_project(root)
+            tool_checks = {
+                item["name"]: item for item in result["checks"] if item["name"].startswith("tool:")
+            }
+            self.assertEqual(tool_checks["tool:ffmpeg"]["status"], "SKIP")
+            self.assertTrue(result["ready"])
+
+    def test_doctor_rejects_missing_configured_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            OriginForgeRuntime(root).initialize("doctor-configured-tool-test")
+            config = root / ".origin-forge" / "config.toml"
+            missing_tool = (root / "missing" / "ffmpeg.exe").resolve()
+            config_text = config.read_text(encoding="utf-8").replace(
+                "[tools]\n# Optional external capability executables. Values must be absolute paths.",
+                f'[tools]\nffmpeg = "{missing_tool.as_posix()}"',
+            )
+            config.write_text(config_text, encoding="utf-8")
+            result = inspect_project(root)
+            checks = {item["name"]: item for item in result["checks"]}
+            self.assertEqual(checks["tool:ffmpeg"]["status"], "FAIL")
+            self.assertFalse(result["ready"])
+
     def test_context_preview_is_read_only_and_hashes_selected_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

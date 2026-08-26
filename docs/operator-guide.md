@@ -77,6 +77,27 @@ Approved commands are structured argv arrays in `.origin-forge/config.toml`; the
 
 Model execution remains separate and replaceable. The packaged one-attempt command defaults to a loopback llama.cpp-compatible endpoint and does not grant a model arbitrary shell/filesystem authority.
 
+### Configure external tools explicitly
+
+Optional production tools may be pinned in `.origin-forge/config.toml` under
+`[tools]`. Every configured value must be an absolute path; Origin Forge does
+not download tools or silently install them.
+
+```toml
+[tools]
+git = "C:/Program Files/Git/cmd/git.exe"
+blender = "C:/Program Files/Blender Foundation/Blender/blender.exe"
+ffmpeg = "C:/tools/ffmpeg/bin/ffmpeg.exe"
+piper = "C:/tools/piper/piper.exe"
+```
+
+Supported keys are `git`, `podman`, `blender`, `pixelorama`, `ffmpeg`,
+`piper`, `llama_cpp`, and `openssl`. Configured paths take precedence for the
+corresponding capability once that adapter is enabled. A configured path must
+be a regular non-symlink file. Run `origin-forge doctor --strict` to see each
+tool’s status; unconfigured optional tools are reported as `SKIP`, while a
+missing or aliased configured path is an actionable failure.
+
 ## Create durable work state
 
 The control-plane CLI exposes explicit Goal / Flow / Task lifecycle operations:

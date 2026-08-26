@@ -4,7 +4,7 @@ import sqlite3
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .config import load_config
+from .config import EXTERNAL_TOOL_IDS, ExternalToolConfig, load_config
 from .db import SCHEMA_VERSION
 
 
@@ -17,6 +17,28 @@ class DoctorCheck:
 
 def _check(name: str, ok: bool, message: str) -> DoctorCheck:
     return DoctorCheck(name, "PASS" if ok else "FAIL", message)
+
+
+def _tool_check(tool_id: str, tool_config: ExternalToolConfig) -> DoctorCheck:
+    configured = tool_config.path(tool_id)
+    if configured is None:
+        return DoctorCheck(
+            f"tool:{tool_id}",
+            "SKIP",
+            "not configured; capability is unavailable unless its adapter supplies a safe fallback",
+        )
+    path = Path(configured)
+    if path.is_symlink() or not path.is_file():
+        return DoctorCheck(
+            f"tool:{tool_id}",
+            "FAIL",
+            f"configured path is missing, not a regular file, or is an alias: {path}",
+        )
+    return DoctorCheck(
+        f"tool:{tool_id}",
+        "PASS",
+        f"configured absolute path is available (takes precedence for this capability): {path}",
+    )
 
 
 def inspect_project(project_root: str | Path) -> dict[str, object]:
@@ -38,6 +60,7 @@ def inspect_project(project_root: str | Path) -> dict[str, object]:
             checks.append(_check("config_parse", False, f"configuration is invalid: {exc}"))
         else:
             checks.append(_check("config_parse", True, f"configuration version {config.version}"))
+            checks.extend(_tool_check(tool_id, config.external_tools) for tool_id in EXTERNAL_TOOL_IDS)
 
     journals = tuple(Path(str(database) + suffix) for suffix in ("-wal", "-shm", "-journal"))
     active_journals = [str(path.name) for path in journals if path.exists() or path.is_symlink()]
