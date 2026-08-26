@@ -50,6 +50,7 @@ from .runtime_observation_models import (
 from .runtime_observation_models import (
     content_hash as simulation_content_hash,
 )
+from .runtime_observation_service import RuntimeObservationServiceResult
 from .simulation_models import (
     SimulationInvariant,
     SimulationModelError,
@@ -289,6 +290,7 @@ class CompletedDispatchInvocation:
     pixelorama_result: PixeloramaCliExportServiceResult | None = None
     image_result: ImageGenerationServiceResult | None = None
     audio_result: AudioOperationServiceResult | None = None
+    runtime_result: RuntimeObservationServiceResult | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.execution, DispatchExecution):
@@ -302,7 +304,8 @@ class CompletedDispatchInvocation:
         has_pixelorama = self.pixelorama_result is not None
         has_image = self.image_result is not None
         has_audio = self.audio_result is not None
-        if sum((has_policy, has_simulation, has_pixelorama, has_image, has_audio)) != 1:
+        has_runtime = self.runtime_result is not None
+        if sum((has_policy, has_simulation, has_pixelorama, has_image, has_audio, has_runtime)) != 1:
             raise ProductionDispatchInvocationError(
                 "completed invocation requires exactly one reviewed owner result"
             )
@@ -355,6 +358,14 @@ class CompletedDispatchInvocation:
             ):
                 raise ProductionDispatchInvocationError(
                     "Piper execution requires exactly one AudioOperationServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.runtime.observe@1":
+            if (
+                not isinstance(self.runtime_result, RuntimeObservationServiceResult)
+                or has_policy or has_simulation or has_pixelorama or has_image or has_audio
+            ):
+                raise ProductionDispatchInvocationError(
+                    "runtime observation execution requires exactly one RuntimeObservationServiceResult"
                 )
         else:
             raise ProductionDispatchInvocationError(
