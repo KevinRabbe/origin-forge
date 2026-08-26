@@ -495,5 +495,6 @@ class OriginForgeRuntime:
             "max_verification_failures": config.max_verification_failures,
             "approved_build_commands": list(config.approved_build_commands),
             "approved_test_commands": list(config.approved_test_commands),
+            "external_tools": dict(config.external_tools.paths),
         }
         return result

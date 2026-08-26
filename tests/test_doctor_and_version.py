@@ -68,6 +68,25 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(backup_checks[0]["status"], "SKIP")
             self.assertEqual(result["schema_version"], result["expected_schema_version"])
 
+    def test_status_exposes_configured_external_tools_read_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = OriginForgeRuntime(root)
+            runtime.initialize("status-tools-test")
+            configured = (root / "tools" / "ffmpeg.exe").resolve()
+            config = root / ".origin-forge" / "config.toml"
+            config_text = config.read_text(encoding="utf-8").replace(
+                "[tools]\n# Optional external capability executables. Values must be absolute paths.",
+                f'[tools]\nffmpeg = "{configured.as_posix()}"',
+            )
+            config.write_text(config_text, encoding="utf-8")
+            before = runtime.status()
+            after = runtime.status()
+            self.assertEqual(
+                before["config"]["external_tools"], {"ffmpeg": str(configured)}
+            )
+            self.assertEqual(before, after)
+
     def test_doctor_reports_optional_tools_without_blocking_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
