@@ -4,7 +4,7 @@ import hashlib
 import json
 import sqlite3
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from .ids import IdKind, validate_id
 from .production_capability_store import (
@@ -20,13 +20,14 @@ from .production_design_specification_models import (
     DesignSpecificationInput,
     DesignSpecificationModelError,
     audit_design_specification,
-    canonical_hash,
 )
 from .production_planning_evidence import goal_planning_hash
-from .production_planning_models import PlanningEvidenceRef, ProductionPlanningModelError
+from .production_planning_models import (
+    PlanningEvidenceRef,
+    ProductionPlanningModelError,
+)
 from .runtime import OriginForgeRuntime
 from .service import OriginForgeStore, utc_now
-
 
 _SCHEMA_VERSION = 1
 _MAX_PAYLOAD_BYTES = 1024 * 1024
@@ -447,7 +448,7 @@ def _semantic_snapshot(conn: sqlite3.Connection, project_id: str) -> DesignSeman
         "bindings": binding_payload,
         "design_rules": rule_payload,
     }
-    context = {
+    context: dict[str, object] = {
         "entities": [
             {
                 "id": value["id"],
