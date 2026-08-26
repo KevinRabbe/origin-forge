@@ -153,6 +153,11 @@ class ImageGenerationInvocationRequest:
             raise ImageGenerationInvocationError(
                 "image invocation projection has unknown or missing fields"
             )
+        task_id = projection.get("task_id")
+        if not isinstance(task_id, str):
+            raise ImageGenerationInvocationError(
+                "image invocation projection task_id must be text"
+            )
         try:
             validator_payload = {
                 key: value for key, value in projection.items() if key != "task_id"
@@ -165,7 +170,7 @@ class ImageGenerationInvocationRequest:
             )
             budget = ImageOperationBudget(**normalized.pop("budget"))
             value = cls(
-                task_id=projection["task_id"],
+                task_id=task_id,
                 backend_version=normalized["backend_version"],
                 workflow_id=normalized["workflow_id"],
                 workflow_hash=normalized["workflow_hash"],
