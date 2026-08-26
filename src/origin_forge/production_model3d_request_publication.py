@@ -130,6 +130,68 @@ def read_model3d_request_publication(
         return value
 
 
+def require_current_model3d_publication(
+    runtime: OriginForgeRuntime,
+    *,
+    task_id: str,
+    request_id: str,
+    request_hash: str,
+) -> Model3DRequestPublication:
+    """Require the exact current Phase-57 publication for Blender admission."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    if not validate_id(task_id, IdKind.TASK):
+        raise ValueError("task_id must be a TASK ID")
+    if not validate_id(request_id, IdKind.MODEL3D_REQUEST):
+        raise ValueError("request_id must be a MODEL3DREQ ID")
+    if not isinstance(request_hash, str) or not request_hash.startswith("sha256:"):
+        raise ValueError("request_hash must be a sha256-prefixed digest")
+    with production_read_connection(runtime) as conn:
+        rows = conn.execute(
+            "SELECT publication_id FROM model3d_request_publications WHERE task_id = ?",
+            (task_id,),
+        ).fetchall()
+        if len(rows) != 1:
+            raise Model3DRequestPublicationError(
+                "Blender admission requires exactly one Phase-57 publication for the Task"
+            )
+        publication = _load_publication_conn(conn, rows[0]["publication_id"])
+        if (
+            publication.task_id != task_id
+            or publication.request_id != request_id
+            or publication.request_hash != request_hash
+        ):
+            raise Model3DRequestPublicationError(
+                "Blender admission request does not match the exact Phase-57 publication"
+            )
+        approval = _load_approval_conn(conn, publication.approval_id)
+        if approval.project_id != runtime.project_id():
+            raise Model3DRequestPublicationError("Phase-57 publication belongs to another project")
+        if (
+            approval.task_id != task_id
+            or approval.request_id != request_id
+            or approval.request_hash != request_hash
+        ):
+            raise Model3DRequestPublicationError("Phase-57 approval relation drifted")
+    evidence = Model3DRequestAuthoringEvidenceStore(runtime)
+    inspection = inspect_model3d_request_input(
+        runtime, approval.request_input_id, evidence_store=evidence
+    )
+    if not inspection.current:
+        raise Model3DRequestPublicationError(
+            f"Phase-57 publication is historical: {inspection.stale_reason}"
+        )
+    try:
+        request = Model3DRequestReader(runtime).get(request_id, request_hash)
+    except (KeyError, Model3DRequestError, RuntimeError, TypeError, ValueError) as exc:
+        raise Model3DRequestPublicationError(
+            "Phase-57 publication protected request is unavailable or drifted"
+        ) from exc
+    if request.request_hash != request_hash:
+        raise Model3DRequestPublicationError("Phase-57 protected request hash drifted")
+    return publication
+
+
 def _request_for_approval(
     runtime: OriginForgeRuntime,
     *,

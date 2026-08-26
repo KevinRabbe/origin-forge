@@ -24,9 +24,13 @@ from .production_dispatch_binding_models import (
 from .production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
 from .production_dispatch_resolution_models import InputResolutionBundle
 from .production_dispatch_store import (
+    _MAX_OBJECTS_PER_CATEGORY,
     ProductionDispatchStore,
     ProductionDispatchStoreError,
-    _MAX_OBJECTS_PER_CATEGORY,
+)
+from .production_model3d_request_publication import (
+    Model3DRequestPublicationError,
+    require_current_model3d_publication,
 )
 from .production_preparation_models import (
     PreparationStage,
@@ -47,8 +51,12 @@ from .production_work_order_audit import (
     WorkOrderCurrentnessStatus,
     inspect_work_order_currentness,
 )
+from .production_work_order_blender import BLENDER_ADAPTER_ID
 from .production_work_order_builtin import build_builtin_dispatch_validator_registry
-from .production_work_order_store import ProductionWorkOrderStore, ProductionWorkOrderStoreError
+from .production_work_order_store import (
+    ProductionWorkOrderStore,
+    ProductionWorkOrderStoreError,
+)
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision, utc_now
 
@@ -167,6 +175,23 @@ def _build_stores(runtime: OriginForgeRuntime, receipt: TaskPreparationReceipt):
         raise PreparationReceiptError(
             f"PREP WorkOrder is not CURRENT_READY: {currentness.status.value}"
         )
+    if work_order.selected_adapter_id == BLENDER_ADAPTER_ID:
+        if len(work_order.input_refs) != 1:
+            raise PreparationReceiptError(
+                "Blender WorkOrder must contain exactly one Phase-57 request ref"
+            )
+        request_ref = work_order.input_refs[0]
+        try:
+            require_current_model3d_publication(
+                runtime,
+                task_id=work_order.task_id,
+                request_id=request_ref.ref_id,
+                request_hash=f"sha256:{request_ref.content_hash}",
+            )
+        except (Model3DRequestPublicationError, RuntimeError, TypeError, ValueError) as exc:
+            raise PreparationReceiptError(
+                "Blender WorkOrder is not backed by an exact current Phase-57 publication"
+            ) from exc
     resolvers = build_dispatch_input_resolver_registry()
     binders = build_builtin_dispatch_binder_registry()
     dispatch_store = ProductionDispatchStore(work_order_store, resolvers, binders)
