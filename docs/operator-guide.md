@@ -34,6 +34,16 @@ Before starting or recovering work, inspect one Task's review evidence:
 origin-forge review inspect TASK-...
 ```
 
+Before advancing a Goal, inspect its complete read-only plan projection:
+
+```text
+origin-forge plan inspect GOAL-...
+```
+
+The plan projection shows the Goal's Flows, dependency order, Task revisions,
+dependency readiness, and the next bounded operator action. It does not create
+Runs or Workspaces, publish evidence, or transition any lifecycle record.
+
 This is read-only and combines the Task, Runs, Workspaces, Verifications, and
 Artifacts already recorded for that Task.
 
