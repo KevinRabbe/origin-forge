@@ -17,6 +17,10 @@ from origin_forge.production_image_dispatch_output_binding_models import (
     ImageDispatchOutputBinding,
     ImageDispatchOutputBindingModelError,
 )
+from origin_forge.production_image_dispatch_output_binding import (
+    ImageDispatchOutputBindingError,
+    _binding_from_rows,
+)
 from origin_forge.production_work_order_image import (
     IMAGE_REQUEST_TYPE_ID,
     ImageGenerationDispatchValidator,
@@ -155,3 +159,41 @@ class ImageWorkOrderValidatorTests(unittest.TestCase):
                 ids[IdKind.RUN], ids[IdKind.ARTIFACT], new_id(IdKind.ARTIFACT), (output, duplicate),
                 "f" * 64, 1, "2026-08-26T00:00:00Z",
             )
+
+    def test_image_output_binding_rejects_mixed_or_noncontiguous_rows(self) -> None:
+        base = {
+            "execution_id": new_id(IdKind.DISPATCH_EXECUTION),
+            "claim_id": new_id(IdKind.DISPATCH_CLAIM),
+            "task_id": new_id(IdKind.TASK),
+            "task_revision": 1,
+            "task_content_hash": "a" * 64,
+            "work_order_id": new_id(IdKind.PRODUCTION_WORK_ORDER),
+            "work_order_hash": "b" * 64,
+            "dispatch_binding_id": new_id(IdKind.DISPATCH_BINDING),
+            "dispatch_binding_hash": "c" * 64,
+            "execution_owner_id": "originforge.execution.image.generate@1",
+            "run_id": new_id(IdKind.RUN),
+            "request_artifact_id": new_id(IdKind.ARTIFACT),
+            "result_artifact_id": new_id(IdKind.ARTIFACT),
+            "backend_result_hash": "d" * 64,
+            "schema_version": 1,
+            "created_at": "2026-08-26T00:00:00Z",
+        }
+        def row(index: int, *, task_id: str = base["task_id"]) -> dict[str, object]:
+            return {
+                **base,
+                "output_index": index,
+                "task_id": task_id,
+                "output_artifact_id": new_id(IdKind.ARTIFACT),
+                "output_verification_id": new_id(IdKind.VERIFICATION),
+                "output_relative_path": f"exports/{index}.png",
+                "output_content_hash": "e" * 64,
+                "output_pixel_hash": "f" * 64,
+                "output_width": 2,
+                "output_height": 2,
+                "output_byte_count": 10,
+            }
+        with self.assertRaisesRegex(ImageDispatchOutputBindingError, "contiguous"):
+            _binding_from_rows([row(0), row(2)])
+        with self.assertRaisesRegex(ImageDispatchOutputBindingError, "disagree"):
+            _binding_from_rows([row(0), row(1, task_id=new_id(IdKind.TASK))])

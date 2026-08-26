@@ -28,6 +28,37 @@ def _binding_from_rows(rows) -> ImageDispatchOutputBinding:
         raise ImageDispatchOutputBindingError("image dispatch-output binding does not exist")
     first = rows[0]
     try:
+        indices = [int(row["output_index"]) for row in rows]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ImageDispatchOutputBindingError("stored image output indices are invalid") from exc
+    if indices != list(range(len(rows))):
+        raise ImageDispatchOutputBindingError(
+            "stored image output indices are not contiguous and canonical"
+        )
+    shared_fields = (
+        "execution_id",
+        "claim_id",
+        "task_id",
+        "task_revision",
+        "task_content_hash",
+        "work_order_id",
+        "work_order_hash",
+        "dispatch_binding_id",
+        "dispatch_binding_hash",
+        "execution_owner_id",
+        "run_id",
+        "request_artifact_id",
+        "result_artifact_id",
+        "backend_result_hash",
+        "schema_version",
+        "created_at",
+    )
+    for row in rows[1:]:
+        if any(row[field] != first[field] for field in shared_fields):
+            raise ImageDispatchOutputBindingError(
+                "stored image output rows disagree on shared execution relation"
+            )
+    try:
         outputs = tuple(
             ImageDispatchOutput(
                 relative_path=row["output_relative_path"],
