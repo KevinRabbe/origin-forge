@@ -11,6 +11,7 @@ from origin_forge.context_preview import build_context_preview
 from origin_forge.doctor import inspect_project
 from origin_forge.plan import inspect_goal_plan
 from origin_forge.production_trace import inspect_task_production_trace
+from origin_forge.pixelorama_source import PixeloramaSourceImportError, import_pixelorama_source
 from origin_forge.review import inspect_task_review, record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.task_dependencies import add_task_dependency
@@ -34,6 +35,7 @@ class DoctorTests(unittest.TestCase):
         plan = parser.parse_args(["plan", "inspect", "GOAL-EXAMPLE"])
         adopt = parser.parse_args(["adopt", "TASK-EXAMPLE", "--revision", "2"])
         trace = parser.parse_args(["production", "trace", "TASK-EXAMPLE"])
+        source_import = parser.parse_args(["production", "source", "import", "assets/player.pxo"])
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
             for kind in ("goal", "flow", "task")
@@ -56,6 +58,8 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(adopt.revision, 2)
         self.assertEqual(trace.production_command, "trace")
         self.assertEqual(trace.task_id, "TASK-EXAMPLE")
+        self.assertEqual(source_import.source_command, "import")
+        self.assertEqual(source_import.path, "assets/player.pxo")
         self.assertEqual(
             [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
             ["inspect", "inspect", "inspect"],
@@ -204,6 +208,21 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(result["next_action"], "ADVANCE")
             self.assertEqual(before["tasks"], after["tasks"])
             self.assertEqual(before["runs"], after["runs"])
+
+    def test_pixelorama_source_import_is_explicit_and_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = OriginForgeRuntime(root)
+            runtime.initialize("pixelorama-source-test")
+            source = root / "assets" / "player.pxo"
+            source.parent.mkdir()
+            source.write_bytes(b"pixelorama-source")
+            result = import_pixelorama_source(runtime, "assets/player.pxo")
+            self.assertTrue(result.artifact_id.startswith("ART-"))
+            self.assertTrue(result.verification_id.startswith("VER"))
+            self.assertEqual(result.relative_path, "assets/player.pxo")
+            with self.assertRaisesRegex(PixeloramaSourceImportError, r"\.pxo"):
+                import_pixelorama_source(runtime, "assets/player.png")
 
     def test_review_decision_is_human_lineage_without_task_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -25,6 +25,7 @@ from .production_goal_bootstrap_operator import (
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .production_trace import inspect_task_production_trace
+from .pixelorama_source import import_pixelorama_source
 from .repository import RepositoryAccessError
 from .review import inspect_task_review, record_task_review_decision
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
@@ -152,6 +153,10 @@ def build_parser() -> argparse.ArgumentParser:
     production_sub = production.add_subparsers(dest="production_command", required=True)
     trace = production_sub.add_parser("trace", help="inspect one correlated Task lifecycle")
     trace.add_argument("task_id")
+    source = production_sub.add_parser("source", help="manage governed Pixelorama sources")
+    source_sub = source.add_subparsers(dest="source_command", required=True)
+    source_import = source_sub.add_parser("import", help="register one explicit project source")
+    source_import.add_argument("path")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -373,6 +378,10 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "production" and args.production_command == "trace":
         _print(inspect_task_production_trace(runtime, args.task_id))
         return 0
+    if args.command == "production" and args.production_command == "source":
+        if args.source_command == "import":
+            _print(import_pixelorama_source(runtime, args.path).to_dict())
+            return 0
 
     if args.command == "goal":
         if args.goal_command == "bootstrap":

@@ -54,6 +54,16 @@ origin-forge production trace TASK-...
 The trace is read-only and reports the next action as `ADVANCE`, `REVIEW`, or
 `RECOVER`. It does not infer acceptance or adoption authority.
 
+Pixelorama source state must enter the governed workflow explicitly:
+
+```text
+origin-forge production source import assets/player.pxo
+```
+
+This creates a `PIXELORAMA_PROJECT` source Artifact and integrity Verification
+for a project-contained, non-symlink `.pxo` file. It does not perform semantic
+acceptance, export, adoption, or signing.
+
 This is read-only and combines the Task, Runs, Workspaces, Verifications, and
 Artifacts already recorded for that Task.
 
