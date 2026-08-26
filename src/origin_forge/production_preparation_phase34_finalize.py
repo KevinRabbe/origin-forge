@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 from .ids import IdKind, validate_id
 from .production_capability_store import ProductionCapabilityStore
@@ -105,11 +106,15 @@ class PreparationPhase34FinalizeResult:
         }
 
 
+class _CanonicalDictModel(Protocol):
+    def to_dict(self) -> dict[str, object]: ...
+
+
 def _detail(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"[:4096]
 
 
-def _semantic_dict(value: object, id_field: str) -> dict[str, object]:
+def _semantic_dict(value: _CanonicalDictModel, id_field: str) -> dict[str, object]:
     payload = dict(value.to_dict())
     payload.pop(id_field)
     return payload
@@ -124,9 +129,7 @@ def _enumerate_ids(
     if not directory.exists():
         return ()
     ids: list[str] = []
-    count = 0
-    for path in directory.iterdir():
-        count += 1
+    for count, path in enumerate(directory.iterdir(), start=1):
         if count > _MAX_OBJECTS_PER_CATEGORY:
             raise OverflowError(f"{category} scan limit exceeded")
         if path.is_symlink() or not path.is_file() or path.suffix != ".json":
@@ -484,7 +487,16 @@ def finalize_preparation_phase34(
     if receipt.status is PreparationStatus.READY and receipt.stage is PreparationStage.BOUND:
         try:
             bundle, binding, audit = _validate_ready_checkpoint(runtime, receipt)
-        except Exception as exc:
+        except (
+            PreparationReceiptError,
+            ProductionPreparationPolicyStoreError,
+            ProductionWorkOrderStoreError,
+            ProductionDispatchStoreError,
+            DispatchBindingError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:
             return PreparationPhase34FinalizeResult(
                 PreparationPhase34FinalizeStatus.INVALID_AUTHORITY,
                 preparation_id,
@@ -527,6 +539,8 @@ def finalize_preparation_phase34(
         )
 
     try:
+        if receipt.work_order_id is None or receipt.work_order_audit_id is None:
+            raise PreparationReceiptError("PREP lacks exact audited Phase-33 authority")
         _, _, store, _, _, _, _ = _build_stores(runtime, receipt)
         bundle, reused_bundle = _select_or_publish_bundle(
             store,
