@@ -8,7 +8,7 @@ from origin_forge import __version__
 from origin_forge.cli import build_parser
 from origin_forge.context_preview import build_context_preview
 from origin_forge.doctor import inspect_project
-from origin_forge.review import inspect_task_review
+from origin_forge.review import inspect_task_review, record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 
 
@@ -21,6 +21,9 @@ class DoctorTests(unittest.TestCase):
         context = parser.parse_args(["context", "preview", "TASK-EXAMPLE", "--file", "game.py"])
         attempt = parser.parse_args(["attempt", "TASK-EXAMPLE", "--auto-context"])
         review = parser.parse_args(["review", "inspect", "TASK-EXAMPLE"])
+        review_reject = parser.parse_args(
+            ["review", "reject", "TASK-EXAMPLE", "--rationale", "needs revision"]
+        )
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
             for kind in ("goal", "flow", "task")
@@ -34,6 +37,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(attempt.command, "attempt")
         self.assertTrue(attempt.auto_context)
         self.assertEqual(review.review_command, "inspect")
+        self.assertEqual(review_reject.review_command, "reject")
         self.assertEqual(
             [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
             ["inspect", "inspect", "inspect"],
@@ -89,3 +93,20 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(result["runs"], [])
             self.assertEqual(result["workspaces"], [])
             self.assertEqual(result["artifacts"], [])
+
+    def test_review_decision_is_human_lineage_without_task_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("review-decision-test")
+            goal_id = runtime.create_goal("build a game")
+            flow_id = runtime.create_flow(goal_id)
+            task_id = runtime.create_task(flow_id, "implement movement")
+            before = runtime.get_task(task_id)
+            decision_id = record_task_review_decision(
+                runtime, task_id, "refine", rationale="add acceleration behavior"
+            )
+            after = runtime.get_task(task_id)
+            self.assertEqual(before, after)
+            self.assertEqual(runtime.get_flow(flow_id)["goal_id"], goal_id)
+            self.assertEqual(runtime.get_task(task_id)["id"], task_id)
+            self.assertTrue(decision_id.startswith("DEC-"))

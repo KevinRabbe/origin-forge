@@ -37,6 +37,17 @@ origin-forge review inspect TASK-...
 This is read-only and combines the Task, Runs, Workspaces, Verifications, and
 Artifacts already recorded for that Task.
 
+Human review decisions are explicit and durable:
+
+```text
+origin-forge review reject TASK-... --rationale "..."
+origin-forge review refine TASK-... --rationale "..."
+origin-forge review replace TASK-... --rationale "..."
+```
+
+These commands record human Decision lineage only. They do not silently rerun,
+replace, adopt, or transition the Task.
+
 Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52/53/54/55/56 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
 
 ## Initialize a project

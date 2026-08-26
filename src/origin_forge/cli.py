@@ -23,7 +23,7 @@ from .production_goal_bootstrap_operator import (
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .repository import RepositoryAccessError
-from .review import inspect_task_review
+from .review import inspect_task_review, record_task_review_decision
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .sandbox import SandboxPolicyError, SandboxUnavailable
 from .sandbox_factory import create_sandbox_backend
@@ -130,6 +130,10 @@ def build_parser() -> argparse.ArgumentParser:
     review_sub = review.add_subparsers(dest="review_command", required=True)
     review_inspect = review_sub.add_parser("inspect", help="inspect one Task review projection")
     review_inspect.add_argument("task_id")
+    for action in ("reject", "refine", "replace"):
+        review_action = review_sub.add_parser(action, help=f"record a human {action} decision")
+        review_action.add_argument("task_id")
+        review_action.add_argument("--rationale", required=True)
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -329,8 +333,17 @@ def _main(argv: list[str] | None = None) -> int:
             ]
         )
         return bounded_attempt_main(forwarded)
-    if args.command == "review" and args.review_command == "inspect":
-        _print(inspect_task_review(runtime, args.task_id))
+    if args.command == "review":
+        if args.review_command == "inspect":
+            _print(inspect_task_review(runtime, args.task_id))
+            return 0
+        decision_id = record_task_review_decision(
+            runtime,
+            args.task_id,
+            args.review_command,
+            rationale=args.rationale,
+        )
+        _print({"decision_id": decision_id, "action": args.review_command})
         return 0
 
     if args.command == "goal":
