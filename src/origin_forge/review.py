@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from .lineage import OriginForgeLineage
@@ -15,7 +16,22 @@ _ACCEPT_CONTEXT = re.compile(
 )
 
 
-def _has_current_accept(decisions: list[dict[str, Any]], task_id: str, revision: int) -> bool:
+@dataclass(frozen=True)
+class TaskRefinementResult:
+    decision_id: str
+    refined_task_id: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "decision_id": self.decision_id,
+            "refined_task_id": self.refined_task_id,
+            "authority": "human-review-refinement",
+        }
+
+
+def _has_current_accept(
+    decisions: list[dict[str, Any]], task_id: str, revision: int
+) -> bool:
     for decision in decisions:
         if decision.get("decision") != "ACCEPT":
             continue
@@ -112,3 +128,34 @@ def record_task_review_decision(
         goal_id=runtime.get_flow(task["flow_id"])["goal_id"],
         task_id=task_id,
     )
+
+
+def refine_task(
+    runtime: OriginForgeRuntime,
+    task_id: str,
+    *,
+    rationale: str,
+    expected_revision: int | None = None,
+) -> TaskRefinementResult:
+    """Record human refinement and create a new immutable child Task proposal."""
+    task = runtime.get_task(task_id)
+    if expected_revision is not None and int(task["revision"]) != expected_revision:
+        raise ValueError(
+            f"review task revision is stale: expected {expected_revision}; "
+            f"current {task['revision']}"
+        )
+    decision_id = record_task_review_decision(
+        runtime,
+        task_id,
+        "refine",
+        rationale=rationale,
+        expected_revision=expected_revision,
+    )
+    refined_task_id = runtime.create_task(
+        task["flow_id"],
+        f"Refine {task['objective']}",
+        parent_task_id=task_id,
+        constraints=(rationale.strip(),),
+        priority=int(task["priority"]),
+    )
+    return TaskRefinementResult(decision_id, refined_task_id)

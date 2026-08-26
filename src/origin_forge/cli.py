@@ -32,7 +32,7 @@ from .production_manager_advance_bounded import advance_production_manager_bound
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .production_trace import inspect_task_production_trace
 from .repository import RepositoryAccessError
-from .review import inspect_task_review, record_task_review_decision
+from .review import inspect_task_review, record_task_review_decision, refine_task
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .sandbox import SandboxPolicyError, SandboxUnavailable
 from .sandbox_factory import create_sandbox_backend
@@ -371,6 +371,16 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "review":
         if args.review_command == "inspect":
             _print(inspect_task_review(runtime, args.task_id))
+            return 0
+        if args.review_command == "refine":
+            _print(
+                refine_task(
+                    runtime,
+                    args.task_id,
+                    rationale=args.rationale,
+                    expected_revision=args.revision,
+                ).to_dict()
+            )
             return 0
         decision_id = record_task_review_decision(
             runtime,

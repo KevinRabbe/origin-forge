@@ -18,7 +18,11 @@ from origin_forge.pixelorama_source import (
 )
 from origin_forge.plan import inspect_goal_plan
 from origin_forge.production_trace import inspect_task_production_trace
-from origin_forge.review import inspect_task_review, record_task_review_decision
+from origin_forge.review import (
+    inspect_task_review,
+    record_task_review_decision,
+    refine_task,
+)
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import FlowStatus, TaskStatus
 from origin_forge.task_dependencies import add_task_dependency
@@ -306,6 +310,28 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(runtime.get_flow(flow_id)["goal_id"], goal_id)
             self.assertEqual(runtime.get_task(task_id)["id"], task_id)
             self.assertTrue(decision_id.startswith("DEC-"))
+
+    def test_refine_creates_a_new_child_task_without_mutating_original(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("review-refine-test")
+            goal_id = runtime.create_goal("build a game")
+            flow_id = runtime.create_flow(goal_id)
+            task_id = runtime.create_task(flow_id, "implement movement")
+            before = runtime.get_task(task_id)
+
+            result = refine_task(
+                runtime,
+                task_id,
+                rationale="add acceleration behavior",
+                expected_revision=0,
+            )
+
+            self.assertTrue(result.decision_id.startswith("DEC-"))
+            child = runtime.get_task(result.refined_task_id)
+            self.assertEqual(runtime.get_task(task_id), before)
+            self.assertEqual(child["parent_task_id"], task_id)
+            self.assertEqual(child["status"], TaskStatus.QUEUED.value)
 
     def test_review_projection_does_not_expose_adoption_before_acceptance(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
