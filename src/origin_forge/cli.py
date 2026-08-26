@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
 from .config import load_config
+from .context_preview import build_context_preview
 from .doctor import inspect_project
 from .patches import PatchValidationError
 from .production_goal_bootstrap_operator import (
@@ -95,6 +96,18 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "advance", help="perform exactly one fixed bounded Manager invocation"
     )
+    context = sub.add_parser("context", help="inspect bounded Task context")
+    context_sub = context.add_subparsers(dest="context_command", required=True)
+    context_preview = context_sub.add_parser(
+        "preview", help="preview selected context without starting an attempt"
+    )
+    context_preview.add_argument("task_id")
+    context_mode = context_preview.add_mutually_exclusive_group(required=True)
+    context_mode.add_argument("--file", action="append", dest="files")
+    context_mode.add_argument("--auto-context", action="store_true")
+    context_preview.add_argument("--seed-file", action="append", default=[], dest="seed_files")
+    context_preview.add_argument("--structural-context", action="store_true")
+    context_preview.add_argument("--semantic-context", action="store_true")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -255,6 +268,21 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
     if args.command == "advance":
         _print(advance_production_manager_bounded(runtime).to_dict())
+        return 0
+    if args.command == "context" and args.context_command == "preview":
+        if args.seed_files and not args.auto_context:
+            raise ValueError("--seed-file requires --auto-context")
+        _print(
+            build_context_preview(
+                runtime,
+                args.task_id,
+                selected_paths=args.files,
+                auto_context=args.auto_context,
+                seed_paths=args.seed_files,
+                structural_context=args.structural_context,
+                semantic_context=args.semantic_context,
+            )
+        )
         return 0
 
     if args.command == "goal":
