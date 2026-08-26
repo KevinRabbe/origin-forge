@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
 from .config import load_config
+from .code_adoption import VerifiedCodeAdopter
 from .context_preview import build_context_preview
 from .doctor import inspect_project
 from .orchestration_cli import main as bounded_attempt_main
@@ -141,6 +142,10 @@ def build_parser() -> argparse.ArgumentParser:
     plan_sub = plan.add_subparsers(dest="plan_command", required=True)
     plan_inspect = plan_sub.add_parser("inspect", help="inspect one Goal plan read-only")
     plan_inspect.add_argument("goal_id")
+
+    adopt = sub.add_parser("adopt", help="explicitly adopt one verified accepted code result")
+    adopt.add_argument("task_id")
+    adopt.add_argument("--revision", required=True, type=int)
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -355,6 +360,9 @@ def _main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "plan" and args.plan_command == "inspect":
         _print(inspect_goal_plan(runtime, args.goal_id))
+        return 0
+    if args.command == "adopt":
+        _print(VerifiedCodeAdopter(runtime).adopt_new(args.task_id, expected_revision=args.revision).to_dict())
         return 0
 
     if args.command == "goal":

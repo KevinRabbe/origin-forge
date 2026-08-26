@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from origin_forge import __version__
+from origin_forge.code_adoption import CodeAdoptionError, VerifiedCodeAdopter
 from origin_forge.cli import build_parser
 from origin_forge.context_preview import build_context_preview
 from origin_forge.doctor import inspect_project
@@ -30,6 +31,7 @@ class DoctorTests(unittest.TestCase):
             ["review", "accept", "TASK-EXAMPLE", "--rationale", "looks good", "--revision", "3"]
         )
         plan = parser.parse_args(["plan", "inspect", "GOAL-EXAMPLE"])
+        adopt = parser.parse_args(["adopt", "TASK-EXAMPLE", "--revision", "2"])
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
             for kind in ("goal", "flow", "task")
@@ -48,6 +50,8 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(review_accept.revision, 3)
         self.assertEqual(plan.plan_command, "inspect")
         self.assertEqual(plan.goal_id, "GOAL-EXAMPLE")
+        self.assertEqual(adopt.task_id, "TASK-EXAMPLE")
+        self.assertEqual(adopt.revision, 2)
         self.assertEqual(
             [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
             ["inspect", "inspect", "inspect"],
@@ -207,6 +211,16 @@ class DoctorTests(unittest.TestCase):
                 record_task_review_decision(
                     runtime, task_id, "accept", rationale="looks good"
                 )
+
+    def test_code_adoption_requires_human_acceptance_and_verified_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("code-adoption-test")
+            goal_id = runtime.create_goal("build a game")
+            flow_id = runtime.create_flow(goal_id)
+            task_id = runtime.create_task(flow_id, "implement movement")
+            with self.assertRaisesRegex(CodeAdoptionError, "SUCCEEDED Task"):
+                VerifiedCodeAdopter(runtime).adopt_new(task_id, expected_revision=0)
 
     def test_review_decision_rejects_stale_task_revision(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
