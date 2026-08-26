@@ -32,6 +32,29 @@ def _read_rows(runtime: OriginForgeRuntime, execution_id: str):
             ).fetchall()
             if not rows:
                 raise AudioDispatchOutputBindingError("audio dispatch-output binding does not exist")
+            execution = conn.execute(
+                "SELECT * FROM dispatch_executions WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            if execution is None:
+                raise AudioDispatchOutputBindingError("audio binding execution does not exist")
+            row = rows[0]
+            for field, expected in (
+                ("project_id", runtime.project_id()),
+                ("claim_id", row["claim_id"]),
+                ("task_id", row["task_id"]),
+                ("task_revision", row["task_revision"]),
+                ("task_content_hash", row["task_content_hash"]),
+                ("work_order_id", row["work_order_id"]),
+                ("work_order_hash", row["work_order_hash"]),
+                ("dispatch_binding_id", row["dispatch_binding_id"]),
+                ("dispatch_binding_hash", row["dispatch_binding_hash"]),
+                ("execution_owner_id", AUDIO_EXECUTION_OWNER_ID),
+            ):
+                if execution[field] != expected:
+                    raise AudioDispatchOutputBindingError(
+                        "audio binding does not match exact execution relation"
+                    )
             return rows
     except AudioDispatchOutputBindingError:
         raise

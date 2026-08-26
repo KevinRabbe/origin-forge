@@ -3,16 +3,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from .model_scheduler import ModelRole
 from .production_capability_builtin import builtin_trusted_production_adapters
 from .production_dispatch_binding import CodeBoundedRetryInputBinder
 from .production_dispatch_binding_blender import BlenderExportGLBInputBinder
+from .production_dispatch_binding_pixelorama import (
+    PixeloramaSpritesheetExportInputBinder,
+)
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
-from .production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
-
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,255}$")
@@ -207,6 +208,7 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
     adapters = {
         value.adapter_id: value for value in builtin_trusted_production_adapters()
     }
+    from .production_execution_owner_audio import piper_execution_owner_descriptor
     from .production_execution_owner_image import (
         image_generation_execution_owner_descriptor,
     )
@@ -329,6 +331,7 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         pixelorama_owner,
         blender_owner,
         image_generation_execution_owner_descriptor(),
+        piper_execution_owner_descriptor(),
     )
 
 

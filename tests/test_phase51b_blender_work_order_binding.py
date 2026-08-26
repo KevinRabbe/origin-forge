@@ -13,7 +13,9 @@ from origin_forge.production_capability_builtin import (
     builtin_trusted_production_adapters,
 )
 from origin_forge.production_capability_models import CapabilityCatalog
-from origin_forge.production_dispatch_binding import build_builtin_dispatch_binder_registry
+from origin_forge.production_dispatch_binding import (
+    build_builtin_dispatch_binder_registry,
+)
 from origin_forge.production_dispatch_binding_blender import BlenderExportGLBInputBinder
 from origin_forge.production_dispatch_binding_core import DispatchBindingError
 from origin_forge.production_dispatch_phase_resolvers import (
@@ -240,7 +242,7 @@ class Phase51BBlenderWorkOrderBindingTests(unittest.TestCase):
             review_rows[BLENDER_ADAPTER_ID].status,
             BuiltinDispatchReviewStatus.SUPPORTED,
         )
-        self.assertEqual(len(build_builtin_dispatch_binder_registry().descriptors), 5)
+        self.assertEqual(len(build_builtin_dispatch_binder_registry().descriptors), 6)
         validator = build_builtin_dispatch_validator_registry().validator(
             "validator.blender.export-glb@1"
         )

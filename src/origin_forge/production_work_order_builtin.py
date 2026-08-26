@@ -6,10 +6,20 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from .production_capability_models import CapabilityCatalog
+from .production_work_order_audio import (
+    PIPER_ADAPTER_ID,
+    PIPER_CONTRACT_ID,
+    PiperSpeechDispatchValidator,
+)
 from .production_work_order_blender import (
     BLENDER_ADAPTER_ID,
     BLENDER_CONTRACT_ID,
     BlenderExportGLBDispatchValidator,
+)
+from .production_work_order_image import (
+    IMAGE_ADAPTER_ID,
+    IMAGE_CONTRACT_ID,
+    ImageGenerationDispatchValidator,
 )
 from .production_work_order_models import (
     DispatchContract,
@@ -18,20 +28,15 @@ from .production_work_order_models import (
     WorkOrderRefType,
     content_hash,
 )
-from .production_work_order_image import (
-    IMAGE_ADAPTER_ID,
-    IMAGE_CONTRACT_ID,
-    ImageGenerationDispatchValidator,
-)
 from .production_work_order_pixelorama import (
     PIXELORAMA_ADAPTER_ID,
     PIXELORAMA_CONTRACT_ID,
     PixeloramaSpritesheetExportDispatchValidator,
 )
 from .production_work_order_simulation import (
-    DeterministicSimulationDispatchValidator,
     SIMULATION_ADAPTER_ID,
     SIMULATION_CONTRACT_ID,
+    DeterministicSimulationDispatchValidator,
 )
 from .production_work_order_validators import (
     DispatchContractValidatorRegistry,
@@ -41,7 +46,6 @@ from .production_work_order_validators import (
     PayloadFieldRule,
     StaticObjectPayloadValidator,
 )
-
 
 _CODE_ADAPTER_ID = "originforge.code.bounded-retry"
 _CODE_VALIDATOR_ID = "validator.code.bounded-retry@1"
@@ -286,6 +290,7 @@ def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
         PixeloramaSpritesheetExportDispatchValidator(),
         BlenderExportGLBDispatchValidator(),
         ImageGenerationDispatchValidator(),
+        PiperSpeechDispatchValidator(),
     )
 
 
@@ -378,6 +383,23 @@ def _image_contract(adapter) -> DispatchContract:
     )
 
 
+def _piper_contract(adapter) -> DispatchContract:
+    validator = PiperSpeechDispatchValidator()
+    return DispatchContract(
+        contract_id=PIPER_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.AUDIO_PROFILE,),
+        max_payload_bytes=64 * 1024,
+        max_input_refs=1,
+    )
+
+
 def build_builtin_dispatch_catalog(
     phase32_catalog: CapabilityCatalog,
 ) -> DispatchContractCatalog:
@@ -400,8 +422,9 @@ def build_builtin_dispatch_catalog(
     pixelorama = adapters.get(PIXELORAMA_ADAPTER_ID)
     blender = adapters.get(BLENDER_ADAPTER_ID)
     image = adapters.get(IMAGE_ADAPTER_ID)
+    piper = adapters.get(PIPER_ADAPTER_ID)
     reviewed_non_code = tuple(
-        value for value in (simulation, pixelorama, blender, image) if value is not None
+        value for value in (simulation, pixelorama, blender, image, piper) if value is not None
     )
     if len(reviewed_non_code) > 1:
         raise ValueError(
@@ -427,4 +450,6 @@ def build_builtin_dispatch_catalog(
             phase32_catalog,
             (_image_contract(image),),
         )
+    if piper is not None:
+        return DispatchContractCatalog.create(phase32_catalog, (_piper_contract(piper),))
     raise ValueError("Phase-32 catalog lacks a reviewed Phase-33 dispatch adapter")

@@ -6,11 +6,17 @@ import unittest
 
 import origin_forge.production_execution_owner as owner_module
 from origin_forge.model_scheduler import ModelRole
-from origin_forge.production_capability_builtin import builtin_trusted_production_adapters
+from origin_forge.production_capability_builtin import (
+    builtin_trusted_production_adapters,
+)
 from origin_forge.production_dispatch_binding import CodeBoundedRetryInputBinder
 from origin_forge.production_dispatch_binding_blender import BlenderExportGLBInputBinder
-from origin_forge.production_dispatch_binding_simulation import DeterministicSimulationInputBinder
-from origin_forge.production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
+from origin_forge.production_dispatch_binding_pixelorama import (
+    PixeloramaSpritesheetExportInputBinder,
+)
+from origin_forge.production_dispatch_binding_simulation import (
+    DeterministicSimulationInputBinder,
+)
 from origin_forge.production_execution_owner import (
     ProductionExecutionOwnerDescriptor,
     ProductionExecutionOwnerError,
@@ -45,9 +51,10 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_builtin_owners_exactly_match_reviewed_adapters_and_binders(self) -> None:
         owners = builtin_execution_owner_descriptors()
-        self.assertEqual(len(owners), 5)
-        code_owner, simulation_owner, pixelorama_owner, blender_owner, image_owner = owners
+        self.assertEqual(len(owners), 6)
+        code_owner, simulation_owner, pixelorama_owner, blender_owner, image_owner, piper_owner = owners
         self.assertEqual(image_owner.owner_id, "originforge.execution.image.generate@1")
+        self.assertEqual(piper_owner.owner_id, "originforge.execution.audio.piper-tts@1")
         adapters = {
             value.adapter_id: value for value in builtin_trusted_production_adapters()
         }
@@ -191,9 +198,8 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
             ("request_schema_hash", "0" * 64),
         )
         for field, value in drift:
-            with self.subTest(field=field):
-                with self.assertRaises(ProductionExecutionOwnerError):
-                    registry.owner_for(**{**base, field: value})
+            with self.subTest(field=field), self.assertRaises(ProductionExecutionOwnerError):
+                registry.owner_for(**{**base, field: value})
 
     def test_registry_rejects_duplicate_ids_and_ambiguous_relations(self) -> None:
         first = self._descriptor(owner_id="owner.one@1")

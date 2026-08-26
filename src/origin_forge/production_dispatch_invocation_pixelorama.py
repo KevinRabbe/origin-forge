@@ -13,7 +13,9 @@ from .production_dispatch_invocation import (
     ProductionDispatchInvocationError,
     ProductionDispatchInvocationRecoveryRequired,
 )
-from .production_dispatch_invocation_blender import dispatch_blender_claim_once_if_applicable
+from .production_dispatch_invocation_blender import (
+    dispatch_blender_claim_once_if_applicable,
+)
 from .production_execution_assembly import PixeloramaSpritesheetExportExecutionPayload
 from .production_pixelorama_dispatch_output_binding_models import (
     PIXELORAMA_DISPATCH_OUTPUT_BINDING_SCHEMA_VERSION,
@@ -34,7 +36,6 @@ from .production_pixelorama_dispatch_output_currentness import (
 )
 from .service import utc_now
 from .state import TaskStatus
-
 
 PixeloramaInvocationRequest = core.PixeloramaInvocationRequest
 _decode_pixelorama_request_projection = core._decode_pixelorama_request_projection
@@ -181,9 +182,21 @@ def _dispatch_claim_once_three_owner(
 ) -> CompletedDispatchInvocation:
     """Single-shot coordinator with reviewed Pixelorama and Blender fanout."""
     import origin_forge.production_dispatch_invocation as legacy
+
     from .production_dispatch_invocation_image_owner import (
         dispatch_image_claim_once_if_applicable,
     )
+    from .production_dispatch_invocation_piper_owner import (
+        dispatch_piper_claim_once_if_applicable,
+    )
+
+    piper = dispatch_piper_claim_once_if_applicable(
+        runtime,
+        claim_id,
+        expected_claim_revision,
+    )
+    if piper is not None:
+        return piper
 
     image = dispatch_image_claim_once_if_applicable(
         runtime,

@@ -16,6 +16,7 @@ from .production_dispatch_binding_models import (
     DispatchBindingAudit,
     DispatchBindingCurrentness,
     DispatchBindingCurrentnessStatus,
+    DispatchBindingModelError,
 )
 from .production_dispatch_resolvers import WorkOrderInputResolverRegistry
 from .production_dispatch_store import (
@@ -157,7 +158,7 @@ def _load_envelope(
         envelope = json.loads(raw.decode("utf-8"), object_pairs_hook=_strict_object)
     except ProductionDispatchReadError:
         raise
-    except Exception as exc:
+    except (DispatchBindingError, DispatchBindingModelError, TypeError, ValueError) as exc:
         raise ProductionDispatchReadError(
             "production dispatch object is not strict UTF-8 JSON"
         ) from exc
@@ -394,7 +395,17 @@ def inspect_dispatch_binding_currentness_readonly(
             and resolved[0].source_object_type == "MODEL3D_REQUEST"
             and resolved[0].resolution_class == "PROTECTED_MODEL3D_REQUEST"
         )
-        if not (pixelorama_input or blender_input):
+        piper_input = (
+            binding.selected_adapter_id == "originforge.audio.piper"
+            and binding.dispatch_contract_id == "audio.piper-tts@1"
+            and binding.binder_id == "binder.audio.piper-tts@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "AUDIO_PROFILE"
+            and resolved[0].original_ref.role == "audio_profile"
+            and resolved[0].source_object_type == "AUDIO_PROFILE"
+            and resolved[0].resolution_class == "PROTECTED_AUDIO_PROFILE"
+        )
+        if not (pixelorama_input or blender_input or piper_input):
             return result(
                 DispatchBindingCurrentnessStatus.STALE_INPUT,
                 "current read-only nonzero-ref eligibility is limited to exact reviewed production contracts",
@@ -421,7 +432,7 @@ def inspect_dispatch_binding_currentness_readonly(
             binder.bind(work_order, bundle),
             binding.dispatch_binding_id,
         )
-    except Exception as exc:
+    except (DispatchBindingError, DispatchBindingModelError, TypeError, ValueError) as exc:
         return result(
             DispatchBindingCurrentnessStatus.BINDER_DRIFT,
             f"{type(exc).__name__}: {exc}",

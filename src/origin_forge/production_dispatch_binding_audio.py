@@ -65,13 +65,9 @@ class PiperAudioInputBinder:
             payload = PiperSpeechDispatchValidator().validate(work_order.payload, work_order.input_refs)
         except (RuntimeError, TypeError, ValueError) as exc:
             raise DispatchBindingError("Piper WorkOrder payload failed exact validation") from exc
-        profile = source.projection
-        if not isinstance(profile, dict):
-            raise DispatchBindingError("Piper AUDIO_PROFILE projection is not an object")
         return {
             "task_id": work_order.task_id,
             "profile_id": ref.ref_id,
-            "profile_hash": "sha256:" + ref.content_hash,
-            "profile": profile,
+            "profile_hash": ref.content_hash,
             **payload,
         }

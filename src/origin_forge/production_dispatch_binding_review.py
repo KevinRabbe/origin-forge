@@ -79,9 +79,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.audio.piper",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "AUDIO_NATIVE_REQUEST_IDENTITY_INCOMPLETE",
-            "AUDIO_PROFILE is resolvable, but AudioOperationRequest still requires execution-owned operation/workspace identity and Phase-33 has no complete audio request payload contract",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 59 reconstructs the exact Piper speech projection, assembles configured local infrastructure, and persists v25 output evidence with no-replay recovery",
         ),
         BuiltinBindingReview(
             "originforge.runtime.observe",
@@ -125,6 +125,11 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         (phase32.adapter("originforge.image.generate"),),
     )
     image_dispatch_catalog = build_builtin_dispatch_catalog(image_phase32)
+    piper_phase32 = CapabilityCatalog.create(
+        (phase32.capability("media.audio.tts"),),
+        (phase32.adapter("originforge.audio.piper"),),
+    )
+    piper_dispatch_catalog = build_builtin_dispatch_catalog(piper_phase32)
     resolver_registry = build_dispatch_input_resolver_registry()
     binder_registry = build_builtin_dispatch_binder_registry()
 
@@ -143,6 +148,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         *pixelorama_dispatch_catalog.contracts,
         *blender_dispatch_catalog.contracts,
         *image_dispatch_catalog.contracts,
+        *piper_dispatch_catalog.contracts,
     )
     contract_by_adapter = {value.adapter_id: value for value in reviewed_contracts}
     if len(contract_by_adapter) != len(reviewed_contracts):

@@ -4,6 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 
+from .audio_service import AudioOperationServiceResult
 from .ids import IdKind, validate_id
 from .image_vision_service import ImageGenerationServiceResult
 from .lineage import OriginForgeLineage
@@ -45,6 +46,8 @@ from .production_work_order_models import content_hash
 from .runtime import OriginForgeRuntime
 from .runtime_observation_models import (
     canonical_bytes as simulation_canonical_bytes,
+)
+from .runtime_observation_models import (
     content_hash as simulation_content_hash,
 )
 from .simulation_models import (
@@ -60,7 +63,6 @@ from .simulation_spec_template import (
     SimulationSpecTemplate,
 )
 from .state import RunStatus, TaskStatus
-
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 _EXCEPTION_TYPE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,255}$")
@@ -286,6 +288,7 @@ class CompletedDispatchInvocation:
     simulation_result: SimulationServiceResult | None = None
     pixelorama_result: PixeloramaCliExportServiceResult | None = None
     image_result: ImageGenerationServiceResult | None = None
+    audio_result: AudioOperationServiceResult | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.execution, DispatchExecution):
@@ -298,7 +301,8 @@ class CompletedDispatchInvocation:
         has_simulation = self.simulation_result is not None
         has_pixelorama = self.pixelorama_result is not None
         has_image = self.image_result is not None
-        if sum((has_policy, has_simulation, has_pixelorama, has_image)) != 1:
+        has_audio = self.audio_result is not None
+        if sum((has_policy, has_simulation, has_pixelorama, has_image, has_audio)) != 1:
             raise ProductionDispatchInvocationError(
                 "completed invocation requires exactly one reviewed owner result"
             )
@@ -343,6 +347,14 @@ class CompletedDispatchInvocation:
             ):
                 raise ProductionDispatchInvocationError(
                     "image execution requires exactly one ImageGenerationServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.audio.piper-tts@1":
+            if (
+                not isinstance(self.audio_result, AudioOperationServiceResult)
+                or has_policy or has_simulation or has_pixelorama or has_image
+            ):
+                raise ProductionDispatchInvocationError(
+                    "Piper execution requires exactly one AudioOperationServiceResult"
                 )
         else:
             raise ProductionDispatchInvocationError(

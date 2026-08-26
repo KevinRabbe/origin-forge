@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .adapters.comfyui import ComfyUiProfile
+from .audio_profiles import AudioProfileStore, GovernedAudioProfile
 from .blender_adapter import BlenderRuntimeProfile
 from .config import ProjectConfig, load_config
 from .image_workflows import GovernedComfyWorkflowTemplate, ImageWorkflowStore
@@ -27,12 +28,17 @@ from .production_dispatch_claim_read import (
     read_dispatch_claim,
 )
 from .production_dispatch_invocation_image import ImageGenerationInvocationRequest
+from .production_dispatch_invocation_piper import PiperInvocationRequest
 from .production_dispatch_read import read_dispatch_binding
 from .production_execution_owner import (
     ProductionExecutionOwnerDescriptor,
     build_builtin_execution_owner_registry,
 )
 from .production_execution_owner_image import IMAGE_EXECUTION_OWNER_ID
+from .production_piper_profile import (
+    PiperInfrastructure,
+    load_infrastructure_piper_profile,
+)
 from .production_pixelorama_profile import (
     ProductionPixeloramaProfileError,
     load_infrastructure_pixelorama_cli_profile,
@@ -49,6 +55,7 @@ _BOUNDED_RETRY_OWNER_ID = "originforge.execution.bounded-retry@1"
 _SIMULATION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 _PIXELORAMA_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
 _BLENDER_OWNER_ID = "originforge.execution.blender.export-glb@1"
+_PIPER_OWNER_ID = "originforge.execution.audio.piper-tts@1"
 _NOT_REQUIRED_RESOURCE_MODEL_HASH = content_hash(
     {"kind": "NO_MODEL_RESOURCE_CONFIG", "version": 1}
 )
@@ -225,12 +232,30 @@ class ImageGenerationExecutionPayload:
             )
 
 
+@dataclass(frozen=True)
+class PiperExecutionPayload:
+    request: PiperInvocationRequest
+    profile: GovernedAudioProfile
+    infrastructure: PiperInfrastructure
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, PiperInvocationRequest):
+            raise TypeError("request must be a PiperInvocationRequest")
+        if not isinstance(self.profile, GovernedAudioProfile):
+            raise TypeError("profile must be a GovernedAudioProfile")
+        if not isinstance(self.infrastructure, PiperInfrastructure):
+            raise TypeError("infrastructure must be PiperInfrastructure")
+        if self.profile.profile_id != self.request.profile_id or self.profile.profile_hash != "sha256:" + self.request.profile_hash:
+            raise ProductionExecutionAssemblyError("Piper profile does not match frozen request")
+
+
 ExecutionDependencyPayload = (
     BoundedRetryExecutionPayload
     | DeterministicSimulationExecutionPayload
     | PixeloramaSpritesheetExportExecutionPayload
     | BlenderExportGLBExecutionPayload
     | ImageGenerationExecutionPayload
+    | PiperExecutionPayload
 )
 
 
@@ -277,6 +302,11 @@ class ProductionExecutionDependencies:
             if not isinstance(self.payload, ImageGenerationExecutionPayload):
                 raise ProductionExecutionAssemblyError(
                     "image owner requires trusted ComfyUI workflow/profile payload"
+                )
+        elif self.owner.owner_id == _PIPER_OWNER_ID:
+            if not isinstance(self.payload, PiperExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "Piper owner requires trusted profile/infrastructure payload"
                 )
         else:
             raise ProductionExecutionAssemblyError(
@@ -626,6 +656,51 @@ def _assemble_image_dependencies(
     )
 
 
+def _assemble_piper_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _PIPER_OWNER_ID:
+        raise ProductionExecutionAssemblyError("Piper dependency assembler received an unexpected owner")
+    if owner.model_strategy_roles or owner.requires_sandbox or owner.requires_workspace_manager:
+        raise ProductionExecutionAssemblyError("Piper owner must not require coding or workspace authority")
+    try:
+        request = PiperInvocationRequest.from_projection(
+            binding.request_projection,
+            binding.request_content_hash,
+        )
+        profile = AudioProfileStore(runtime).get(
+            request.profile_id, "sha256:" + request.profile_hash
+        )
+        infrastructure = load_infrastructure_piper_profile()
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted Piper profile/infrastructure dependencies are unavailable"
+        ) from exc
+    dependency_hash = content_hash({
+        "profile_hash": profile.profile_hash,
+        "infrastructure_hash": infrastructure.dependency_hash,
+    })
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(), model_profile_ids=(), runtime_ids=(),
+        runtime_provider_fingerprints=(), sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=dependency_hash,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=PiperExecutionPayload(request, profile, infrastructure),
+    )
+
+
 def _assemble_bounded_retry_dependencies(
     runtime: OriginForgeRuntime,
     claim,
@@ -798,6 +873,8 @@ def assemble_production_execution_dependencies(
             owner,
             owner_registry,
         )
+    if owner.owner_id == _PIPER_OWNER_ID:
+        return _assemble_piper_dependencies(runtime, claim, binding, owner, owner_registry)
     if owner.owner_id == _PIXELORAMA_OWNER_ID:
         return _assemble_pixelorama_dependencies(
             runtime,

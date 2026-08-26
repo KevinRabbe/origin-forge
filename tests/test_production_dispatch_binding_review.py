@@ -54,6 +54,11 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             (phase32.adapter("originforge.image.generate"),),
         )
         image_dispatch = build_builtin_dispatch_catalog(image_phase32)
+        piper_phase32 = CapabilityCatalog.create(
+            (phase32.capability("media.audio.tts"),),
+            (phase32.adapter("originforge.audio.piper"),),
+        )
+        piper_dispatch = build_builtin_dispatch_catalog(piper_phase32)
         binder_registry = build_builtin_dispatch_binder_registry()
         rows = builtin_binding_review()
 
@@ -70,6 +75,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
                 "originforge.pixelorama.export",
                 "originforge.simulation.deterministic",
                 "originforge.image.generate",
+                "originforge.audio.piper",
             },
         )
         reviewed_contracts = (
@@ -78,6 +84,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             *pixelorama_dispatch.contracts,
             *blender_dispatch.contracts,
             *image_dispatch.contracts,
+            *piper_dispatch.contracts,
         )
         self.assertEqual(
             bindable,
@@ -135,12 +142,9 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         image = rows["originforge.image.generate"]
         self.assertEqual(image.status, BuiltinBindingReviewStatus.BINDABLE)
         self.assertIsNone(image.blocker)
-        self.assertEqual(piper.status, BuiltinBindingReviewStatus.DEFERRED)
-        self.assertEqual(
-            piper.blocker,
-            "AUDIO_NATIVE_REQUEST_IDENTITY_INCOMPLETE",
-        )
-        self.assertIn("operation/workspace identity", piper.reason)
+        self.assertEqual(piper.status, BuiltinBindingReviewStatus.BINDABLE)
+        self.assertIsNone(piper.blocker)
+        self.assertIn("v25", piper.reason)
         self.assertEqual(simulation.status, BuiltinBindingReviewStatus.BINDABLE)
         self.assertIsNone(simulation.blocker)
         self.assertIn("zero-ref", simulation.reason)
@@ -155,7 +159,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             for value in rows
             if value.status is BuiltinBindingReviewStatus.DEFERRED
         ]
-        self.assertEqual(len(deferred), 5)
+        self.assertEqual(len(deferred), 4)
         self.assertTrue(all(value.blocker for value in deferred))
         self.assertEqual(
             len({value.blocker for value in deferred}),

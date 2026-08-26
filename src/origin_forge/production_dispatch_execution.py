@@ -33,6 +33,7 @@ _SIMULATION_EXECUTION_OWNER_ID = "originforge.execution.simulation.deterministic
 _PIXELORAMA_EXECUTION_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
 _BLENDER_EXECUTION_OWNER_ID = "originforge.execution.blender.export-glb@1"
 _IMAGE_EXECUTION_OWNER_ID = "originforge.execution.image.generate@1"
+_PIPER_EXECUTION_OWNER_ID = "originforge.execution.audio.piper-tts@1"
 
 
 class ProductionDispatchExecutionError(RuntimeError):
@@ -606,6 +607,11 @@ def begin_dispatch_execution(
                 now,
             )
             task_transition_reason = "IMAGE_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _PIPER_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime, conn, claim, execution_id, now
+            )
+            task_transition_reason = "PIPER_DISPATCH_EXECUTION_STARTED"
 
         runtime.store._append_event(
             conn,
