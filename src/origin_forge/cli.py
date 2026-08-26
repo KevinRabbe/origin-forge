@@ -24,6 +24,7 @@ from .production_goal_bootstrap_operator import (
 )
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
+from .production_trace import inspect_task_production_trace
 from .repository import RepositoryAccessError
 from .review import inspect_task_review, record_task_review_decision
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
@@ -146,6 +147,11 @@ def build_parser() -> argparse.ArgumentParser:
     adopt = sub.add_parser("adopt", help="explicitly adopt one verified accepted code result")
     adopt.add_argument("task_id")
     adopt.add_argument("--revision", required=True, type=int)
+
+    production = sub.add_parser("production", help="inspect governed production state")
+    production_sub = production.add_subparsers(dest="production_command", required=True)
+    trace = production_sub.add_parser("trace", help="inspect one correlated Task lifecycle")
+    trace.add_argument("task_id")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -363,6 +369,9 @@ def _main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "adopt":
         _print(VerifiedCodeAdopter(runtime).adopt_new(args.task_id, expected_revision=args.revision).to_dict())
+        return 0
+    if args.command == "production" and args.production_command == "trace":
+        _print(inspect_task_production_trace(runtime, args.task_id))
         return 0
 
     if args.command == "goal":

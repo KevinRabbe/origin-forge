@@ -10,6 +10,7 @@ from origin_forge.cli import build_parser
 from origin_forge.context_preview import build_context_preview
 from origin_forge.doctor import inspect_project
 from origin_forge.plan import inspect_goal_plan
+from origin_forge.production_trace import inspect_task_production_trace
 from origin_forge.review import inspect_task_review, record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.task_dependencies import add_task_dependency
@@ -32,6 +33,7 @@ class DoctorTests(unittest.TestCase):
         )
         plan = parser.parse_args(["plan", "inspect", "GOAL-EXAMPLE"])
         adopt = parser.parse_args(["adopt", "TASK-EXAMPLE", "--revision", "2"])
+        trace = parser.parse_args(["production", "trace", "TASK-EXAMPLE"])
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
             for kind in ("goal", "flow", "task")
@@ -52,6 +54,8 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(plan.goal_id, "GOAL-EXAMPLE")
         self.assertEqual(adopt.task_id, "TASK-EXAMPLE")
         self.assertEqual(adopt.revision, 2)
+        self.assertEqual(trace.production_command, "trace")
+        self.assertEqual(trace.task_id, "TASK-EXAMPLE")
         self.assertEqual(
             [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
             ["inspect", "inspect", "inspect"],
@@ -180,6 +184,24 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(task_views[first]["next_action"], "ACTIVATE")
             self.assertEqual(task_views[second]["next_action"], "WAIT_FOR_DEPENDENCIES")
             self.assertEqual(result["summary"]["next_action"], "ACTIVATE")
+            self.assertEqual(before["tasks"], after["tasks"])
+            self.assertEqual(before["runs"], after["runs"])
+
+    def test_production_trace_is_read_only_and_correlates_task_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("trace-test")
+            goal_id = runtime.create_goal("build a game")
+            flow_id = runtime.create_flow(goal_id)
+            task_id = runtime.create_task(flow_id, "implement movement")
+            before = runtime.status()
+            result = inspect_task_production_trace(runtime, task_id)
+            after = runtime.status()
+            self.assertEqual(result["goal"]["id"], goal_id)
+            self.assertEqual(result["flow"]["id"], flow_id)
+            self.assertEqual(result["task"]["id"], task_id)
+            self.assertEqual(result["dispatch"], {"claims": [], "executions": []})
+            self.assertEqual(result["next_action"], "ADVANCE")
             self.assertEqual(before["tasks"], after["tasks"])
             self.assertEqual(before["runs"], after["runs"])
 

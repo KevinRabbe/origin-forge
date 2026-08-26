@@ -44,6 +44,16 @@ The plan projection shows the Goal's Flows, dependency order, Task revisions,
 dependency readiness, and the next bounded operator action. It does not create
 Runs or Workspaces, publish evidence, or transition any lifecycle record.
 
+To inspect one correlated production lifecycle across planning, execution,
+workspaces, dispatch, evidence, verification, and review:
+
+```text
+origin-forge production trace TASK-...
+```
+
+The trace is read-only and reports the next action as `ADVANCE`, `REVIEW`, or
+`RECOVER`. It does not infer acceptance or adoption authority.
+
 This is read-only and combines the Task, Runs, Workspaces, Verifications, and
 Artifacts already recorded for that Task.
 
