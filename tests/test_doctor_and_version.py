@@ -20,6 +20,7 @@ from origin_forge.plan import inspect_goal_plan
 from origin_forge.production_trace import inspect_task_production_trace
 from origin_forge.review import inspect_task_review, record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
+from origin_forge.state import FlowStatus, TaskStatus
 from origin_forge.task_dependencies import add_task_dependency
 
 
@@ -114,14 +115,19 @@ class DoctorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             runtime = OriginForgeRuntime(Path(directory))
             runtime.initialize("status-readiness-test")
+            goal_id = runtime.create_goal("status goal")
+            flow_id = runtime.create_flow(goal_id)
+            runtime.transition_flow(flow_id, FlowStatus.RUNNING, expected_revision=0)
+            task_id = runtime.create_task(flow_id, "status task")
+            runtime.transition_task(task_id, TaskStatus.READY, expected_revision=0)
 
             status = runtime.status()
 
-            self.assertEqual(status["task_readiness"], {})
+            self.assertEqual(status["task_readiness"], {"READY": 1})
             self.assertEqual(
                 status["operator_actions"],
                 {
-                    "attempt": 0,
+                    "attempt": 1,
                     "inspect_or_recover": 0,
                     "review_or_accept": 0,
                     "recover": 0,
