@@ -105,17 +105,35 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import subprocess
+          import sys
           from tempfile import TemporaryDirectory
 
-          from origin_forge.doctor import inspect_project
           from origin_forge.runtime import OriginForgeRuntime
 
           with TemporaryDirectory() as directory:
               root = Path(directory)
               OriginForgeRuntime(root).initialize("ci-doctor")
-              report = inspect_project(root)
-              if not report["ready"]:
-                  raise SystemExit(f"strict doctor preflight failed: {report}")
+              completed = subprocess.run(
+                  [
+                      sys.executable,
+                      "-m",
+                      "origin_forge.cli",
+                      "--project-root",
+                      str(root),
+                      "doctor",
+                      "--strict",
+                  ],
+                  check=False,
+                  capture_output=True,
+                  text=True,
+              )
+              if completed.returncode != 0:
+                  raise SystemExit(
+                      "strict doctor preflight failed:\n"
+                      + completed.stdout
+                      + completed.stderr
+                  )
 
       - name: Run unit tests
         env:
