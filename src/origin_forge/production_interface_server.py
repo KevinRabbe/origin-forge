@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import secrets
+from collections.abc import Mapping
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Mapping
 from urllib.parse import parse_qs, urlsplit
 
 from .conversation_blender_task_acceptance_actions import (
@@ -43,7 +43,6 @@ from .production_interface_live_decorator import (
 from .production_interface_snapshot import build_production_interface_snapshot
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision
-
 
 _MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 _MAX_REQUEST_BYTES = 256 * 1024
@@ -607,19 +606,19 @@ def create_production_interface_server(
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             self._dispatch("GET")
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             self._dispatch("POST")
 
-        def do_PUT(self) -> None:  # noqa: N802
+        def do_PUT(self) -> None:
             self._dispatch("PUT")
 
-        def do_PATCH(self) -> None:  # noqa: N802
+        def do_PATCH(self) -> None:
             self._dispatch("PATCH")
 
-        def do_DELETE(self) -> None:  # noqa: N802
+        def do_DELETE(self) -> None:
             self._dispatch("DELETE")
 
         def _send(self, response: ProductionInterfaceResponse) -> None:
@@ -690,10 +689,11 @@ def create_production_interface_server(
                     )
                     return
 
+            request_headers = {key: value for key, value in self.headers.items()}
             response = router.route(
                 method,
                 self.path,
-                headers=self.headers,
+                headers=request_headers,
                 body=body,
             )
             self._send(response)
