@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from html import escape
+from typing import cast
 
 from .production_interface_snapshot import ProductionInterfaceSnapshot
 
@@ -218,9 +219,10 @@ def _relationship_items(
         scoped_rules = sum(
             1
             for value in snapshot.design_rules
-            if (
-                isinstance(value.get("scope_entity_ids"), (list, tuple))
-                and object_id in value["scope_entity_ids"]
+            if isinstance(value.get("scope_entity_ids"), (list, tuple))
+            and any(
+                object_id == scope_id
+                for scope_id in cast(Iterable[str], value["scope_entity_ids"])
             )
         )
         items.extend(
