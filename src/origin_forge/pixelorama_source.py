@@ -222,3 +222,24 @@ def inspect_pixelorama_source(
         verification_ids=verification_ids,
         byte_count=path.stat().st_size,
     )
+
+
+def inspect_pixelorama_source_history(
+    runtime: OriginForgeRuntime,
+    artifact_id: str,
+) -> dict[str, object]:
+    """Return the immutable predecessor chain for one governed source."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    revisions: list[dict[str, object]] = []
+    visited: set[str] = set()
+    current_id: str | None = artifact_id
+    while current_id is not None:
+        if current_id in visited or len(revisions) >= 128:
+            raise PixeloramaSourceImportError("Pixelorama source revision chain is invalid")
+        visited.add(current_id)
+        inspection = inspect_pixelorama_source(runtime, current_id)
+        revisions.append(inspection.to_dict())
+        parent_id = inspection.artifact.get("parent_artifact_id")
+        current_id = parent_id if isinstance(parent_id, str) else None
+    return {"source_artifact_id": artifact_id, "revisions": revisions, "read_only": True}

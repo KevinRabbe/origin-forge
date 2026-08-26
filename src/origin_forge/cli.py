@@ -17,6 +17,7 @@ from .patches import PatchValidationError
 from .pixelorama_source import (
     import_pixelorama_source,
     inspect_pixelorama_source,
+    inspect_pixelorama_source_history,
     replace_pixelorama_source,
 )
 from .plan import inspect_goal_plan
@@ -166,6 +167,8 @@ def build_parser() -> argparse.ArgumentParser:
     source_replace = source_sub.add_parser("replace", help="replace one source explicitly")
     source_replace.add_argument("artifact_id")
     source_replace.add_argument("path")
+    source_history = source_sub.add_parser("history", help="inspect source revision history")
+    source_history.add_argument("artifact_id")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -396,6 +399,9 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.source_command == "replace":
             _print(replace_pixelorama_source(runtime, args.artifact_id, args.path).to_dict())
+            return 0
+        if args.source_command == "history":
+            _print(inspect_pixelorama_source_history(runtime, args.artifact_id))
             return 0
 
     if args.command == "goal":

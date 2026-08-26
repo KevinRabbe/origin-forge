@@ -13,6 +13,7 @@ from origin_forge.pixelorama_source import (
     PixeloramaSourceImportError,
     import_pixelorama_source,
     inspect_pixelorama_source,
+    inspect_pixelorama_source_history,
     replace_pixelorama_source,
 )
 from origin_forge.plan import inspect_goal_plan
@@ -255,6 +256,11 @@ class DoctorTests(unittest.TestCase):
                     "parent_artifact_id"
                 ],
                 result.artifact_id,
+            )
+            history = inspect_pixelorama_source_history(runtime, revised.artifact_id)
+            self.assertEqual(
+                [item["artifact"]["id"] for item in history["revisions"]],
+                [revised.artifact_id, result.artifact_id],
             )
             with self.assertRaisesRegex(PixeloramaSourceImportError, r"\.pxo"):
                 import_pixelorama_source(runtime, "assets/player.png")
