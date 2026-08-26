@@ -12,6 +12,11 @@ from origin_forge.production_dispatch_invocation_image import (
 from origin_forge.production_execution_owner_image import (
     image_generation_execution_owner_descriptor,
 )
+from origin_forge.production_image_dispatch_output_binding_models import (
+    ImageDispatchOutput,
+    ImageDispatchOutputBinding,
+    ImageDispatchOutputBindingModelError,
+)
 from origin_forge.production_work_order_image import (
     IMAGE_REQUEST_TYPE_ID,
     ImageGenerationDispatchValidator,
@@ -114,3 +119,39 @@ class ImageWorkOrderValidatorTests(unittest.TestCase):
         projection["unexpected"] = True
         with self.assertRaisesRegex(ImageGenerationInvocationError, "unknown or missing"):
             ImageGenerationInvocationRequest.from_projection(projection, "0" * 64)
+
+    def test_image_output_binding_requires_distinct_verified_outputs(self) -> None:
+        ids = {kind: new_id(kind) for kind in (
+            IdKind.DISPATCH_EXECUTION,
+            IdKind.DISPATCH_CLAIM,
+            IdKind.TASK,
+            IdKind.PRODUCTION_WORK_ORDER,
+            IdKind.DISPATCH_BINDING,
+            IdKind.RUN,
+            IdKind.ARTIFACT,
+            IdKind.VERIFICATION,
+        )}
+        output = ImageDispatchOutput(
+            "exports/robot.png", new_id(IdKind.ARTIFACT), new_id(IdKind.VERIFICATION),
+            "a" * 64, "b" * 64, 512, 512, 1234,
+        )
+        binding = ImageDispatchOutputBinding(
+            ids[IdKind.DISPATCH_EXECUTION], ids[IdKind.DISPATCH_CLAIM], ids[IdKind.TASK],
+            2, "c" * 64, ids[IdKind.PRODUCTION_WORK_ORDER], "d" * 64,
+            ids[IdKind.DISPATCH_BINDING], "e" * 64, "originforge.execution.image.generate@1",
+            ids[IdKind.RUN], ids[IdKind.ARTIFACT], new_id(IdKind.ARTIFACT), (output,),
+            "f" * 64, 1, "2026-08-26T00:00:00Z",
+        )
+        self.assertEqual(binding.outputs[0].relative_path, "exports/robot.png")
+        duplicate = ImageDispatchOutput(
+            "exports/ROBOT.PNG", new_id(IdKind.ARTIFACT), new_id(IdKind.VERIFICATION),
+            "1" * 64, "2" * 64, 512, 512, 1234,
+        )
+        with self.assertRaisesRegex(ImageDispatchOutputBindingModelError, "paths must be distinct"):
+            ImageDispatchOutputBinding(
+                ids[IdKind.DISPATCH_EXECUTION], ids[IdKind.DISPATCH_CLAIM], ids[IdKind.TASK],
+                2, "c" * 64, ids[IdKind.PRODUCTION_WORK_ORDER], "d" * 64,
+                ids[IdKind.DISPATCH_BINDING], "e" * 64, "originforge.execution.image.generate@1",
+                ids[IdKind.RUN], ids[IdKind.ARTIFACT], new_id(IdKind.ARTIFACT), (output, duplicate),
+                "f" * 64, 1, "2026-08-26T00:00:00Z",
+            )
