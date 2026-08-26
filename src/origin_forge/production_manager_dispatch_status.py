@@ -45,7 +45,7 @@ class ManagerDispatchStatusProjection:
         ):
             if type(value) is not int or value < 0:
                 raise ValueError(f"{label} must be a non-negative integer")
-        for value, kind, label in (
+        for selected_id, kind, label in (
             (self.selected_task_id, IdKind.TASK, "selected_task_id"),
             (
                 self.selected_dispatch_binding_id,
@@ -58,8 +58,8 @@ class ManagerDispatchStatusProjection:
                 "selected_binding_audit_id",
             ),
         ):
-            if value is not None and (
-                not isinstance(value, str) or not validate_id(value, kind)
+            if selected_id is not None and (
+                not isinstance(selected_id, str) or not validate_id(selected_id, kind)
             ):
                 raise ValueError(f"{label} has wrong canonical ID kind")
         selected_ids = (
