@@ -40,6 +40,7 @@ Artifacts already recorded for that Task.
 Human review decisions are explicit and durable:
 
 ```text
+origin-forge review accept TASK-... --rationale "..."
 origin-forge review reject TASK-... --rationale "..."
 origin-forge review refine TASK-... --rationale "..."
 origin-forge review replace TASK-... --rationale "..."

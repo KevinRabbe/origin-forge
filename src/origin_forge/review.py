@@ -50,11 +50,17 @@ def record_task_review_decision(
     rationale: str,
 ) -> str:
     """Record an explicit human review decision without changing Task state."""
-    if action not in {"reject", "refine", "replace"}:
-        raise ValueError("review action must be reject, refine, or replace")
+    if action not in {"accept", "reject", "refine", "replace"}:
+        raise ValueError("review action must be accept, reject, refine, or replace")
     if not isinstance(rationale, str) or not rationale.strip():
         raise ValueError("review rationale must be non-empty")
     task = runtime.get_task(task_id)
+    if action == "accept":
+        if task["status"] != "SUCCEEDED":
+            raise ValueError("review accept requires a SUCCEEDED Task")
+        verifications = runtime.list_verifications("TASK", task_id)
+        if not any(item["status"] == "PASS" for item in verifications):
+            raise ValueError("review accept requires PASS Task Verification evidence")
     return OriginForgeLineage(runtime).create_decision(
         title=f"Task review: {action.upper()}",
         decision=action.upper(),

@@ -130,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     review_sub = review.add_subparsers(dest="review_command", required=True)
     review_inspect = review_sub.add_parser("inspect", help="inspect one Task review projection")
     review_inspect.add_argument("task_id")
-    for action in ("reject", "refine", "replace"):
+    for action in ("accept", "reject", "refine", "replace"):
         review_action = review_sub.add_parser(action, help=f"record a human {action} decision")
         review_action.add_argument("task_id")
         review_action.add_argument("--rationale", required=True)

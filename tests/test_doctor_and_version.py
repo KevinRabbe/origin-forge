@@ -24,6 +24,9 @@ class DoctorTests(unittest.TestCase):
         review_reject = parser.parse_args(
             ["review", "reject", "TASK-EXAMPLE", "--rationale", "needs revision"]
         )
+        review_accept = parser.parse_args(
+            ["review", "accept", "TASK-EXAMPLE", "--rationale", "looks good"]
+        )
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
             for kind in ("goal", "flow", "task")
@@ -38,6 +41,7 @@ class DoctorTests(unittest.TestCase):
         self.assertTrue(attempt.auto_context)
         self.assertEqual(review.review_command, "inspect")
         self.assertEqual(review_reject.review_command, "reject")
+        self.assertEqual(review_accept.review_command, "accept")
         self.assertEqual(
             [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
             ["inspect", "inspect", "inspect"],
@@ -110,3 +114,15 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(runtime.get_flow(flow_id)["goal_id"], goal_id)
             self.assertEqual(runtime.get_task(task_id)["id"], task_id)
             self.assertTrue(decision_id.startswith("DEC-"))
+
+    def test_review_accept_requires_verified_succeeded_task(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("review-accept-test")
+            goal_id = runtime.create_goal("build a game")
+            flow_id = runtime.create_flow(goal_id)
+            task_id = runtime.create_task(flow_id, "implement movement")
+            with self.assertRaisesRegex(ValueError, "SUCCEEDED Task"):
+                record_task_review_decision(
+                    runtime, task_id, "accept", rationale="looks good"
+                )
