@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .config import EXTERNAL_TOOL_IDS, ExternalToolConfig, load_config
-from .db import SCHEMA_VERSION
+from .db import SCHEMA_VERSION, verify_database_backup
 
 
 @dataclass(frozen=True)
@@ -88,6 +88,21 @@ def inspect_project(project_root: str | Path) -> dict[str, object]:
 
     if schema_version is not None:
         checks.append(_check("schema", schema_version == SCHEMA_VERSION, f"schema version {schema_version}; expected {SCHEMA_VERSION}"))
+
+    backup_dir = state / "backups"
+    backups = sorted(backup_dir.glob("*.bak")) if backup_dir.is_dir() else []
+    if not backups:
+        checks.append(DoctorCheck("database_backups", "SKIP", "no upgrade backup has been created"))
+    else:
+        for backup in backups:
+            report = verify_database_backup(backup)
+            checks.append(
+                DoctorCheck(
+                    f"backup:{backup.name}",
+                    "PASS" if report["valid"] else "FAIL",
+                    str(report["reason"]),
+                )
+            )
 
     failures = [item for item in checks if item.status == "FAIL"]
     return {

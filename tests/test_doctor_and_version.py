@@ -63,6 +63,8 @@ class DoctorTests(unittest.TestCase):
             OriginForgeRuntime(root).initialize("doctor-test")
             result = inspect_project(root)
             self.assertTrue(result["ready"])
+            backup_checks = [item for item in result["checks"] if item["name"] == "database_backups"]
+            self.assertEqual(backup_checks[0]["status"], "SKIP")
             self.assertEqual(result["schema_version"], result["expected_schema_version"])
 
     def test_doctor_reports_optional_tools_without_blocking_readiness(self) -> None:

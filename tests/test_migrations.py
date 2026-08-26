@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from origin_forge.db import SCHEMA_VERSION, migrate
+from origin_forge.db import SCHEMA_VERSION, migrate, verify_database_backup
 from origin_forge.migrations import MIGRATION_001, MIGRATIONS
 from origin_forge.service import OriginForgeStore
 
@@ -41,6 +41,25 @@ class MigrationTests(unittest.TestCase):
             finally:
                 unchanged.close()
             self.assertEqual(backup.read_bytes(), b"operator-preserved")
+
+    def test_backup_verification_is_read_only_and_detects_tampering(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "project.db"
+            conn = sqlite3.connect(path)
+            try:
+                conn.executescript(MIGRATION_001)
+                conn.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (1, '2026-01-01T00:00:00Z')"
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            report = verify_database_backup(path)
+            self.assertTrue(report["valid"])
+            self.assertEqual(report["schema_version"], 1)
+            path.write_bytes(b"tampered")
+            tampered = verify_database_backup(path)
+            self.assertFalse(tampered["valid"])
 
     def test_version_one_database_upgrades_to_latest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

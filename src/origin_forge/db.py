@@ -49,6 +49,45 @@ MIGRATIONS = (
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
 
+def verify_database_backup(
+    backup_path: str | Path, *, expected_schema_version: int = SCHEMA_VERSION
+) -> dict[str, object]:
+    """Verify an upgrade backup without migrating or changing it."""
+    path = Path(backup_path)
+    result: dict[str, object] = {
+        "path": str(path),
+        "valid": False,
+        "schema_version": None,
+        "expected_schema_version": expected_schema_version,
+    }
+    if path.is_symlink() or not path.is_file():
+        result["reason"] = "backup is missing, not a regular file, or is an alias"
+        return result
+    connection: sqlite3.Connection | None = None
+    try:
+        connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5.0)
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()
+        if not integrity or integrity[0] != "ok":
+            result["reason"] = f"SQLite integrity check: {integrity[0] if integrity else 'no result'}"
+            return result
+        current = _schema_version(connection)
+        result["schema_version"] = current
+        if current > expected_schema_version:
+            result["reason"] = (
+                f"backup schema version {current} is newer than expected {expected_schema_version}"
+            )
+            return result
+        result["valid"] = True
+        result["reason"] = "SQLite integrity and schema checks passed"
+        return result
+    except sqlite3.Error as exc:
+        result["reason"] = f"backup cannot be inspected read-only: {exc}"
+        return result
+    finally:
+        if connection is not None:
+            connection.close()
+
+
 def _schema_version(connection: sqlite3.Connection) -> int:
     exists = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'"
@@ -91,8 +130,11 @@ def migrate(
     *,
     backup_path: str | Path | None = None,
 ) -> None:
+    schema_table_exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'"
+    ).fetchone() is not None
     current = _schema_version(connection)
-    if backup_path is not None and current < SCHEMA_VERSION:
+    if backup_path is not None and schema_table_exists and current < SCHEMA_VERSION:
         _backup_before_upgrade(connection, backup_path)
     connection.execute(
         "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
