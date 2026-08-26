@@ -7,7 +7,9 @@ import unittest
 import origin_forge.production_dispatch_binding_review as review_module
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
 from origin_forge.production_capability_models import CapabilityCatalog
-from origin_forge.production_dispatch_binding import build_builtin_dispatch_binder_registry
+from origin_forge.production_dispatch_binding import (
+    build_builtin_dispatch_binder_registry,
+)
 from origin_forge.production_dispatch_binding_review import (
     BuiltinBindingReviewStatus,
     builtin_binding_review,
@@ -47,6 +49,11 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             (phase32.adapter("originforge.blender.model3d"),),
         )
         blender_dispatch = build_builtin_dispatch_catalog(blender_phase32)
+        image_phase32 = CapabilityCatalog.create(
+            (phase32.capability("image.generate"),),
+            (phase32.adapter("originforge.image.generate"),),
+        )
+        image_dispatch = build_builtin_dispatch_catalog(image_phase32)
         binder_registry = build_builtin_dispatch_binder_registry()
         rows = builtin_binding_review()
 
@@ -62,6 +69,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
                 "originforge.code.bounded-retry",
                 "originforge.pixelorama.export",
                 "originforge.simulation.deterministic",
+                "originforge.image.generate",
             },
         )
         reviewed_contracts = (
@@ -69,6 +77,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             *simulation_dispatch.contracts,
             *pixelorama_dispatch.contracts,
             *blender_dispatch.contracts,
+            *image_dispatch.contracts,
         )
         self.assertEqual(
             bindable,
@@ -123,6 +132,9 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             "AUDIO_SOURCE_STRUCTURE_NOT_RESOLVED",
         )
         self.assertIn("PCM hash", ffmpeg.reason)
+        image = rows["originforge.image.generate"]
+        self.assertEqual(image.status, BuiltinBindingReviewStatus.BINDABLE)
+        self.assertIsNone(image.blocker)
         self.assertEqual(piper.status, BuiltinBindingReviewStatus.DEFERRED)
         self.assertEqual(
             piper.blocker,
@@ -143,7 +155,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             for value in rows
             if value.status is BuiltinBindingReviewStatus.DEFERRED
         ]
-        self.assertEqual(len(deferred), 6)
+        self.assertEqual(len(deferred), 5)
         self.assertTrue(all(value.blocker for value in deferred))
         self.assertEqual(
             len({value.blocker for value in deferred}),

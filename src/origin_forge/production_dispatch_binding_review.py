@@ -61,9 +61,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.image.generate",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_TYPED_IMAGE_WORKFLOW_REF",
-            "governed image workflows use bounded workflow tokens rather than a typed infrastructure ref that 34C can resolve exactly",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 57 image integration reconstructs the exact local-only workflow projection and promotes ComfyUI through the governed claim/execution/output-binding chain",
         ),
         BuiltinBindingReview(
             "originforge.vision.inspect",
@@ -120,6 +120,11 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         (phase32.adapter("originforge.blender.model3d"),),
     )
     blender_dispatch_catalog = build_builtin_dispatch_catalog(blender_phase32)
+    image_phase32 = CapabilityCatalog.create(
+        (phase32.capability("image.generate"),),
+        (phase32.adapter("originforge.image.generate"),),
+    )
+    image_dispatch_catalog = build_builtin_dispatch_catalog(image_phase32)
     resolver_registry = build_dispatch_input_resolver_registry()
     binder_registry = build_builtin_dispatch_binder_registry()
 
@@ -137,6 +142,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         *simulation_dispatch_catalog.contracts,
         *pixelorama_dispatch_catalog.contracts,
         *blender_dispatch_catalog.contracts,
+        *image_dispatch_catalog.contracts,
     )
     contract_by_adapter = {value.adapter_id: value for value in reviewed_contracts}
     if len(contract_by_adapter) != len(reviewed_contracts):
