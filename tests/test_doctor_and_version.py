@@ -130,6 +130,8 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(result["task"]["id"], task_id)
             self.assertEqual(result["context"]["paths"], ["game.py"])
             self.assertEqual(result["context"]["files"][0]["path"], "game.py")
+            self.assertTrue(result["context"]["snapshot_id"].startswith("sha256:"))
+            self.assertIn("max_file_bytes", result["context"]["limits"])
             self.assertEqual(before["tasks"], after["tasks"])
             self.assertEqual(before["runs"], after["runs"])
 
