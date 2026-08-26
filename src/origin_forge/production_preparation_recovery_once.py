@@ -129,10 +129,10 @@ def recover_preparation_once(runtime: OriginForgeRuntime, preparation_id: str) -
 
     if state is PreparationRecoveryState.RESUMABLE_ROUTED:
         try:
-            lower = resume_routed_preparation_planner_once(runtime, preparation_id, revision)
+            planner_result = resume_routed_preparation_planner_once(runtime, preparation_id, revision)
         except (RuntimeError, KeyError, TypeError, ValueError) as exc:
             return _result(PreparationRecoveryOnceStatus.INVALID_AUTHORITY, preparation_id, projection, lower_status=state.value, detail=_detail(exc))
-        if not isinstance(lower, PreparationPlannerResumeResult):
+        if not isinstance(planner_result, PreparationPlannerResumeResult):
             return _result(PreparationRecoveryOnceStatus.INVALID_STATE, preparation_id, projection, lower_status=state.value, detail="planner resume returned invalid result type")
         planner_mapping: dict[
             PreparationPlannerResumeStatus, PreparationRecoveryOnceStatus
@@ -141,14 +141,14 @@ def recover_preparation_once(runtime: OriginForgeRuntime, preparation_id: str) -
             PreparationPlannerResumeStatus.PLANNER_RECOVERY_REQUIRED: PreparationRecoveryOnceStatus.PLANNER_RECOVERY_REQUIRED,
             PreparationPlannerResumeStatus.INVALID_AUTHORITY: PreparationRecoveryOnceStatus.INVALID_AUTHORITY,
         }
-        return _result(planner_mapping[lower.status], preparation_id, projection, lower.receipt, lower.status.value, lower.detail)
+        return _result(planner_mapping[planner_result.status], preparation_id, projection, planner_result.receipt, planner_result.status.value, planner_result.detail)
 
     if state is PreparationRecoveryState.PLANNER_EVIDENCE_ONLY:
         try:
-            lower = recover_planner_evidence(runtime, preparation_id)
+            evidence_result = recover_planner_evidence(runtime, preparation_id)
         except (RuntimeError, KeyError, TypeError, ValueError) as exc:
             return _result(PreparationRecoveryOnceStatus.PLANNER_RECOVERY_REQUIRED, preparation_id, projection, lower_status=state.value, detail=_detail(exc))
-        if not isinstance(lower, PlannerEvidenceRecovery):
+        if not isinstance(evidence_result, PlannerEvidenceRecovery):
             return _result(PreparationRecoveryOnceStatus.INVALID_STATE, preparation_id, projection, lower_status=state.value, detail="planner evidence recovery returned invalid result type")
         evidence_mapping: dict[
             PlannerEvidenceRecoveryStatus, PreparationRecoveryOnceStatus
@@ -160,7 +160,7 @@ def recover_preparation_once(runtime: OriginForgeRuntime, preparation_id: str) -
             PlannerEvidenceRecoveryStatus.LIMIT_EXCEEDED: PreparationRecoveryOnceStatus.LIMIT_EXCEEDED,
             PlannerEvidenceRecoveryStatus.INVALID_STATE: PreparationRecoveryOnceStatus.INVALID_STATE,
         }
-        return _result(evidence_mapping[lower.status], preparation_id, projection, lower.receipt, lower.status.value, lower.detail)
+        return _result(evidence_mapping[evidence_result.status], preparation_id, projection, evidence_result.receipt, evidence_result.status.value, evidence_result.detail)
 
     state_mapping: dict[PreparationRecoveryState, PreparationRecoveryOnceStatus] = {
         PreparationRecoveryState.POST_PLANNER_NOT_REQUIRED: PreparationRecoveryOnceStatus.POST_PLANNER_NOT_REQUIRED,

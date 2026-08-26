@@ -53,7 +53,6 @@ from .production_work_orders import ProductionWorkOrder, ProductionWorkOrderErro
 from .runtime import OriginForgeRuntime
 from .state import TaskStatus
 
-
 _PLANNER_ROLE = "WORK_ORDER_PLANNER"
 _PLANNER_VERIFICATION_TYPE = "work-order-planner-generation"
 _PLANNER_VERIFIER = "OriginForge.BoundedProductionWorkOrderPlanner"
@@ -491,6 +490,7 @@ def _work_order_from_planner_evidence(value: object) -> ProductionWorkOrder:
         raise PreparationStatusReadError(
             "Phase-39 v1 planner WorkOrder input refs are not a list"
         )
+    refs: tuple[WorkOrderInputRef, ...]
     if (
         value["selected_adapter_id"] == "originforge.pixelorama.export"
         and value["dispatch_contract_id"] == "pixelorama.spritesheet-export@1"

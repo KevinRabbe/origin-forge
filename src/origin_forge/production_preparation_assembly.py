@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from .config import ProjectConfig, load_config
 from .managed_llamacpp_loader import ManagedLlamaCppCpuLoader
+from .model_runtime_config import ManagedModelRuntimeProviderConfig
 from .model_runtime_registry import (
     ModelRuntimeBinding,
     ModelRuntimeRegistry,
@@ -212,7 +213,7 @@ def _assemble_preparation_planner_dependencies_from_provenance(
 
     profile_ids: list[str] = []
     runtime_ids: set[str] = set()
-    provider_by_runtime: dict[str, object] = {}
+    provider_by_runtime: dict[str, ManagedModelRuntimeProviderConfig] = {}
     model_policy_chain: list[tuple[str, str, tuple[str, ...]]] = []
     for selection in policies:
         model_policy_chain.append(
