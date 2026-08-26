@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
 from .config import load_config
+from .doctor import inspect_project
 from .patches import PatchValidationError
 from .production_goal_bootstrap_operator import (
     GoalBootstrapOperatorBlocked,
@@ -20,10 +21,10 @@ from .production_goal_bootstrap_operator import (
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .repository import RepositoryAccessError
+from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .sandbox import SandboxPolicyError, SandboxUnavailable
 from .sandbox_factory import create_sandbox_backend
 from .sandbox_verification import SandboxedWorkspaceVerifier
-from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .service import StaleRevision, VerificationRequired
 from .state import FlowStatus, GoalStatus, InvalidTransition, RunStatus, TaskStatus
 from .worker import LocalPatchWorker
@@ -76,6 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser = sub.add_parser("init", help="initialize Origin Forge state")
     init_parser.add_argument("--name", help="project name (default: directory name)")
     sub.add_parser("status", help="show durable runtime status")
+    doctor = sub.add_parser("doctor", help="inspect project readiness without changing state")
+    doctor.add_argument("--strict", action="store_true", help="return failure when any readiness check fails")
 
     recover_parser = sub.add_parser(
         "recover", help="inspect or reconcile interrupted RUNNING records"
@@ -171,6 +174,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_finish.add_argument("--failure-reason")
     run_show = run.add_parser("show")
     run_show.add_argument("run_id")
+    run_inspect = run.add_parser("inspect", help="inspect one run (read-only alias for show)")
+    run_inspect.add_argument("run_id")
 
     verify = sub.add_parser("verify", help="record and inspect verification").add_subparsers(
         dest="verify_command", required=True
@@ -224,6 +229,10 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "status":
         _print(runtime.status())
         return 0
+    if args.command == "doctor":
+        result = inspect_project(args.project_root)
+        _print(result)
+        return 0 if result["ready"] or not args.strict else 1
     if args.command == "recover":
         raw = runtime.recover() if args.apply else runtime.recovery_findings()
         _print({"applied": bool(args.apply), "findings": [item.__dict__ for item in raw]})
@@ -323,7 +332,7 @@ def _main(argv: list[str] | None = None) -> int:
             runtime.finish_run(args.run_id, args.status, failure_reason=args.failure_reason)
             _print(runtime.get_run(args.run_id))
             return 0
-        if args.run_command == "show":
+        if args.run_command in {"show", "inspect"}:
             _print(runtime.get_run(args.run_id))
             return 0
 
