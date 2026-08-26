@@ -18,6 +18,7 @@ class DoctorTests(unittest.TestCase):
         inspect = parser.parse_args(["run", "inspect", "RUN-EXAMPLE"])
         advance = parser.parse_args(["advance"])
         context = parser.parse_args(["context", "preview", "TASK-EXAMPLE", "--file", "game.py"])
+        attempt = parser.parse_args(["attempt", "TASK-EXAMPLE", "--auto-context"])
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
             for kind in ("goal", "flow", "task")
@@ -28,6 +29,8 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(advance.command, "advance")
         self.assertEqual(context.context_command, "preview")
         self.assertEqual(context.files, ["game.py"])
+        self.assertEqual(attempt.command, "attempt")
+        self.assertTrue(attempt.auto_context)
         self.assertEqual(
             [item.goal_command if item.command == "goal" else item.flow_command if item.command == "flow" else item.task_command for item in graph_inspects],
             ["inspect", "inspect", "inspect"],

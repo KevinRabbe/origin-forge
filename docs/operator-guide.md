@@ -20,6 +20,14 @@ origin-forge-attempt  exactly one bounded coding attempt
 origin-forge-cockpit  read-only local inspection
 ```
 
+The bounded coding attempt is also available under the unified operator CLI:
+
+```text
+origin-forge attempt TASK-... --auto-context
+```
+
+It delegates to the same single-attempt engine as `origin-forge-attempt`.
+
 Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52/53/54/55/56 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
 
 ## Initialize a project

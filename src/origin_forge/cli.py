@@ -19,6 +19,7 @@ from .production_goal_bootstrap_operator import (
     inspect_goal_bootstrap_status_readonly,
     recover_goal_once,
 )
+from .orchestration_cli import main as bounded_attempt_main
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .repository import RepositoryAccessError
@@ -108,6 +109,22 @@ def build_parser() -> argparse.ArgumentParser:
     context_preview.add_argument("--seed-file", action="append", default=[], dest="seed_files")
     context_preview.add_argument("--structural-context", action="store_true")
     context_preview.add_argument("--semantic-context", action="store_true")
+
+    attempt = sub.add_parser("attempt", help="run exactly one bounded coding attempt")
+    attempt.add_argument("task_id")
+    attempt_mode = attempt.add_mutually_exclusive_group(required=True)
+    attempt_mode.add_argument("--file", action="append", dest="files")
+    attempt_mode.add_argument("--auto-context", action="store_true")
+    attempt.add_argument("--seed-file", action="append", default=[], dest="seed_files")
+    attempt.add_argument("--structural-context", action="store_true")
+    attempt.add_argument("--semantic-context", action="store_true")
+    attempt.add_argument("--base-url", default="http://127.0.0.1:8080")
+    attempt.add_argument("--model", default="local-model")
+    attempt.add_argument("--api-key", default="no-key")
+    attempt.add_argument("--timeout", type=float, default=300.0)
+    attempt.add_argument("--max-tokens", type=int, default=4096)
+    attempt.add_argument("--temperature", type=float, default=0.2)
+    attempt.add_argument("--allow-remote", action="store_true")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -284,6 +301,29 @@ def _main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+    if args.command == "attempt":
+        forwarded = ["--project-root", str(args.project_root), args.task_id]
+        if args.auto_context:
+            forwarded.append("--auto-context")
+        else:
+            for path in args.files or []:
+                forwarded.extend(["--file", path])
+        for path in args.seed_files:
+            forwarded.extend(["--seed-file", path])
+        for flag in ("--structural-context", "--semantic-context", "--allow-remote"):
+            if getattr(args, flag.removeprefix("--").replace("-", "_")):
+                forwarded.append(flag)
+        forwarded.extend(
+            [
+                "--base-url", args.base_url,
+                "--model", args.model,
+                "--api-key", args.api_key,
+                "--timeout", str(args.timeout),
+                "--max-tokens", str(args.max_tokens),
+                "--temperature", str(args.temperature),
+            ]
+        )
+        return bounded_attempt_main(forwarded)
 
     if args.command == "goal":
         if args.goal_command == "bootstrap":
