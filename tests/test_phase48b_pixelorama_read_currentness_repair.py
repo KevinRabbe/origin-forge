@@ -195,7 +195,10 @@ class Phase48BPixeloramaReadCurrentnessRepairTests(unittest.TestCase):
         self.assertIn('resolved[0].original_ref.role == "model3d_request"', source)
         self.assertIn('resolved[0].source_object_type == "MODEL3D_REQUEST"', source)
         self.assertIn('resolved[0].resolution_class == "PROTECTED_MODEL3D_REQUEST"', source)
-        self.assertIn("if not (pixelorama_input or blender_input):", source)
+        self.assertIn(
+            "if not (pixelorama_input or blender_input or piper_input or runtime_input or playtest_input):",
+            source,
+        )
         artifact_resolver_source = inspect.getsource(ArtifactInputResolver)
         self.assertNotIn("read_bytes", artifact_resolver_source)
         self.assertNotIn("open(", artifact_resolver_source)
