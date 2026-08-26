@@ -26,6 +26,7 @@ from origin_forge.pixelorama_models import (
     SpriteProjectSpec,
 )
 from origin_forge.pixelorama_source import create_pixelorama_source
+from origin_forge.review import record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import FlowStatus, RunStatus, TaskStatus
 
@@ -238,6 +239,41 @@ class PixeloramaMediaTests(unittest.TestCase):
         self.assertEqual(len(project_outputs), 1)
         self.assertEqual(result.operation.bridge_result.status, BridgeResultStatus.SUCCEEDED)
         self.assertFalse(result.to_dict()["canonical_asset_adopted"])
+
+    def test_created_project_requires_human_review_before_explicit_adoption(self) -> None:
+        script = self._script("review-source-bridge.py")
+        request = self._request()
+        before = self.runtime.get_task(self.task)
+        result = create_pixelorama_source(
+            self.runtime,
+            self.task,
+            self._profile(script),
+            request.sprite_spec,
+            export_specs=request.export_specs,
+            budget=request.budget,
+        )
+        project = next(
+            value
+            for value in result.output_evidence
+            if value.output_type is BridgeOutputType.PIXELORAMA_PROJECT
+        )
+        rejected = record_task_review_decision(
+            self.runtime, self.task, "reject", rationale="sprite silhouette needs revision"
+        )
+        refined = record_task_review_decision(
+            self.runtime, self.task, "refine", rationale="rework the silhouette"
+        )
+        adopted = PixeloramaOutputAdopter(self.runtime).adopt_new(
+            project.artifact_id, "assets/sprites/reviewed-sprite.pxo"
+        )
+        self.assertTrue(rejected.startswith("DEC-"))
+        self.assertTrue(refined.startswith("DEC-"))
+        after = self.runtime.get_task(self.task)
+        self.assertEqual(after["status"], before["status"])
+        self.assertEqual(after["revision"], before["revision"])
+        self.assertIsNone(after["assigned_run_id"])
+        self.assertEqual(self.runtime.list_verifications("TASK", self.task), [])
+        self.assertEqual(adopted.source_artifact_id, project.artifact_id)
         self.assertFalse(result.to_dict()["task_status_changed"])
         self.assertFalse(result.to_dict()["canonical_asset_adopted"])
 
