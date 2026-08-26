@@ -220,6 +220,29 @@ The selected `DISPEXEC-*` must resolve to the exact immutable Phase-51 Blender d
 
 The destination must be a new safe project-relative path. Publication is create-only and never overwrites an existing file. One exact bound Blender production execution/output may be canonically adopted at most once. A PREPARED receipt is retryable only while the destination is absent. If the destination exists beside PREPARED state, automatic retry fails closed with recovery required rather than deleting, replacing, or guessing whether the prior publication completed.
 
+## Publish a governed Blender semantic request
+
+Phase 57 adds a separate module-only publication boundary between accepted design
+evidence and the existing Blender WorkOrder. First create the Phase-57A
+proposal and independent PASS audit, then explicitly approve and publish it:
+
+```bash
+python -m origin_forge.model3d_request_publication_admin_cli approve \
+  --proposal-id M3DREQPROP-...
+python -m origin_forge.model3d_request_publication_admin_cli publish \
+  --approval-id M3DREQAPP-...
+python -m origin_forge.model3d_request_publication_admin_cli inspect \
+  --publication-id M3DREQPUB-...
+```
+
+Approval is fixed to `HUMAN_OPERATOR`. Origin Forge allocates the final
+`MODEL3DREQ-*` identity and publishes it to the existing protected registry;
+operators and models cannot provide or replace its ID, hash, payload, path, or
+runtime authority. Blender admission requires the exact current
+`M3DREQPUB-*` relation for the Task. Missing, conflicting, stale, or tampered
+approval/publication/request evidence fails closed. Recovery can finish a
+durable approval or publication without rerunning the semantic model.
+
 A successful adoption creates one adopted child `BLENDER_GLB_EXPORT` Artifact, one exact `blender-production-adoption-integrity` PASS Verification, and finalizes the immutable Blender adoption receipt as PUBLISHED. The Task remains `RUNNING`; no Task PASS/FAIL is synthesized, semantic geometry or aesthetic quality is not asserted, and provenance is not signed.
 
 Phase 52 adoption never invokes Blender. It consumes only the exact already-durable Phase-51 terminal output and fails closed rather than replaying the backend. Phase 52 alone stops at canonical byte adoption; semantic Task acceptance is the separately governed Phase-53 boundary documented below.

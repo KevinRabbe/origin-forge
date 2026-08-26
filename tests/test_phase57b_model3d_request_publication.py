@@ -18,7 +18,9 @@ from origin_forge.production_model3d_request_publication import (
     publish_approved_model3d_request,
     read_model3d_request_approval,
     read_model3d_request_publication,
+    require_current_model3d_publication,
 )
+from origin_forge.state import GoalStatus
 from tests.test_phase57a_model3d_request_authoring import (
     Phase57AModel3DRequestAuthoringTests,
     _semantic_response,
@@ -134,6 +136,38 @@ class Phase57BModel3DRequestPublicationTests(unittest.TestCase):
         self.assertEqual(
             read_model3d_request_approval(fixture.runtime, first.approval_id), first
         )
+
+    def test_phase51_admission_requires_exact_current_publication(self) -> None:
+        fixture, approval = self._approved()
+        publication = publish_approved_model3d_request(fixture.runtime, approval.approval_id)
+        self.assertEqual(
+            require_current_model3d_publication(
+                fixture.runtime,
+                task_id=fixture.task_id,
+                request_id=publication.request_id,
+                request_hash=publication.request_hash,
+            ),
+            publication,
+        )
+        with self.assertRaises(Model3DRequestPublicationError):
+            require_current_model3d_publication(
+                fixture.runtime,
+                task_id=fixture.task_id,
+                request_id=publication.request_id,
+                request_hash="sha256:" + "0" * 64,
+            )
+
+    def test_stale_upstream_lineage_blocks_phase51_admission(self) -> None:
+        fixture, approval = self._approved()
+        publication = publish_approved_model3d_request(fixture.runtime, approval.approval_id)
+        fixture.runtime.transition_goal(fixture.goal_id, GoalStatus.ACTIVE, expected_revision=0)
+        with self.assertRaisesRegex(Model3DRequestPublicationError, "historical"):
+            require_current_model3d_publication(
+                fixture.runtime,
+                task_id=fixture.task_id,
+                request_id=publication.request_id,
+                request_hash=publication.request_hash,
+            )
 
 
 if __name__ == "__main__":
