@@ -11,20 +11,28 @@ from .production_dispatch_resolution_models import (
     ResolverClaim,
 )
 from .production_dispatch_resolvers import (
-    DispatchInputResolutionError,
-    WorkOrderInputResolver,
-    WorkOrderInputResolverRegistry,
     ArtifactInputResolver,
     DesignRuleInputResolver,
+    DispatchInputResolutionError,
     ProjectEntityInputResolver,
     VerificationInputResolver,
+    WorkOrderInputResolver,
+    WorkOrderInputResolverRegistry,
 )
-from .production_work_order_models import WorkOrderInputRef, WorkOrderRefType, content_hash
-from .runtime import OriginForgeRuntime
 from .production_runtime_observation_store import (
     RuntimeObservationRequestStore,
     RuntimeObservationRequestStoreError,
 )
+from .production_playtest_scenario_store import (
+    PlaytestScenarioStore,
+    PlaytestScenarioStoreError,
+)
+from .production_work_order_models import (
+    WorkOrderInputRef,
+    WorkOrderRefType,
+    content_hash,
+)
+from .runtime import OriginForgeRuntime
 
 
 class PhaseSpecificResolverReviewStatus(StrEnum):
@@ -265,6 +273,61 @@ class RuntimeObservationRequestInputResolver:
         )
 
 
+class PlaytestScenarioInputResolver:
+    """Resolve one exact immutable PLAYSCEN scenario without invoking a harness."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.PLAYTEST_SCENARIO,
+        "PLAYSCEN-",
+        "PLAYTEST_SCENARIO",
+        "playtest_scenario",
+    )
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.phase.playtest-scenario@1",
+        content_hash(
+            {
+                "implementation_id": "origin-forge-playtest-scenario-resolver@1",
+                "claim": _CLAIM.to_dict(),
+                "projection_contract": {
+                    "source": "PlaytestScenarioStore.get",
+                    "backend_invocation": False,
+                },
+            }
+        ),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(self, runtime: OriginForgeRuntime, ref: WorkOrderInputRef) -> ResolvedWorkOrderInput:
+        if (
+            not isinstance(ref, WorkOrderInputRef)
+            or ref.ref_type is not WorkOrderRefType.PLAYTEST_SCENARIO
+            or not ref.ref_id.startswith("PLAYSCEN-")
+            or ref.role != "playtest_scenario"
+            or ref.revision is not None
+        ):
+            raise DispatchInputResolutionError("WorkOrder ref does not match playtest scenario claim")
+        try:
+            scenario = PlaytestScenarioStore(runtime).get(ref.ref_id, "sha256:" + ref.content_hash)
+        except KeyError as exc:
+            raise DispatchInputResolutionError("playtest scenario is not available under the exact ID/hash") from exc
+        except (PlaytestScenarioStoreError, RuntimeError, TypeError, ValueError) as exc:
+            raise DispatchInputResolutionError("playtest scenario failed protected-store revalidation") from exc
+        if scenario.content_hash != "sha256:" + ref.content_hash:
+            raise DispatchInputResolutionError("playtest scenario content hash drifted")
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="PLAYTEST_SCENARIO",
+            resolution_class="PROTECTED_PLAYTEST_SCENARIO",
+            projection=scenario.to_dict(),
+        )
+
+
 def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
     """Freeze the evidence-driven resolver inclusion/defer boundary.
 
@@ -290,8 +353,8 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
         ),
         PhaseSpecificResolverReview(
             "playtest-scenario",
-            PhaseSpecificResolverReviewStatus.DEFERRED_NO_TYPED_READER,
-            "PLAYSCEN data is persisted inside playtest workspaces/artifacts without a direct exact PLAYSCEN reader; resolver scanning is forbidden",
+            PhaseSpecificResolverReviewStatus.SUPPORTED,
+            "PLAYSCEN scenarios are content-addressed and PlaytestScenarioStore.get performs exact non-creating canonical/symlink-safe revalidation",
         ),
         PhaseSpecificResolverReview(
             "image-workflow",
@@ -322,6 +385,7 @@ def phase_specific_input_resolvers() -> tuple[WorkOrderInputResolver, ...]:
         AudioProfileInputResolver(),
         Model3DRequestInputResolver(),
         RuntimeObservationRequestInputResolver(),
+        PlaytestScenarioInputResolver(),
     )
 
 

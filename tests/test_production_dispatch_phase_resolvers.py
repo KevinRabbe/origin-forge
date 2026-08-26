@@ -182,6 +182,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
                 "resolver.core.verification@1",
                 "resolver.phase.audio-profile@1",
                 "resolver.phase.model3d-request@1",
+                "resolver.phase.playtest-scenario@1",
                 "resolver.phase.runtime-observation-request@1",
             ),
         )
@@ -191,7 +192,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
             if descriptor.resolver_id.startswith("resolver.phase.")
             for claim in descriptor.claims
         ]
-        self.assertEqual(len(phase_claims), 3)
+        self.assertEqual(len(phase_claims), 4)
         claims = {claim.ref_type: claim for claim in phase_claims}
         audio_claim = claims[WorkOrderRefType.AUDIO_PROFILE]
         self.assertEqual(audio_claim.source_id_prefix, "AUDPROF-")
@@ -224,7 +225,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
         ]
         self.assertEqual(
             supported,
-            ["audio-profile", "model3d-request", "runtime-observation-request"],
+            ["audio-profile", "model3d-request", "playtest-scenario", "runtime-observation-request"],
         )
         self.assertTrue(
             all(
@@ -234,6 +235,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
                 not in {
                     "audio-profile",
                     "model3d-request",
+                    "playtest-scenario",
                     "runtime-observation-request",
                 }
             )
