@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from html import escape
+from typing import cast
 
 from .production_interface_snapshot import ProductionInterfaceSnapshot
 
@@ -466,7 +467,11 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
                     (
                         "task",
                         row["task_id"],
-                        (row["claims"], row["executions"], sum(row["output_bindings"].values())),
+                        (
+                            row["claims"],
+                            row["executions"],
+                            sum(cast(dict[str, int], row["output_bindings"]).values()),
+                        ),
                     )
                     for row in snapshot.production_trace
                 ),
@@ -789,7 +794,7 @@ def render_detail(
                     ),
                 )
                 for value in snapshot.design_rules
-                if object_id in value["scope_entity_ids"]
+                if object_id in cast(Iterable[str], value["scope_entity_ids"])
             ),
         )
     elif kind == "rule":
