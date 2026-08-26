@@ -5,12 +5,43 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from origin_forge.db import SCHEMA_VERSION
+from origin_forge.db import SCHEMA_VERSION, migrate
 from origin_forge.migrations import MIGRATION_001, MIGRATIONS
 from origin_forge.service import OriginForgeStore
 
 
 class MigrationTests(unittest.TestCase):
+    def test_upgrade_creates_non_overwriting_backup_before_migration(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "project.db"
+            conn = sqlite3.connect(path)
+            try:
+                conn.executescript(MIGRATION_001)
+                conn.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (1, '2026-01-01T00:00:00Z')"
+                )
+                conn.commit()
+                backup = Path(temp) / "backups" / "project.db.before-latest.bak"
+                migrate(conn, "2026-01-02T00:00:00Z", backup_path=backup)
+            finally:
+                conn.close()
+            self.assertTrue(backup.is_file())
+            saved = sqlite3.connect(backup)
+            try:
+                self.assertEqual(
+                    saved.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],
+                    1,
+                )
+            finally:
+                saved.close()
+            backup.write_bytes(b"operator-preserved")
+            unchanged = sqlite3.connect(path)
+            try:
+                migrate(unchanged, "2026-01-03T00:00:00Z", backup_path=backup)
+            finally:
+                unchanged.close()
+            self.assertEqual(backup.read_bytes(), b"operator-preserved")
+
     def test_version_one_database_upgrades_to_latest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "project.db"

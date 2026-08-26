@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from .db import connect, migrate
+from .db import SCHEMA_VERSION, connect, migrate
 from .ids import IdKind, new_id
 from .state import (
     FLOW_TRANSITIONS,
@@ -49,7 +49,12 @@ class OriginForgeStore:
 
     def open(self) -> sqlite3.Connection:
         connection = connect(self.db_path)
-        migrate(connection, utc_now())
+        backup_path = (
+            self.db_path.parent
+            / "backups"
+            / f"{self.db_path.name}.before-v{SCHEMA_VERSION}.bak"
+        )
+        migrate(connection, utc_now(), backup_path=backup_path)
         return connection
 
     @contextmanager

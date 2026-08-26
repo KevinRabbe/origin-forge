@@ -49,6 +49,31 @@ MIGRATIONS = (
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
 
+def _schema_version(connection: sqlite3.Connection) -> int:
+    exists = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'"
+    ).fetchone()
+    if exists is None:
+        return 0
+    row = connection.execute(
+        "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def _backup_before_upgrade(connection: sqlite3.Connection, backup_path: str | Path) -> None:
+    destination_path = Path(backup_path)
+    if destination_path.exists() or destination_path.is_symlink():
+        return
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    destination = sqlite3.connect(destination_path)
+    try:
+        connection.backup(destination)
+        destination.commit()
+    finally:
+        destination.close()
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -60,14 +85,22 @@ def connect(path: str | Path) -> sqlite3.Connection:
     return connection
 
 
-def migrate(connection: sqlite3.Connection, now: str) -> None:
+def migrate(
+    connection: sqlite3.Connection,
+    now: str,
+    *,
+    backup_path: str | Path | None = None,
+) -> None:
+    current = _schema_version(connection)
+    if backup_path is not None and current < SCHEMA_VERSION:
+        _backup_before_upgrade(connection, backup_path)
     connection.execute(
         "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
     )
     row = connection.execute(
         "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations"
     ).fetchone()
-    current = int(row["version"])
+    current = int(row["version"] if isinstance(row, sqlite3.Row) else row[0])
 
     for migration in MIGRATIONS:
         if migration.version <= current:
