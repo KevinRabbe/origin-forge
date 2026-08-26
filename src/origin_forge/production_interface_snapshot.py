@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from .dream_read import DreamReadService
 from .model_resource_read import inspect_model_resources
 from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import ensure_production_runtime_readable
 from .production_runtime_read import ProductionRuntimeReadService
+from .production_trace import inspect_task_production_trace
 from .project_intelligence_read import ProjectIntelligenceReadService
 from .provenance_read import ProvenanceReadService
 from .runtime import OriginForgeRuntime
 from .runtime_observation_models import content_hash
-
 
 _MAX_TEXT_CHARS = 4096
 _MAX_SECTION_ROWS = 10_000
@@ -340,6 +341,7 @@ class ProductionInterfaceSnapshot:
     dream_memory: dict[str, object]
     total_counts: dict[str, int]
     truncated: dict[str, bool]
+    production_trace: tuple[dict[str, object], ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -363,6 +365,7 @@ class ProductionInterfaceSnapshot:
             "dream_memory": self.dream_memory,
             "total_counts": dict(sorted(self.total_counts.items())),
             "truncated": dict(sorted(self.truncated.items())),
+            "production_trace": list(self.production_trace),
             "authority": {
                 "read_only": True,
                 "task_mutation": False,
@@ -449,6 +452,20 @@ def build_production_interface_snapshot(
     goals, goals_truncated = _limit_rows(raw_goals, max_goals)
     flows, flows_truncated = _limit_rows(raw_flows, max_flows)
     tasks, tasks_truncated = _limit_rows(raw_tasks, max_tasks)
+    production_trace = tuple(
+        {
+            "task_id": task["id"],
+            "claims": len(trace["dispatch"]["claims"]),
+            "executions": len(trace["dispatch"]["executions"]),
+            "output_bindings": {
+                table: len(rows)
+                for table, rows in trace["dispatch"]["output_bindings"].items()
+            },
+            "read_only": True,
+        }
+        for task in tasks
+        for trace in (inspect_task_production_trace(runtime, str(task["id"])),)
+    )
     runs, runs_truncated = _limit_rows(raw_runs, max_runs)
 
     verification_rows: list[dict[str, Any]] = []
@@ -618,4 +635,5 @@ def build_production_interface_snapshot(
             "memory_entries": dream_counts["memory_entries"] > len(memory_entries),
             "memory_generations": dream_counts["generations"] > len(memory_generations),
         },
+        production_trace=production_trace,
     )

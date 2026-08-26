@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from html import escape
-from typing import Iterable, Mapping
 
 from .production_interface_snapshot import ProductionInterfaceSnapshot
-
 
 _MAX_HTML_BYTES = 4 * 1024 * 1024
 
@@ -460,6 +459,18 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
         )
     body.extend(
         [
+            "<h2>Production Trace</h2>",
+            _linked_table(
+                ("Task", "Claims", "Executions", "Output bindings"),
+                (
+                    (
+                        "task",
+                        row["task_id"],
+                        (row["claims"], row["executions"], sum(row["output_bindings"].values())),
+                    )
+                    for row in snapshot.production_trace
+                ),
+            ),
             "<h2>Goals</h2>",
             _linked_table(
                 ("ID", "Status", "Objective"),
