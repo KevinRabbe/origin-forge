@@ -120,6 +120,18 @@ class GitWorkspaceManager:
             str(workspace_path),
             base_commit,
         )
+        # Worktree evidence is content-addressed.  A developer's global
+        # autocrlf setting must not change the bytes hashed by the model
+        # precondition or the independent audit.
+        self._git(
+            "-c",
+            "core.autocrlf=false",
+            "-C",
+            str(workspace_path),
+            "reset",
+            "--hard",
+            base_commit,
+        )
 
         now = utc_now()
         try:
