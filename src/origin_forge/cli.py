@@ -11,6 +11,7 @@ from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
 from .config import load_config
 from .context_preview import build_context_preview
 from .doctor import inspect_project
+from .orchestration_cli import main as bounded_attempt_main
 from .patches import PatchValidationError
 from .production_goal_bootstrap_operator import (
     GoalBootstrapOperatorBlocked,
@@ -19,7 +20,6 @@ from .production_goal_bootstrap_operator import (
     inspect_goal_bootstrap_status_readonly,
     recover_goal_once,
 )
-from .orchestration_cli import main as bounded_attempt_main
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .repository import RepositoryAccessError
