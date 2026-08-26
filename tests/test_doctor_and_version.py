@@ -110,6 +110,24 @@ class DoctorTests(unittest.TestCase):
             )
             self.assertEqual(before, after)
 
+    def test_status_exposes_readiness_and_operator_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = OriginForgeRuntime(Path(directory))
+            runtime.initialize("status-readiness-test")
+
+            status = runtime.status()
+
+            self.assertEqual(status["task_readiness"], {})
+            self.assertEqual(
+                status["operator_actions"],
+                {
+                    "attempt": 0,
+                    "inspect_or_recover": 0,
+                    "review_or_accept": 0,
+                    "recover": 0,
+                },
+            )
+
     def test_doctor_reports_optional_tools_without_blocking_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
