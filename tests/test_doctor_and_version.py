@@ -204,7 +204,19 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(result["goal"]["id"], goal_id)
             self.assertEqual(result["flow"]["id"], flow_id)
             self.assertEqual(result["task"]["id"], task_id)
-            self.assertEqual(result["dispatch"], {"claims": [], "executions": []})
+            self.assertEqual(result["dispatch"]["claims"], [])
+            self.assertEqual(result["dispatch"]["executions"], [])
+            self.assertEqual(
+                set(result["dispatch"]["output_bindings"]),
+                {
+                    "pixelorama_dispatch_output_bindings",
+                    "blender_dispatch_output_bindings",
+                    "image_dispatch_output_bindings",
+                    "audio_dispatch_output_bindings",
+                    "runtime_dispatch_output_bindings",
+                    "playtest_dispatch_output_bindings",
+                },
+            )
             self.assertEqual(result["next_action"], "ADVANCE")
             self.assertEqual(before["tasks"], after["tasks"])
             self.assertEqual(before["runs"], after["runs"])

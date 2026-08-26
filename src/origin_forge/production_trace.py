@@ -4,7 +4,10 @@ from typing import Any
 
 from .lineage import OriginForgeLineage
 from .production_evidence_read import ProductionEvidenceReadService
-from .production_read_guard import ensure_production_runtime_readable, production_read_connection
+from .production_read_guard import (
+    ensure_production_runtime_readable,
+    production_read_connection,
+)
 from .runtime import OriginForgeRuntime
 from .workspaces import GitWorkspaceManager
 
@@ -37,6 +40,21 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
             "SELECT * FROM dispatch_executions WHERE project_id = ? AND task_id = ? ORDER BY created_at, execution_id",
             (runtime.project_id(), task_id),
         )
+        output_bindings = {
+            table: _rows(
+                conn,
+                f"SELECT * FROM {table} WHERE task_id = ? ORDER BY created_at, execution_id",
+                (task_id,),
+            )
+            for table in (
+                "pixelorama_dispatch_output_bindings",
+                "blender_dispatch_output_bindings",
+                "image_dispatch_output_bindings",
+                "audio_dispatch_output_bindings",
+                "runtime_dispatch_output_bindings",
+                "playtest_dispatch_output_bindings",
+            )
+        }
     decisions = [
         item for item in OriginForgeLineage(runtime).list_decisions() if item.get("task_id") == task_id
     ]
@@ -46,7 +64,11 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
         "task": task,
         "runs": runs,
         "workspaces": GitWorkspaceManager(runtime).list(task_id),
-        "dispatch": {"claims": claims, "executions": executions},
+        "dispatch": {
+            "claims": claims,
+            "executions": executions,
+            "output_bindings": output_bindings,
+        },
         "artifacts": artifacts,
         "verifications": runtime.list_verifications("TASK", task_id),
         "decisions": decisions,
