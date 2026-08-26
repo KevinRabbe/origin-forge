@@ -15,7 +15,6 @@ from .production_capability_models import (
 )
 from .service import OriginForgeStore
 
-
 _MAX_TASK_TEXT_CHARS = 16_384
 _MAX_TASK_LIST_ITEMS = 256
 _MAX_TASK_BUDGET_KEYS = 128
@@ -157,9 +156,14 @@ class TaskRouteInput:
     required_capabilities: tuple[str, ...]
 
     @classmethod
-    def from_row(cls, row: sqlite3.Row) -> "TaskRouteInput":
+    def from_row(cls, row: sqlite3.Row) -> TaskRouteInput:
         payload = _task_payload(row)
-        required = tuple(payload["required_capabilities"])
+        raw_required = payload["required_capabilities"]
+        if not isinstance(raw_required, list) or any(
+            not isinstance(capability_id, str) for capability_id in raw_required
+        ):
+            raise CapabilityRoutingError("required_capabilities projection is invalid")
+        required = tuple(raw_required)
         return cls(
             task_id=row["id"],
             flow_id=row["flow_id"],
