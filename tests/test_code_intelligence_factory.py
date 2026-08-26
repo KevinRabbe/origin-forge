@@ -14,16 +14,22 @@ class ConfiguredLspFactoryTests(unittest.TestCase):
             root = Path(temp)
             runtime = OriginForgeRuntime(root)
             runtime.initialize("lsp-factory-test")
-            runtime.state_dir.joinpath("config.toml").write_text(
-                '''version = 4
+            configured_podman = root / "tools" / "podman.exe"
+            configured_podman.parent.mkdir()
+            configured_podman.write_bytes(b"configured podman")
+            config_text = '''version = 4
 [commands]
 build = []
 test = []
+[tools]
+podman = "__PODMAN_PATH__"
 [code_intelligence]
 lsp_servers = [
   { server_id = "python", backend = "podman", image = "python-lsp:local", argv = ["python-lsp", "--stdio"], network = false, memory = "1g", cpus = 1.25, pids_limit = 64 }
 ]
-''',
+'''.replace("__PODMAN_PATH__", configured_podman.as_posix())
+            runtime.state_dir.joinpath("config.toml").write_text(
+                config_text,
                 encoding="utf-8",
             )
 
@@ -36,6 +42,7 @@ lsp_servers = [
             self.assertEqual(backend.spec.memory, "1g")
             self.assertEqual(backend.spec.cpus, 1.25)
             self.assertEqual(backend.spec.pids_limit, 64)
+            self.assertEqual(backend.spec.podman_executable, str(configured_podman))
 
             with self.assertRaises(KeyError):
                 create_configured_lsp_backend(runtime, "not-configured")
