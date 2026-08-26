@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from .config import load_config
 from .pixelorama_cli_export import PixeloramaCliProfile
 from .production_work_order_models import content_hash
 
@@ -16,10 +17,16 @@ _FINGERPRINT_ENV = "ORIGIN_FORGE_PIXELORAMA_SHA256"
 _VERSION_ENV = "ORIGIN_FORGE_PIXELORAMA_VERSION"
 
 
-def load_infrastructure_pixelorama_cli_profile() -> PixeloramaCliProfile:
+def load_infrastructure_pixelorama_cli_profile(
+    project_root: str | Path | None = None,
+) -> PixeloramaCliProfile:
     """Load one operator-owned profile without reading or launching the executable."""
 
     executable = os.environ.get(_EXECUTABLE_ENV)
+    if project_root is not None:
+        configured = load_config(project_root).external_tools.path("pixelorama")
+        if configured is not None:
+            executable = configured
     fingerprint = os.environ.get(_FINGERPRINT_ENV)
     version = os.environ.get(_VERSION_ENV)
     if not executable or not fingerprint or not version:

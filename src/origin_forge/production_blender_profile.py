@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from .blender_adapter import BlenderRuntimeProfile, blender_runner_v1_fingerprint
+from .config import load_config
 from .production_work_order_models import content_hash
 
 
@@ -17,11 +18,17 @@ _RUNTIME_HASH_ENV = "ORIGIN_FORGE_BLENDER_RUNTIME_SHA256"
 _VERSION_ENV = "ORIGIN_FORGE_BLENDER_VERSION"
 
 
-def load_infrastructure_blender_runtime_profile() -> BlenderRuntimeProfile:
+def load_infrastructure_blender_runtime_profile(
+    project_root: str | Path | None = None,
+) -> BlenderRuntimeProfile:
     """Load one operator-owned Blender profile without reading or launching the runtime."""
 
     runtime_root = os.environ.get(_RUNTIME_ROOT_ENV)
     executable = os.environ.get(_EXECUTABLE_ENV)
+    if project_root is not None:
+        configured = load_config(project_root).external_tools.path("blender")
+        if configured is not None:
+            executable = configured
     runtime_hash = os.environ.get(_RUNTIME_HASH_ENV)
     version = os.environ.get(_VERSION_ENV)
     if not runtime_root or not executable or not runtime_hash or not version:

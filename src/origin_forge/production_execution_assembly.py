@@ -5,7 +5,11 @@ from dataclasses import dataclass
 from .blender_adapter import BlenderRuntimeProfile
 from .config import ProjectConfig, load_config
 from .managed_llamacpp_loader import ManagedLlamaCppCpuLoader
-from .model_runtime_registry import ModelRuntimeBinding, ModelRuntimeRegistry, RuntimeDispatchLoader
+from .model_runtime_registry import (
+    ModelRuntimeBinding,
+    ModelRuntimeRegistry,
+    RuntimeDispatchLoader,
+)
 from .model_scheduler import ModelRole, ModelSelectionPolicy
 from .model_scheduler_factory import ConfiguredModelScheduling, create_model_scheduling
 from .orchestration_policy import BoundedRetryPolicy
@@ -14,11 +18,6 @@ from .production_blender_profile import (
     ProductionBlenderProfileError,
     blender_runtime_profile_dependency_hash,
     load_infrastructure_blender_runtime_profile,
-)
-from .production_pixelorama_profile import (
-    ProductionPixeloramaProfileError,
-    load_infrastructure_pixelorama_cli_profile,
-    pixelorama_cli_profile_dependency_hash,
 )
 from .production_dispatch_claim_read import (
     DispatchClaimCurrentnessStatus,
@@ -30,13 +29,17 @@ from .production_execution_owner import (
     ProductionExecutionOwnerDescriptor,
     build_builtin_execution_owner_registry,
 )
+from .production_pixelorama_profile import (
+    ProductionPixeloramaProfileError,
+    load_infrastructure_pixelorama_cli_profile,
+    pixelorama_cli_profile_dependency_hash,
+)
 from .production_work_order_models import content_hash
 from .runtime import OriginForgeRuntime
 from .sandbox import SandboxBackend
 from .sandbox_factory import create_sandbox_backend
 from .scheduled_model_adapter import RuntimeModelScheduleRecorder, ScheduledModelAdapter
 from .workspaces import GitWorkspaceManager
-
 
 _BOUNDED_RETRY_OWNER_ID = "originforge.execution.bounded-retry@1"
 _SIMULATION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
@@ -406,6 +409,7 @@ def _assemble_simulation_dependencies(
 
 
 def _assemble_pixelorama_dependencies(
+    runtime: OriginForgeRuntime,
     claim,
     binding,
     owner: ProductionExecutionOwnerDescriptor,
@@ -424,7 +428,7 @@ def _assemble_pixelorama_dependencies(
             "Pixelorama export owner must not require coding sandbox or Git workspace authority"
         )
     try:
-        profile = load_infrastructure_pixelorama_cli_profile()
+        profile = load_infrastructure_pixelorama_cli_profile(runtime.project_root)
     except ProductionPixeloramaProfileError as exc:
         raise ProductionExecutionAssemblyError(
             "trusted Pixelorama CLI profile is unavailable"
@@ -454,6 +458,7 @@ def _assemble_pixelorama_dependencies(
 
 
 def _assemble_blender_dependencies(
+    runtime: OriginForgeRuntime,
     claim,
     binding,
     owner: ProductionExecutionOwnerDescriptor,
@@ -472,7 +477,7 @@ def _assemble_blender_dependencies(
             "Blender export owner must not require coding sandbox or Git workspace authority"
         )
     try:
-        profile = load_infrastructure_blender_runtime_profile()
+        profile = load_infrastructure_blender_runtime_profile(runtime.project_root)
     except ProductionBlenderProfileError as exc:
         raise ProductionExecutionAssemblyError(
             "trusted Blender runtime profile is unavailable"
@@ -659,6 +664,7 @@ def assemble_production_execution_dependencies(
 
     if owner.owner_id == _BLENDER_OWNER_ID:
         return _assemble_blender_dependencies(
+            runtime,
             claim,
             binding,
             owner,
@@ -666,6 +672,7 @@ def assemble_production_execution_dependencies(
         )
     if owner.owner_id == _PIXELORAMA_OWNER_ID:
         return _assemble_pixelorama_dependencies(
+            runtime,
             claim,
             binding,
             owner,
