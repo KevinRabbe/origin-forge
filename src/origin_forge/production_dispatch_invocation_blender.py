@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from .blender_models import BlenderBudget, BlenderJobRequest
 from .blockbench_glb import GlbError, inspect_glb
-from .blockbench_models import canonical_bytes, validate_sha256
+from .blockbench_models import BlockbenchProjectSpec, canonical_bytes, validate_sha256
 from .ids import IdKind, validate_id
 from .lineage import OriginForgeLineage
 from .model3d_requests import Model3DRequestError, _project
@@ -17,11 +17,13 @@ from .production_dispatch_binding_blender import (
     BlenderExportGLBInputBinder,
 )
 from .production_dispatch_claim_models import DispatchClaimStatus
-from .production_dispatch_execution_models import DispatchExecution, DispatchExecutionStatus
+from .production_dispatch_execution_models import (
+    DispatchExecution,
+    DispatchExecutionStatus,
+)
 from .production_dispatch_invocation import (
     CompletedDispatchInvocation,
     ProductionDispatchInvocationError,
-    ProductionDispatchInvocationRecoveryRequired,
 )
 from .production_execution_assembly import BlenderExportGLBExecutionPayload
 from .production_work_order_blender import (
@@ -31,7 +33,6 @@ from .production_work_order_blender import (
 )
 from .production_work_order_models import content_hash
 from .state import RunStatus, TaskStatus
-
 
 _BLENDER_OWNER_ID = "originforge.execution.blender.export-glb@1"
 _BLENDER_RETURNED_DETAIL = "trusted Blender export-glb execution owner returned normally"
@@ -52,7 +53,7 @@ class BlenderInvocationRequest:
     model3d_request_id: str
     model3d_request_hash: str
     operation: str
-    project: object
+    project: BlockbenchProjectSpec
     project_hash: str
     request_content_hash: str
 
