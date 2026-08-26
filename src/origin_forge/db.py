@@ -22,6 +22,9 @@ from .production_model3d_request_authoring_migration import (
 from .production_model3d_request_publication_migration import (
     MODEL3D_REQUEST_PUBLICATION_MIGRATION,
 )
+from .production_image_dispatch_output_binding_migration import (
+    IMAGE_DISPATCH_OUTPUT_BINDING_MIGRATION,
+)
 from .production_pixelorama_adoption_migration import (
     PIXELORAMA_PRODUCTION_ADOPTION_MIGRATION,
 )
@@ -45,6 +48,7 @@ MIGRATIONS = (
     DESIGN_SPECIFICATION_MIGRATION,
     MODEL3D_REQUEST_AUTHORING_MIGRATION,
     MODEL3D_REQUEST_PUBLICATION_MIGRATION,
+    IMAGE_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
