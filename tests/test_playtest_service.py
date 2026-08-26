@@ -288,11 +288,16 @@ class PlaytestServiceTests(unittest.TestCase):
         self.assertEqual(OriginForgeLineage(self.runtime).list_artifacts(), [])
 
     def test_scenario_parent_symlink_escape_fails_before_artifact_persistence(self) -> None:
-        with self.assertRaisesRegex(PlaytestServiceError, "may not use symlinks"):
-            PlaytestService(
-                self.runtime,
-                _FakePlaytestBackend(self.runtime, escaped_scenario=True),
-            ).execute(self.task, self._scenario())
+        try:
+            with self.assertRaisesRegex(PlaytestServiceError, "may not use symlinks"):
+                PlaytestService(
+                    self.runtime,
+                    _FakePlaytestBackend(self.runtime, escaped_scenario=True),
+                ).execute(self.task, self._scenario())
+        except OSError as exc:
+            if getattr(exc, "winerror", None) != 1314:
+                raise
+            self.skipTest("Windows symlink privilege is unavailable")
         self.assertEqual(OriginForgeLineage(self.runtime).list_artifacts(), [])
 
     def test_backend_outcome_exit_inconsistency_fails_closed(self) -> None:
