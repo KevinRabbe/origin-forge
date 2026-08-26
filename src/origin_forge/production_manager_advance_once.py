@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TypedDict
 
 from .production_manager_advance_admission import (
     ManagerAdvanceActionKind,
@@ -92,6 +93,16 @@ class ManagerAdvanceOnceResult:
         }
 
 
+class _ManagerAdvanceCandidateFields(TypedDict):
+    action_kind: ManagerAdvanceActionKind | None
+    task_id: str | None
+    task_created_at: str | None
+    preparation_policy_id: str | None
+    preparation_id: str | None
+    dispatch_binding_id: str | None
+    binding_audit_id: str | None
+
+
 def _selection_result(status: ManagerAdvanceSelectionStatus, detail: str | None) -> ManagerAdvanceOnceResult:
     mapping = {
         ManagerAdvanceSelectionStatus.NO_ACTIONABLE_WORK: ManagerAdvanceOnceStatus.NO_ACTIONABLE_WORK,
@@ -106,7 +117,7 @@ def _selection_result(status: ManagerAdvanceSelectionStatus, detail: str | None)
     return ManagerAdvanceOnceResult(target, None, None, None, detail=detail)
 
 
-def _candidate_fields(candidate: ManagerAdvanceCandidate) -> dict[str, object]:
+def _candidate_fields(candidate: ManagerAdvanceCandidate) -> _ManagerAdvanceCandidateFields:
     return {
         "action_kind": candidate.action_kind,
         "task_id": candidate.task_id,
