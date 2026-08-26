@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 
 from .ids import IdKind, validate_id
+from .image_vision_service import ImageGenerationServiceResult
 from .lineage import OriginForgeLineage
 from .orchestration_policy import PolicyResult
 from .production_dispatch_binding import CodeBoundedRetryInputBinder
@@ -284,6 +285,7 @@ class CompletedDispatchInvocation:
     policy_result: PolicyResult | None = None
     simulation_result: SimulationServiceResult | None = None
     pixelorama_result: PixeloramaCliExportServiceResult | None = None
+    image_result: ImageGenerationServiceResult | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.execution, DispatchExecution):
@@ -295,7 +297,8 @@ class CompletedDispatchInvocation:
         has_policy = self.policy_result is not None
         has_simulation = self.simulation_result is not None
         has_pixelorama = self.pixelorama_result is not None
-        if sum((has_policy, has_simulation, has_pixelorama)) != 1:
+        has_image = self.image_result is not None
+        if sum((has_policy, has_simulation, has_pixelorama, has_image)) != 1:
             raise ProductionDispatchInvocationError(
                 "completed invocation requires exactly one reviewed owner result"
             )
@@ -326,9 +329,20 @@ class CompletedDispatchInvocation:
                 not isinstance(self.pixelorama_result, PixeloramaCliExportServiceResult)
                 or has_policy
                 or has_simulation
+                or has_image
             ):
                 raise ProductionDispatchInvocationError(
                     "Pixelorama execution requires exactly one PixeloramaCliExportServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.image.generate@1":
+            if (
+                not isinstance(self.image_result, ImageGenerationServiceResult)
+                or has_policy
+                or has_simulation
+                or has_pixelorama
+            ):
+                raise ProductionDispatchInvocationError(
+                    "image execution requires exactly one ImageGenerationServiceResult"
                 )
         else:
             raise ProductionDispatchInvocationError(

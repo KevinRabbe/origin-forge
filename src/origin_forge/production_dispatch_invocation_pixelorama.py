@@ -181,6 +181,17 @@ def _dispatch_claim_once_three_owner(
 ) -> CompletedDispatchInvocation:
     """Single-shot coordinator with reviewed Pixelorama and Blender fanout."""
     import origin_forge.production_dispatch_invocation as legacy
+    from .production_dispatch_invocation_image_owner import (
+        dispatch_image_claim_once_if_applicable,
+    )
+
+    image = dispatch_image_claim_once_if_applicable(
+        runtime,
+        claim_id,
+        expected_claim_revision,
+    )
+    if image is not None:
+        return image
 
     blender = dispatch_blender_claim_once_if_applicable(
         runtime,
