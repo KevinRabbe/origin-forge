@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from origin_forge.lineage import OriginForgeLineage
 from origin_forge.playtest_models import (
     PlaytestAction,
     PlaytestActionKind,
@@ -27,7 +28,10 @@ from origin_forge.production_dispatch_binding import (
     create_input_resolution_bundle,
 )
 from origin_forge.production_dispatch_claims import acquire_dispatch_claim
-from origin_forge.production_dispatch_invocation import dispatch_claim_once
+from origin_forge.production_dispatch_invocation import (
+    ProductionDispatchInvocationRecoveryRequired,
+    dispatch_claim_once,
+)
 from origin_forge.production_dispatch_invocation_playtest_owner import (
     recover_playtest_dispatch_execution_once,
 )
@@ -180,6 +184,36 @@ class PlaytestDispatchVerticalTests(unittest.TestCase):
             self.assertEqual(calls, 1)
             self.assertEqual(recovered.playtest_result, completed.playtest_result)
             self.assertEqual(recovered.execution.status.value, "RETURNED")
+        finally:
+            if old_value is None:
+                os.environ.pop("ORIGIN_FORGE_PLAYTEST_EXECUTABLE", None)
+            else:
+                os.environ["ORIGIN_FORGE_PLAYTEST_EXECUTABLE"] = old_value
+
+    def test_recovery_rejects_tampered_summary_evidence(self) -> None:
+        old_value = os.environ.get("ORIGIN_FORGE_PLAYTEST_EXECUTABLE")
+        os.environ["ORIGIN_FORGE_PLAYTEST_EXECUTABLE"] = str(self.executable)
+        try:
+            with patch(
+                "origin_forge.production_dispatch_invocation_playtest_owner.PlaytestService",
+                side_effect=lambda runtime, harness: SimpleNamespace(
+                    execute=lambda task_id, scenario: PlaytestService(
+                        self.runtime, _FakePlaytestBackend(self.runtime)
+                    ).execute(task_id, scenario)
+                ),
+            ):
+                completed = dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+            binding = read_playtest_dispatch_output_binding(
+                self.runtime, completed.execution.execution_id
+            )
+            summary_path = OriginForgeLineage(self.runtime).local_artifact_path(
+                binding.summary_artifact_id
+            )
+            summary_path.write_text("{}", encoding="utf-8")
+            with self.assertRaises(ProductionDispatchInvocationRecoveryRequired):
+                recover_playtest_dispatch_execution_once(
+                    self.runtime, completed.execution.execution_id
+                )
         finally:
             if old_value is None:
                 os.environ.pop("ORIGIN_FORGE_PLAYTEST_EXECUTABLE", None)

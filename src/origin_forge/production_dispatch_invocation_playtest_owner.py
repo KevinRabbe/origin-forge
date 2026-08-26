@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
+from .lineage import OriginForgeLineage
 from .playtest_analysis import PlaytestSummary
 from .playtest_harness import CooperativePlaytestHarness
 from .playtest_service import PlaytestService, PlaytestServiceResult
@@ -96,11 +98,35 @@ def dispatch_playtest_claim_once_if_applicable(
 
 
 def _materialize(runtime, binding):
+    lineage = OriginForgeLineage(runtime)
+    artifact_ids = (
+        (binding.scenario_artifact_id, "PLAYTEST_SCENARIO", None),
+        (binding.telemetry_artifact_id, "PLAYTEST_TELEMETRY", binding.scenario_artifact_id),
+        (binding.summary_artifact_id, "PLAYTEST_SUMMARY", binding.telemetry_artifact_id),
+        (binding.stdout_artifact_id, "PLAYTEST_STDOUT_LOG", binding.telemetry_artifact_id),
+        (binding.stderr_artifact_id, "PLAYTEST_STDERR_LOG", binding.telemetry_artifact_id),
+    )
+    for artifact_id, expected_type, expected_parent in artifact_ids:
+        artifact = lineage.get_artifact(artifact_id)
+        if (
+            artifact.get("type") != expected_type
+            or artifact.get("created_by_run_id") != binding.run_id
+            or artifact.get("parent_artifact_id") != expected_parent
+        ):
+            raise ValueError("playtest artifact lineage does not match output binding")
+        lineage.local_artifact_path(artifact_id)
+    telemetry_path = lineage.local_artifact_path(binding.telemetry_artifact_id)
+    telemetry_hash = "sha256:" + hashlib.sha256(telemetry_path.read_bytes()).hexdigest()
+    if telemetry_hash.removeprefix("sha256:") != binding.telemetry_hash:
+        raise ValueError("playtest telemetry artifact hash does not match output binding")
     fields = set(PlaytestSummary.__dataclass_fields__)
     summary_value = json.loads(binding.summary_json)
     for key in ("incomplete_encounters", "unmatched_encounter_ends"):
         if key in summary_value:
             summary_value[key] = tuple(summary_value[key])
+    summary_path = lineage.local_artifact_path(binding.summary_artifact_id)
+    if json.loads(summary_path.read_text(encoding="utf-8")) != binding_summary_json(summary_value):
+        raise ValueError("playtest summary artifact does not match output binding")
     summary = PlaytestSummary(**{key: summary_value[key] for key in fields})
     return PlaytestServiceResult(
         run_id=binding.run_id,
@@ -115,6 +141,15 @@ def _materialize(runtime, binding):
         timed_out=binding.timed_out,
         exit_code=binding.exit_code,
     )
+
+
+def binding_summary_json(summary_value):
+    """Return the canonical JSON-compatible summary representation."""
+    value = dict(summary_value)
+    for key in ("incomplete_encounters", "unmatched_encounter_ends"):
+        if key in value:
+            value[key] = list(value[key])
+    return value
 
 
 def recover_playtest_dispatch_execution_once(
