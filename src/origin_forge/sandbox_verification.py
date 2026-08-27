@@ -161,3 +161,39 @@ class SandboxedWorkspaceVerifier:
             },
         )
         return WorkspaceVerificationResult(workspace_id, True, tuple(results))
+
+    def verify_build(self, workspace_id: str) -> WorkspaceVerificationResult:
+        """Run only required project-approved build commands.
+
+        Build evidence is intentionally distinct from the combined workspace
+        verification promotion. This operation never marks a Workspace
+        VERIFIED and cannot accept, adopt, or terminalize a Task.
+        """
+        workspace = self.workspaces.get(workspace_id)
+        if workspace["status"] != WorkspaceStatus.AUDITED.value:
+            raise RuntimeInvariantError(
+                f"build verification requires AUDITED workspace; got {workspace['status']}"
+            )
+
+        config = load_config(self.runtime.project_root)
+        self._check_backend(network_allowed=config.sandbox_network)
+        commands = tuple(
+            command for command in config.approved_build_commands if command.required
+        )
+        if not commands:
+            raise RuntimeInvariantError(
+                "workspace has no required approved build command"
+            )
+
+        results: list[CommandVerificationResult] = []
+        for command in commands:
+            result = self._run_command(
+                workspace_id,
+                "build",
+                command,
+                network_allowed=config.sandbox_network,
+            )
+            results.append(result)
+            if not result.passed:
+                return WorkspaceVerificationResult(workspace_id, False, tuple(results))
+        return WorkspaceVerificationResult(workspace_id, True, tuple(results))

@@ -298,6 +298,10 @@ def build_parser() -> argparse.ArgumentParser:
         "verify", help="run required approved verification commands for an AUDITED workspace"
     )
     sandbox_verify.add_argument("workspace_id")
+    sandbox_build = sandbox.add_parser(
+        "build", help="run required approved build commands for an AUDITED workspace"
+    )
+    sandbox_build.add_argument("workspace_id")
 
     return parser
 
@@ -544,6 +548,29 @@ def _main(argv: list[str] | None = None) -> int:
             return 0 if available else 1
         if args.sandbox_command == "verify":
             verification_result = SandboxedWorkspaceVerifier(runtime, backend).verify(
+                args.workspace_id
+            )
+            _print(
+                {
+                    "workspace_id": verification_result.workspace_id,
+                    "passed": verification_result.passed,
+                    "results": [
+                        {
+                            "category": item.category,
+                            "command_name": item.command_name,
+                            "verification_id": item.verification_id,
+                            "passed": item.passed,
+                            "sandbox_result": asdict(item.sandbox_result)
+                            if item.sandbox_result is not None
+                            else None,
+                        }
+                        for item in verification_result.results
+                    ],
+                }
+            )
+            return 0 if verification_result.passed else 1
+        if args.sandbox_command == "build":
+            verification_result = SandboxedWorkspaceVerifier(runtime, backend).verify_build(
                 args.workspace_id
             )
             _print(
