@@ -31,7 +31,7 @@ class PixeloramaSourceInvocationRequest:
     accepted_design_id: str
     accepted_design_hash: str
     design_input_id: str
-    planning_input_id: str
+    planning_input_id: str | None
     sprite_spec: SpriteProjectSpec
     export_specs: tuple[ExportSpec, ...]
     budget: BridgeBudget
@@ -47,8 +47,10 @@ class PixeloramaSourceInvocationRequest:
             raise PixeloramaSourceRequestError("accepted_design_hash must use sha256: format")
         if not isinstance(self.design_input_id, str) or not self.design_input_id:
             raise PixeloramaSourceRequestError("design_input_id must be non-empty")
-        if not isinstance(self.planning_input_id, str) or not self.planning_input_id:
-            raise PixeloramaSourceRequestError("planning_input_id must be non-empty")
+        if self.planning_input_id is not None and (
+            not isinstance(self.planning_input_id, str) or not self.planning_input_id
+        ):
+            raise PixeloramaSourceRequestError("planning_input_id must be non-empty when supplied")
         if not isinstance(self.sprite_spec, SpriteProjectSpec):
             raise PixeloramaSourceRequestError("sprite_spec must be a SpriteProjectSpec")
         exports = tuple(self.export_specs)
@@ -103,7 +105,7 @@ def decode_pixelorama_source_request(
             accepted_design_id=accepted_design_projection["acceptance_id"],
             accepted_design_hash=accepted_design_projection["acceptance_hash"],
             design_input_id=accepted_design_projection["design_input_id"],
-            planning_input_id=accepted_design_projection["planning_input_id"],
+            planning_input_id=accepted_design_projection.get("planning_input_id"),
             sprite_spec=parse_sprite_spec(payload["sprite_spec"]),
             export_specs=tuple(parse_export_spec(value) for value in payload["export_specs"]),
             budget=parse_bridge_budget(payload["budget"]),

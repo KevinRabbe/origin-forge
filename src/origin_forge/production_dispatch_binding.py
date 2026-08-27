@@ -23,6 +23,9 @@ from .production_dispatch_binding_image import ImageGenerationInputBinder
 from .production_dispatch_binding_pixelorama import (
     PixeloramaSpritesheetExportInputBinder,
 )
+from .production_dispatch_binding_pixelorama_source import (
+    PixeloramaSourceCreationInputBinder,
+)
 from .production_dispatch_binding_playtest import CooperativePlaytestInputBinder
 from .production_dispatch_binding_runtime import RuntimeObservationInputBinder
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
@@ -36,6 +39,7 @@ def builtin_dispatch_binders() -> tuple[DispatchInputBinder, ...]:
         CodeBoundedRetryInputBinder(),
         DeterministicSimulationInputBinder(),
         PixeloramaSpritesheetExportInputBinder(),
+        PixeloramaSourceCreationInputBinder(),
         BlenderExportGLBInputBinder(),
         ImageGenerationInputBinder(),
         FfmpegAudioInputBinder(),

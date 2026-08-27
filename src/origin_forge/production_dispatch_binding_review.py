@@ -85,9 +85,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.pixelorama.source",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_SOURCE_EXECUTION_OWNER",
-            "the typed source/animation WorkOrder is now defined, but its dedicated execution owner and durable output-binding recovery boundary are not complete",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 64 reconstructs the exact typed Pixelorama source/animation request from one current immutable accepted-design input; execution and output-binding recovery remain downstream",
         ),
         BuiltinBindingReview(
             "originforge.audio.piper",
@@ -132,6 +132,13 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         (phase32.adapter("originforge.pixelorama.export"),),
     )
     pixelorama_dispatch_catalog = build_builtin_dispatch_catalog(pixelorama_phase32)
+    pixelorama_source_phase32 = CapabilityCatalog.create(
+        (phase32.capability("media.2d.source"),),
+        (phase32.adapter("originforge.pixelorama.source"),),
+    )
+    pixelorama_source_dispatch_catalog = build_builtin_dispatch_catalog(
+        pixelorama_source_phase32
+    )
     blender_phase32 = CapabilityCatalog.create(
         (phase32.capability("media.3d.blender"),),
         (phase32.adapter("originforge.blender.model3d"),),
@@ -179,6 +186,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         *build_dispatch_catalog.contracts,
         *simulation_dispatch_catalog.contracts,
         *pixelorama_dispatch_catalog.contracts,
+        *pixelorama_source_dispatch_catalog.contracts,
         *blender_dispatch_catalog.contracts,
         *image_dispatch_catalog.contracts,
         *ffmpeg_dispatch_catalog.contracts,
