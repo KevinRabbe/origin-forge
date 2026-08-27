@@ -46,6 +46,15 @@ class DoctorTests(unittest.TestCase):
         plan = parser.parse_args(["plan", "inspect", "GOAL-EXAMPLE"])
         adopt = parser.parse_args(["adopt", "TASK-EXAMPLE", "--revision", "2"])
         trace = parser.parse_args(["production", "trace", "TASK-EXAMPLE"])
+        production_reject = parser.parse_args(
+            ["production", "reject", "DISPEXEC-EXAMPLE", "--rationale", "needs revision", "--revision", "2"]
+        )
+        production_refine = parser.parse_args(
+            ["production", "refine", "DISPEXEC-EXAMPLE", "--rationale", "adjust timing"]
+        )
+        production_replace = parser.parse_args(
+            ["production", "replace", "DISPEXEC-EXAMPLE", "--rationale", "use replacement"]
+        )
         source_import = parser.parse_args(["production", "source", "import", "assets/player.pxo"])
         graph_inspects = [
             parser.parse_args([kind, "inspect", "EXAMPLE"])
@@ -69,6 +78,10 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(adopt.revision, 2)
         self.assertEqual(trace.production_command, "trace")
         self.assertEqual(trace.task_id, "TASK-EXAMPLE")
+        self.assertEqual(production_reject.production_command, "reject")
+        self.assertEqual(production_reject.revision, 2)
+        self.assertEqual(production_refine.production_command, "refine")
+        self.assertEqual(production_replace.production_command, "replace")
         self.assertEqual(source_import.source_command, "import")
         self.assertEqual(source_import.path, "assets/player.pxo")
         self.assertEqual(

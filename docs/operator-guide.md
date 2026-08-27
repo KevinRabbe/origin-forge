@@ -127,6 +127,21 @@ origin-forge review replace TASK-... --rationale "..."
 These commands record human Decision lineage. They do not silently rerun,
 replace, adopt, or transition the reviewed Task.
 
+For a governed production execution, the equivalent execution-bound review
+commands preserve the exact execution and current Task revision in the
+decision context:
+
+```text
+origin-forge production reject DISPEXEC-... --rationale "..." --revision N
+origin-forge production refine DISPEXEC-... --rationale "..." --revision N
+origin-forge production replace DISPEXEC-... --rationale "..." --revision N
+```
+
+These commands require a current `RETURNED` execution. Refinement and
+replacement create new queued child Tasks; they never mutate or replay the
+original execution. Adoption and capability-specific acceptance remain
+separate explicit actions.
+
 `review refine` additionally creates a new queued child Task linked to the
 reviewed Task. The original Task and its evidence remain immutable; the child
 Task carries the human rationale as a constraint and is the only Task eligible
