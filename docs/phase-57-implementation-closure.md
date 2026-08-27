@@ -2,9 +2,9 @@
 
 Status: **Phase 57A–57C implemented; Phase 57D evidence synchronization in progress**
 
-Latest candidate evidence head: `caa4422`.
-Remote CI is not yet present for this head; the branch remains a draft PR and
-the final Phase 57D release gate is therefore still open. The candidate also
+Latest candidate evidence head: `079d470`.
+Remote CI is queued for this head; the branch remains a draft PR and the final
+Phase 57D release gate is therefore still open. The candidate also
 contains the later governed Pixelorama source/animation vertical and its
 read-only trace evidence; those additions do not alter Phase-57 authority.
 
