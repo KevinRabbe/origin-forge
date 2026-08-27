@@ -21,6 +21,7 @@ from .pixelorama_source import (
     replace_pixelorama_source,
 )
 from .plan import inspect_goal_plan
+from .production_dispatch_recovery import recover_dispatch_execution_once
 from .production_goal_bootstrap_operator import (
     GoalBootstrapOperatorBlocked,
     GoalBootstrapOperatorError,
@@ -259,6 +260,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_show.add_argument("run_id")
     run_inspect = run.add_parser("inspect", help="inspect one run (read-only alias for show)")
     run_inspect.add_argument("run_id")
+    run_recover = run.add_parser("recover", help="recover one dispatch execution without replay")
+    run_recover.add_argument("execution_id")
 
     verify = sub.add_parser("verify", help="record and inspect verification").add_subparsers(
         dest="verify_command", required=True
@@ -507,6 +510,9 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.run_command in {"show", "inspect"}:
             _print(runtime.get_run(args.run_id))
+            return 0
+        if args.run_command == "recover":
+            _print(recover_dispatch_execution_once(runtime, args.execution_id).execution.to_dict())
             return 0
 
     if args.command == "verify":
