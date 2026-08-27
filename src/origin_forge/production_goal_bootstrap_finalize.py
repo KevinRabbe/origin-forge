@@ -788,6 +788,16 @@ def finalize_goal_bootstrap(
                 reused_policy = reused_policy or reused
                 continue
         except StaleRevision as exc:
+            # A goal revision change is a semantic currentness failure and
+            # must interrupt the bootstrap.  A checkpoint race is different:
+            # another worker may still be completing the same exact stage,
+            # so retry the bounded state machine and let the durable winner
+            # determine the next state.  Treating both cases identically can
+            # interrupt a valid bootstrap between an idempotent evidence
+            # publication and its checkpoint.
+            if "Goal changed after GOALBOOT acquisition" not in str(exc):
+                time.sleep(_TRANSIENT_CONCURRENCY_DELAY_SECONDS)
+                continue
             current = read_goal_bootstrap_receipt(runtime, receipt.bootstrap_id)
             if (
                 current.status is GoalBootstrapStatus.ACTIVE

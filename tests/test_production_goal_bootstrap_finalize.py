@@ -29,6 +29,7 @@ from origin_forge.production_goal_bootstrap_store import (
 from origin_forge.production_planning_evidence import ProductionPlanningEvidenceStore
 from origin_forge.production_planning_models import PlanProposal, PlanStep
 from origin_forge.runtime import OriginForgeRuntime
+from origin_forge.service import StaleRevision
 
 
 _VALID_CONFIG = '''version = 6
@@ -326,6 +327,27 @@ class GoalBootstrapFinalizeTests(unittest.TestCase):
         self.assertEqual(len(self._policy_files()), 1)
         self.assertEqual(self._count("flows"), 1)
         self.assertEqual(self._count("tasks"), 1)
+
+    def test_checkpoint_contention_does_not_interrupt_valid_bootstrap(self) -> None:
+        from origin_forge import production_goal_bootstrap_finalize as module
+
+        real_checkpoint = module._checkpoint_locked
+        seen = {"calls": 0}
+
+        def contend_once(*args, **kwargs):
+            seen["calls"] += 1
+            if seen["calls"] == 1:
+                raise StaleRevision("GOALBOOT changed during locked checkpoint")
+            return real_checkpoint(*args, **kwargs)
+
+        with patch.object(module, "_checkpoint_locked", side_effect=contend_once):
+            result = finalize_goal_bootstrap(self.runtime, self.bootstrap_id)
+
+        self.assertEqual(result.receipt.status, GoalBootstrapStatus.READY)
+        self.assertEqual(seen["calls"], 2)
+        self.assertEqual(self._count("plan_audits"), 1)
+        self.assertEqual(self._count("plan_materializations"), 1)
+        self.assertEqual(len(self._policy_files()), 1)
 
 
 if __name__ == "__main__":
