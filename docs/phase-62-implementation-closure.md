@@ -21,16 +21,17 @@ The subsequent read-only production-trace improvement is present at:
 e7e1c5d feat: expose work orders in production trace
 ```
 
-The latest Phase-57B source/animation vertical verification is present at:
+The latest Phase-57B source/animation and adoption verification is present at:
 
 ```text
-544eff0 style: clean pixelorama source vertical checks
+c8088b1 style: clean source adoption migration
 ```
 
 The branch preserves the existing Phase-57B base and all prior durable
-schemas, IDs, receipts, authority values, and historical evidence. Schema v29
-is the current candidate head; migration v29 copies the existing shared audio
-binding rows and adds the reviewed FFmpeg owner without rewriting Piper rows.
+schemas, IDs, receipts, authority values, and historical evidence. Schema v31
+is the current candidate head; migrations v29 and v30 preserve the existing
+audio bindings and add Pixelorama source dispatch, while migration v31 adds the
+source-adoption receipt without rewriting historical rows.
 
 ## Implemented boundary
 

@@ -88,6 +88,18 @@ string array through `ORIGIN_FORGE_PIXELORAMA_BRIDGE_ARGS_JSON`. The bridge
 profile permits `CREATE_SPRITE_PROJECT` only; missing fields, relative paths,
 hash drift, or an unavailable package fail closed before execution.
 
+After a source-create execution is `RETURNED`, the generated project output
+can be adopted explicitly through the shared production command:
+
+```text
+origin-forge production adopt DISPEXEC-... assets/player.pxo
+```
+
+This action is create-only and requires the exact schema-v30 source output
+binding plus the schema-v31 adoption receipt. It revalidates the generated
+project bytes and lineage, refuses existing destinations, and never accepts
+the Task or signs provenance.
+
 The compatibility admin module also exposes explicit source revision
 inspection and replacement:
 
