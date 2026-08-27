@@ -415,9 +415,12 @@ class WorkOrderInputResolverRegistry:
                         claim.ref_type is other.ref_type
                         and claim.source_id_prefix == other.source_id_prefix
                         and (
-                            claim.role is None
-                            or other.role is None
-                            or claim.role == other.role
+                            (claim.role is None and other.role is None)
+                            or (
+                                claim.role is not None
+                                and other.role is not None
+                                and claim.role == other.role
+                            )
                         )
                     ):
                         raise ValueError(
@@ -450,7 +453,7 @@ class WorkOrderInputResolverRegistry:
     def resolver_for(self, ref: WorkOrderInputRef) -> WorkOrderInputResolver:
         if not isinstance(ref, WorkOrderInputRef):
             raise TypeError("ref must be a WorkOrderInputRef")
-        matches: list[str] = []
+        matches: list[tuple[bool, str]] = []
         for descriptor in self._descriptors:
             if any(
                 claim.ref_type is ref.ref_type
@@ -458,14 +461,23 @@ class WorkOrderInputResolverRegistry:
                 and (claim.role is None or claim.role == ref.role)
                 for claim in descriptor.claims
             ):
-                matches.append(descriptor.resolver_id)
+                exact_role = any(
+                    claim.ref_type is ref.ref_type
+                    and ref.ref_id.startswith(claim.source_id_prefix)
+                    and claim.role is not None
+                    and claim.role == ref.role
+                    for claim in descriptor.claims
+                )
+                matches.append((exact_role, descriptor.resolver_id))
         if not matches:
             raise DispatchInputResolutionError(
                 f"no trusted input resolver for {ref.ref_type.value}:{ref.ref_id}:{ref.role}"
             )
-        if len(matches) != 1:
+        exact_matches = [value for exact, value in matches if exact]
+        selected = exact_matches if exact_matches else [value for _, value in matches]
+        if len(selected) != 1:
             raise DispatchInputResolutionError("input resolver selection is ambiguous")
-        return self._by_id[matches[0]]
+        return self._by_id[selected[0]]
 
     def resolve(
         self,

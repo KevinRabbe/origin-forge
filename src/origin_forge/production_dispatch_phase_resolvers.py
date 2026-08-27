@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import ClassVar
 
 from .audio_profiles import AudioProfileError, AudioProfileStore
+from .audio_wav import WavError, inspect_pcm16_wav
+from .lineage import OriginForgeLineage
 from .model3d_requests import Model3DRequestError, Model3DRequestReader
 from .production_dispatch_resolution_models import (
     InputResolverDescriptor,
@@ -19,13 +22,13 @@ from .production_dispatch_resolvers import (
     WorkOrderInputResolver,
     WorkOrderInputResolverRegistry,
 )
-from .production_runtime_observation_store import (
-    RuntimeObservationRequestStore,
-    RuntimeObservationRequestStoreError,
-)
 from .production_playtest_scenario_store import (
     PlaytestScenarioStore,
     PlaytestScenarioStoreError,
+)
+from .production_runtime_observation_store import (
+    RuntimeObservationRequestStore,
+    RuntimeObservationRequestStoreError,
 )
 from .production_work_order_models import (
     WorkOrderInputRef,
@@ -65,7 +68,7 @@ class AudioProfileInputResolver:
         "AUDIO_PROFILE",
         "audio_profile",
     )
-    _PROJECTION_CONTRACT = {
+    _PROJECTION_CONTRACT: ClassVar[dict[str, object]] = {
         "source": "GovernedAudioProfile.to_dict",
         "hash_semantics": "WorkOrder digest equals AudioProfile.profile_hash digest",
         "revision": None,
@@ -133,6 +136,87 @@ class AudioProfileInputResolver:
         )
 
 
+class AudioSourceInputResolver:
+    """Resolve exact PCM16 WAV evidence for a governed audio operation."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.ARTIFACT, "ART-", "AUDIO_SOURCE", "audio_source"
+    )
+    _PROJECTION_CONTRACT: ClassVar[dict[str, object]] = {
+        "source": "protected Artifact bytes + inspect_pcm16_wav",
+        "fields": (
+            "source_id", "relative_path", "content_hash", "pcm_hash",
+            "byte_count", "frame_count", "sample_rate", "channels",
+        ),
+        "accepted_statuses": ("CAPTURED", "PRODUCED"),
+        "artifact_bytes": True,
+        "backend_invocation": False,
+    }
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.phase.audio-source@1",
+        content_hash({
+            "implementation_id": "origin-forge-dispatch-audio-source-resolver@1",
+            "claim": _CLAIM.to_dict(),
+            "projection_contract": _PROJECTION_CONTRACT,
+        }),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(
+        self,
+        runtime: OriginForgeRuntime,
+        ref: WorkOrderInputRef,
+    ) -> ResolvedWorkOrderInput:
+        if not isinstance(ref, WorkOrderInputRef):
+            raise TypeError("ref must be a WorkOrderInputRef")
+        if ref.ref_type is not WorkOrderRefType.ARTIFACT or not ref.ref_id.startswith("ART-"):
+            raise DispatchInputResolutionError("WorkOrder ref does not match audio-source resolver claim")
+        if ref.role != "audio_source":
+            raise DispatchInputResolutionError("audio source resolver requires the audio_source role")
+        if ref.revision is not None:
+            raise DispatchInputResolutionError("Audio source refs are not revision-numbered")
+        try:
+            lineage = OriginForgeLineage(runtime)
+            artifact = lineage.get_artifact(ref.ref_id)
+            path = lineage.local_artifact_path(ref.ref_id)
+            inspection = inspect_pcm16_wav(path.read_bytes())
+        except (KeyError, OSError, RuntimeError, TypeError, ValueError, WavError) as exc:
+            raise DispatchInputResolutionError(
+                "audio source Artifact is not a valid protected PCM16 WAV"
+            ) from exc
+        if artifact.get("content_hash") != "sha256:" + ref.content_hash:
+            raise DispatchInputResolutionError("audio source Artifact content hash drifted")
+        if artifact.get("status") not in {"CAPTURED", "PRODUCED"}:
+            raise DispatchInputResolutionError("audio source Artifact status is not usable")
+        location = artifact.get("path_or_uri")
+        if not isinstance(location, str) or "://" in location:
+            raise DispatchInputResolutionError("audio source Artifact is not a local file")
+        if inspection.content_hash != "sha256:" + ref.content_hash:
+            raise DispatchInputResolutionError("audio source WAV bytes drifted")
+        projection = {
+            "source_id": ref.ref_id,
+            "relative_path": location,
+            "content_hash": inspection.content_hash,
+            "pcm_hash": inspection.pcm_hash,
+            "byte_count": inspection.byte_count,
+            "frame_count": inspection.frame_count,
+            "sample_rate": inspection.sample_rate,
+            "channels": inspection.channels,
+        }
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="AUDIO_SOURCE",
+            resolution_class="PROTECTED_PCM16_WAV",
+            projection=projection,
+        )
+
+
 class Model3DRequestInputResolver:
     """Resolve one exact immutable MODEL3DREQ object without runtime allocation."""
 
@@ -142,7 +226,7 @@ class Model3DRequestInputResolver:
         "MODEL3D_REQUEST",
         "model3d_request",
     )
-    _PROJECTION_CONTRACT = {
+    _PROJECTION_CONTRACT: ClassVar[dict[str, object]] = {
         "source": "Model3DProductionRequest.to_dict",
         "hash_semantics": "WorkOrder digest equals request_hash digest",
         "revision": None,
@@ -220,7 +304,7 @@ class RuntimeObservationRequestInputResolver:
         "RUNTIME_OBSERVATION_REQUEST",
         "runtime_observation_request",
     )
-    _PROJECTION_CONTRACT = {
+    _PROJECTION_CONTRACT: ClassVar[dict[str, object]] = {
         "source": "RuntimeObservationRequestStore.get",
         "hash_semantics": "WorkOrder digest equals RuntimeObservationRequest.content_hash",
         "revision": None,
@@ -383,6 +467,7 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
 def phase_specific_input_resolvers() -> tuple[WorkOrderInputResolver, ...]:
     return (
         AudioProfileInputResolver(),
+        AudioSourceInputResolver(),
         Model3DRequestInputResolver(),
         RuntimeObservationRequestInputResolver(),
         PlaytestScenarioInputResolver(),

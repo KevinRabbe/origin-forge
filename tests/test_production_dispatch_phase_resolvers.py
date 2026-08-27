@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import inspect
 import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,7 +15,10 @@ from origin_forge.audio_profiles import (
     AudioProfileStore,
     GovernedAudioProfile,
 )
+from origin_forge.audio_wav import encode_pcm16_wav, inspect_pcm16_wav
 from origin_forge.ids import IdKind, new_id
+from origin_forge.lineage import OriginForgeLineage
+from origin_forge.pixelorama_source import import_pixelorama_source
 from origin_forge.production_dispatch_phase_resolvers import (
     AudioProfileInputResolver,
     PhaseSpecificResolverReviewStatus,
@@ -22,10 +26,11 @@ from origin_forge.production_dispatch_phase_resolvers import (
     phase_specific_resolver_review,
 )
 from origin_forge.production_dispatch_resolvers import DispatchInputResolutionError
-from origin_forge.production_work_order_models import WorkOrderInputRef, WorkOrderRefType
-from origin_forge.pixelorama_source import import_pixelorama_source
+from origin_forge.production_work_order_models import (
+    WorkOrderInputRef,
+    WorkOrderRefType,
+)
 from origin_forge.runtime import OriginForgeRuntime
-
 
 _RUNTIME_HASH = "sha256:" + "1" * 64
 
@@ -112,6 +117,58 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
         self.assertEqual(resolved.projection["type"], "PIXELORAMA_PROJECT")
         self.assertEqual(resolved.projection["status"], "PRODUCED")
 
+    def test_audio_source_role_resolves_exact_pcm_evidence_and_preserves_generic_artifact_path(self) -> None:
+        source = self.root / "exports" / "source.wav"
+        source.parent.mkdir()
+        data = encode_pcm16_wav(
+            channels=1,
+            sample_rate=8_000,
+            pcm_bytes=b"".join(struct.pack("<h", value) for value in (1, 2, 3, 4)),
+        )
+        source.write_bytes(data)
+        artifact_id = OriginForgeLineage(self.runtime).create_artifact(
+            artifact_type="TEST_AUDIO_WAV",
+            path_or_uri=str(source),
+            status="PRODUCED",
+        )
+        inspection = inspect_pcm16_wav(data)
+        ref = WorkOrderInputRef(
+            WorkOrderRefType.ARTIFACT,
+            artifact_id,
+            inspection.content_hash.removeprefix("sha256:"),
+            "audio_source",
+            None,
+        )
+
+        resolved = build_dispatch_input_resolver_registry().resolve(self.runtime, ref)
+
+        self.assertEqual(resolved.resolver_id, "resolver.phase.audio-source@1")
+        self.assertEqual(resolved.source_object_type, "AUDIO_SOURCE")
+        self.assertEqual(resolved.resolution_class, "PROTECTED_PCM16_WAV")
+        self.assertEqual(resolved.projection["pcm_hash"], inspection.pcm_hash)
+        self.assertEqual(resolved.projection["frame_count"], inspection.frame_count)
+
+    def test_audio_source_role_rejects_tampered_bytes_and_cross_project_refs(self) -> None:
+        source = self.root / "exports" / "source.wav"
+        source.parent.mkdir()
+        data = encode_pcm16_wav(channels=1, sample_rate=8_000, pcm_bytes=b"\x01\x00\x02\x00")
+        source.write_bytes(data)
+        artifact_id = OriginForgeLineage(self.runtime).create_artifact(
+            artifact_type="TEST_AUDIO_WAV", path_or_uri=str(source), status="PRODUCED"
+        )
+        digest = inspect_pcm16_wav(data).content_hash.removeprefix("sha256:")
+        ref = WorkOrderInputRef(WorkOrderRefType.ARTIFACT, artifact_id, digest, "audio_source", None)
+        source.write_bytes(data + b"tampered")
+        with self.assertRaisesRegex(DispatchInputResolutionError, "integrity mismatch|valid protected"):
+            build_dispatch_input_resolver_registry().resolve(self.runtime, ref)
+
+        source.write_bytes(data)
+        with tempfile.TemporaryDirectory() as other_dir:
+            other = OriginForgeRuntime(other_dir)
+            other.initialize("other-project")
+            with self.assertRaisesRegex(DispatchInputResolutionError, "valid protected|not available"):
+                build_dispatch_input_resolver_registry().resolve(other, ref)
+
     def test_missing_audio_profile_read_is_noncreating_and_cross_project_ref_fails_closed(self) -> None:
         profile = self._profile()
         ref = self._ref(profile)
@@ -181,6 +238,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
                 "resolver.core.project-entity@1",
                 "resolver.core.verification@1",
                 "resolver.phase.audio-profile@1",
+                "resolver.phase.audio-source@1",
                 "resolver.phase.model3d-request@1",
                 "resolver.phase.playtest-scenario@1",
                 "resolver.phase.runtime-observation-request@1",
@@ -192,7 +250,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
             if descriptor.resolver_id.startswith("resolver.phase.")
             for claim in descriptor.claims
         ]
-        self.assertEqual(len(phase_claims), 4)
+        self.assertEqual(len(phase_claims), 5)
         claims = {claim.ref_type: claim for claim in phase_claims}
         audio_claim = claims[WorkOrderRefType.AUDIO_PROFILE]
         self.assertEqual(audio_claim.source_id_prefix, "AUDPROF-")
