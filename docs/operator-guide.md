@@ -230,6 +230,25 @@ paths, or Task acceptance/adoption authority.
 
 A fresh bounded coding attempt requires the target Task and parent Flow to satisfy the orchestration preconditions. The attempt command does not invent Tasks or silently repair lifecycle state.
 
+## Recover one dispatch execution explicitly
+
+For an interrupted governed production execution, inspect the exact receipt first:
+
+```text
+origin-forge --project-root /path/to/project run inspect DISPEXEC-...
+```
+
+Then invoke the owner-specific recovery route explicitly:
+
+```text
+origin-forge --project-root /path/to/project run recover DISPEXEC-...
+```
+
+Recovery consumes only the durable evidence already bound to that execution. It
+does not invoke Blender, Pixelorama, ComfyUI, FFmpeg, Piper, runtime observation,
+playtesting, or build commands a second time. Missing, conflicting, stale, or
+tampered evidence fails closed and requires operator review.
+
 ## Inspect, bootstrap, or recover one explicit Goal
 
 Phase 46 exposes the accepted Phase-45 Goal-bootstrap operator boundary through the existing `origin-forge` executable without adding a fourth packaged command:

@@ -54,6 +54,7 @@ jobs:
           tests.test_production_dispatch_claim_lifecycle
           tests.test_production_dispatch_execution
           tests.test_production_dispatch_invocation
+          tests.test_production_build_dispatch_vertical
           tests.test_production_execution_assembly
           tests.test_phase57a_model3d_request_authoring
           tests.test_phase57b_model3d_request_publication
