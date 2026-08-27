@@ -16,6 +16,9 @@ from .production_dispatch_binding_blender import BlenderExportGLBInputBinder
 from .production_dispatch_binding_pixelorama import (
     PixeloramaSpritesheetExportInputBinder,
 )
+from .production_dispatch_binding_pixelorama_source import (
+    PixeloramaSourceCreationInputBinder,
+)
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -338,6 +341,34 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         requires_workspace_manager=False,
     )
     try:
+        pixelorama_source_adapter = adapters["originforge.pixelorama.source"]
+    except KeyError as exc:
+        raise ProductionExecutionOwnerError(
+            "built-in capability inventory lacks Pixelorama source adapter"
+        ) from exc
+    pixelorama_source_binder = PixeloramaSourceCreationInputBinder().descriptor
+    if (
+        pixelorama_source_binder.adapter_id != pixelorama_source_adapter.adapter_id
+        or pixelorama_source_binder.dispatch_contract_id != "pixelorama.source-create@1"
+    ):
+        raise ProductionExecutionOwnerError(
+            "built-in Pixelorama source binder relation drifted"
+        )
+    pixelorama_source_owner = ProductionExecutionOwnerDescriptor(
+        owner_id="originforge.execution.pixelorama.source-create@1",
+        owner_version="1",
+        adapter_id=pixelorama_source_adapter.adapter_id,
+        adapter_fingerprint=pixelorama_source_adapter.implementation_fingerprint,
+        dispatch_contract_id=pixelorama_source_binder.dispatch_contract_id,
+        binder_id=pixelorama_source_binder.binder_id,
+        binder_fingerprint=pixelorama_source_binder.binder_fingerprint,
+        request_type_id=pixelorama_source_binder.request_type_id,
+        request_schema_hash=pixelorama_source_binder.request_schema_hash,
+        model_strategy_roles=(),
+        requires_sandbox=False,
+        requires_workspace_manager=False,
+    )
+    try:
         blender_adapter = adapters["originforge.blender.model3d"]
     except KeyError as exc:
         raise ProductionExecutionOwnerError(
@@ -370,6 +401,7 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         code_owner,
         simulation_owner,
         pixelorama_owner,
+        pixelorama_source_owner,
         blender_owner,
         image_generation_execution_owner_descriptor(),
         ffmpeg_execution_owner_descriptor(),

@@ -14,6 +14,9 @@ from origin_forge.production_dispatch_binding_blender import BlenderExportGLBInp
 from origin_forge.production_dispatch_binding_pixelorama import (
     PixeloramaSpritesheetExportInputBinder,
 )
+from origin_forge.production_dispatch_binding_pixelorama_source import (
+    PixeloramaSourceCreationInputBinder,
+)
 from origin_forge.production_dispatch_binding_simulation import (
     DeterministicSimulationInputBinder,
 )
@@ -51,8 +54,8 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_builtin_owners_exactly_match_reviewed_adapters_and_binders(self) -> None:
         owners = builtin_execution_owner_descriptors()
-        self.assertEqual(len(owners), 10)
-        build_owner, code_owner, simulation_owner, pixelorama_owner, blender_owner, image_owner, ffmpeg_owner, piper_owner, runtime_owner, playtest_owner = owners
+        self.assertEqual(len(owners), 11)
+        build_owner, code_owner, simulation_owner, pixelorama_owner, pixelorama_source_owner, blender_owner, image_owner, ffmpeg_owner, piper_owner, runtime_owner, playtest_owner = owners
         self.assertEqual(build_owner.owner_id, "originforge.execution.build.integration@1")
         self.assertEqual(image_owner.owner_id, "originforge.execution.image.generate@1")
         self.assertEqual(ffmpeg_owner.owner_id, "originforge.execution.audio.ffmpeg-process@1")
@@ -129,6 +132,35 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
         self.assertEqual(pixelorama_owner.model_strategy_roles, ())
         self.assertFalse(pixelorama_owner.requires_sandbox)
         self.assertFalse(pixelorama_owner.requires_workspace_manager)
+
+        source_adapter = adapters["originforge.pixelorama.source"]
+        source_binder = PixeloramaSourceCreationInputBinder().descriptor
+        self.assertEqual(
+            pixelorama_source_owner.owner_id,
+            "originforge.execution.pixelorama.source-create@1",
+        )
+        self.assertEqual(pixelorama_source_owner.adapter_id, source_adapter.adapter_id)
+        self.assertEqual(
+            pixelorama_source_owner.adapter_fingerprint,
+            source_adapter.implementation_fingerprint,
+        )
+        self.assertEqual(
+            pixelorama_source_owner.dispatch_contract_id,
+            source_binder.dispatch_contract_id,
+        )
+        self.assertEqual(pixelorama_source_owner.binder_id, source_binder.binder_id)
+        self.assertEqual(
+            pixelorama_source_owner.binder_fingerprint,
+            source_binder.binder_fingerprint,
+        )
+        self.assertEqual(pixelorama_source_owner.request_type_id, source_binder.request_type_id)
+        self.assertEqual(
+            pixelorama_source_owner.request_schema_hash,
+            source_binder.request_schema_hash,
+        )
+        self.assertEqual(pixelorama_source_owner.model_strategy_roles, ())
+        self.assertFalse(pixelorama_source_owner.requires_sandbox)
+        self.assertFalse(pixelorama_source_owner.requires_workspace_manager)
 
         blender_adapter = adapters["originforge.blender.model3d"]
         blender_binder = BlenderExportGLBInputBinder().descriptor

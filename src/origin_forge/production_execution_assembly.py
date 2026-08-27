@@ -75,6 +75,7 @@ _BOUNDED_RETRY_OWNER_ID = "originforge.execution.bounded-retry@1"
 _BUILD_OWNER_ID = "originforge.execution.build.integration@1"
 _SIMULATION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 _PIXELORAMA_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
+_PIXELORAMA_SOURCE_OWNER_ID = "originforge.execution.pixelorama.source-create@1"
 _BLENDER_OWNER_ID = "originforge.execution.blender.export-glb@1"
 _PIPER_OWNER_ID = "originforge.execution.audio.piper-tts@1"
 _FFMPEG_OWNER_ID = FFMPEG_EXECUTION_OWNER_ID
@@ -221,6 +222,21 @@ class PixeloramaSpritesheetExportExecutionPayload:
 
 
 @dataclass(frozen=True)
+class PixeloramaSourceCreationExecutionPayload:
+    profile: PixeloramaCliProfile
+    profile_dependency_hash: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.profile, PixeloramaCliProfile):
+            raise TypeError("profile must be a PixeloramaCliProfile")
+        expected = pixelorama_cli_profile_dependency_hash(self.profile)
+        if self.profile_dependency_hash != expected:
+            raise ProductionExecutionAssemblyError(
+                "Pixelorama source profile dependency hash is not current"
+            )
+
+
+@dataclass(frozen=True)
 class BlenderExportGLBExecutionPayload:
     profile: BlenderRuntimeProfile
     profile_dependency_hash: str
@@ -351,6 +367,7 @@ ExecutionDependencyPayload = (
     | BuildIntegrationExecutionPayload
     | DeterministicSimulationExecutionPayload
     | PixeloramaSpritesheetExportExecutionPayload
+    | PixeloramaSourceCreationExecutionPayload
     | BlenderExportGLBExecutionPayload
     | ImageGenerationExecutionPayload
     | PiperExecutionPayload
@@ -782,6 +799,51 @@ def _assemble_image_dependencies(
     )
 
 
+def _assemble_pixelorama_source_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _PIXELORAMA_SOURCE_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "Pixelorama source dependency assembler received an unexpected owner"
+        )
+    if owner.model_strategy_roles or owner.requires_sandbox or owner.requires_workspace_manager:
+        raise ProductionExecutionAssemblyError(
+            "Pixelorama source owner must not require model, sandbox, or Git workspace authority"
+        )
+    try:
+        profile = load_infrastructure_pixelorama_cli_profile(runtime.project_root)
+    except ProductionPixeloramaProfileError as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted Pixelorama CLI profile is unavailable"
+        ) from exc
+    profile_hash = pixelorama_cli_profile_dependency_hash(profile)
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=profile_hash,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=PixeloramaSourceCreationExecutionPayload(
+            profile=profile,
+            profile_dependency_hash=profile_hash,
+        ),
+    )
+
+
 def _assemble_piper_dependencies(
     runtime: OriginForgeRuntime,
     claim,
@@ -1196,6 +1258,10 @@ def assemble_production_execution_dependencies(
             binding,
             owner,
             owner_registry,
+        )
+    if owner.owner_id == _PIXELORAMA_SOURCE_OWNER_ID:
+        return _assemble_pixelorama_source_dependencies(
+            runtime, claim, binding, owner, owner_registry
         )
     if owner.owner_id == _SIMULATION_OWNER_ID:
         return _assemble_simulation_dependencies(
