@@ -158,7 +158,7 @@ def _require_runtime_binding_evidence(runtime, binding) -> None:
             or artifact.get("status") != "PRODUCED"
             or artifact.get("content_hash") != "sha256:" + capture.content_hash
             or len(data) != capture.byte_count
-            or inspection.pixel_hash != capture.pixel_hash
+            or inspection.pixel_hash.removeprefix("sha256:") != capture.pixel_hash
             or inspection.width != capture.width
             or inspection.height != capture.height
             or capture.integrity_verification_id not in verification_ids
