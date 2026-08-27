@@ -19,6 +19,11 @@ from .production_work_order_blender import (
     BLENDER_CONTRACT_ID,
     BlenderExportGLBDispatchValidator,
 )
+from .production_work_order_build import (
+    BUILD_ADAPTER_ID,
+    BUILD_CONTRACT_ID,
+    BuildIntegrationDispatchValidator,
+)
 from .production_work_order_image import (
     IMAGE_ADAPTER_ID,
     IMAGE_CONTRACT_ID,
@@ -96,6 +101,11 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
         "originforge.audio.piper",
     )
     rows = [
+        BuiltinDispatchReview(
+            BUILD_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "build integration accepts only the inert BUILD selector; approved commands, sandbox, workspace, and environment remain infrastructure-owned",
+        ),
         BuiltinDispatchReview(
             _CODE_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
@@ -310,6 +320,7 @@ class CodeBoundedRetryDispatchValidator:
 
 def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
     return (
+        BuildIntegrationDispatchValidator(),
         CodeBoundedRetryDispatchValidator(),
         DeterministicSimulationDispatchValidator(),
         PixeloramaSpritesheetExportDispatchValidator(),
@@ -391,6 +402,23 @@ def _blender_contract(adapter) -> DispatchContract:
         allowed_input_ref_types=(WorkOrderRefType.MODEL3D_REQUEST,),
         max_payload_bytes=2,
         max_input_refs=1,
+    )
+
+
+def _build_contract(adapter) -> DispatchContract:
+    validator = BuildIntegrationDispatchValidator()
+    return DispatchContract(
+        contract_id=BUILD_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(),
+        max_payload_bytes=128,
+        max_input_refs=0,
     )
 
 
@@ -496,6 +524,7 @@ def build_builtin_dispatch_catalog(
     if not isinstance(phase32_catalog, CapabilityCatalog):
         raise TypeError("phase32_catalog must be a CapabilityCatalog")
     adapters = {value.adapter_id: value for value in phase32_catalog.adapters}
+    build = adapters.get(BUILD_ADAPTER_ID)
     code = adapters.get(_CODE_ADAPTER_ID)
     if code is not None:
         return DispatchContractCatalog.create(phase32_catalog, (_code_contract(code),))
@@ -508,12 +537,26 @@ def build_builtin_dispatch_catalog(
     runtime_observer = adapters.get(RUNTIME_ADAPTER_ID)
     playtest = adapters.get(PLAYTEST_ADAPTER_ID)
     reviewed_non_code = tuple(
-        value for value in (simulation, pixelorama, blender, image, ffmpeg, piper, runtime_observer, playtest) if value is not None
+        value
+        for value in (
+            build,
+            simulation,
+            pixelorama,
+            blender,
+            image,
+            ffmpeg,
+            piper,
+            runtime_observer,
+            playtest,
+        )
+        if value is not None
     )
     if len(reviewed_non_code) > 1:
         raise ValueError(
             "Phase-32 catalog contains multiple reviewed non-code Phase-33 adapters"
         )
+    if build is not None:
+        return DispatchContractCatalog.create(phase32_catalog, (_build_contract(build),))
     if simulation is not None:
         return DispatchContractCatalog.create(
             phase32_catalog,

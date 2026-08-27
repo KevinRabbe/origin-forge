@@ -60,6 +60,7 @@ class SandboxedWorkspaceVerifier:
         command: CommandSpec,
         *,
         network_allowed: bool,
+        execution_id: str | None = None,
     ) -> CommandVerificationResult:
         workspace_path = self.workspaces.path(workspace_id)
         job = SandboxJob(
@@ -78,7 +79,10 @@ class SandboxedWorkspaceVerifier:
                 verification_type=f"sandbox-{category}:{command.name}",
                 verifier=f"OriginForge.Sandbox:{self.backend.backend_id}",
                 status="BLOCKED",
-                evidence={"error": f"{type(exc).__name__}: {exc}"},
+                evidence={
+                    "error": f"{type(exc).__name__}: {exc}",
+                    **({"dispatch_execution_id": execution_id} if execution_id else {}),
+                },
             )
             return CommandVerificationResult(
                 category, command.name, verification_id, False, None
@@ -100,6 +104,7 @@ class SandboxedWorkspaceVerifier:
                 "backend_provenance": dict(self.backend.provenance),
                 "argv": list(command.argv),
                 "result": asdict(result),
+                **({"dispatch_execution_id": execution_id} if execution_id else {}),
             },
         )
         return CommandVerificationResult(
@@ -162,7 +167,9 @@ class SandboxedWorkspaceVerifier:
         )
         return WorkspaceVerificationResult(workspace_id, True, tuple(results))
 
-    def verify_build(self, workspace_id: str) -> WorkspaceVerificationResult:
+    def verify_build(
+        self, workspace_id: str, *, execution_id: str | None = None
+    ) -> WorkspaceVerificationResult:
         """Run only required project-approved build commands.
 
         Build evidence is intentionally distinct from the combined workspace
@@ -192,6 +199,7 @@ class SandboxedWorkspaceVerifier:
                 "build",
                 command,
                 network_allowed=config.sandbox_network,
+                execution_id=execution_id,
             )
             results.append(result)
             if not result.passed:

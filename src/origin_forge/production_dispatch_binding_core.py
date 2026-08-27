@@ -22,6 +22,11 @@ from .production_work_order_audit import (
     WorkOrderCurrentnessStatus,
     inspect_work_order_currentness,
 )
+from .production_work_order_build import (
+    BUILD_ADAPTER_ID,
+    BUILD_CONTRACT_ID,
+    BUILD_REQUEST_TYPE_ID,
+)
 from .production_work_order_models import canonical_bytes, content_hash
 from .production_work_order_store import (
     ProductionWorkOrderStore,
@@ -175,6 +180,60 @@ class CodeBoundedRetryInputBinder:
         }
 
 
+class BuildIntegrationInputBinder:
+    """Bind the inert build selector; commands are loaded from project config."""
+
+    _SCHEMA = {
+        "request_type": BUILD_REQUEST_TYPE_ID,
+        "fields": {"task_id": "TASK ID", "operation": "BUILD"},
+        "injected_later": ["approved build commands", "sandbox backend", "workspace manager"],
+        "adapter_invocation": False,
+    }
+    _SCHEMA_HASH = content_hash(_SCHEMA)
+    _FINGERPRINT = content_hash(
+        {
+            "implementation_id": "origin-forge-build-integration-dispatch-binder@1",
+            "adapter_id": BUILD_ADAPTER_ID,
+            "dispatch_contract_id": BUILD_CONTRACT_ID,
+            "request_schema": _SCHEMA,
+        }
+    )
+    _DESCRIPTOR = DispatchBinderDescriptor(
+        binder_id="binder.build.integration@1",
+        binder_fingerprint=_FINGERPRINT,
+        adapter_id=BUILD_ADAPTER_ID,
+        dispatch_contract_id=BUILD_CONTRACT_ID,
+        request_type_id=BUILD_REQUEST_TYPE_ID,
+        request_schema_hash=_SCHEMA_HASH,
+        accepted_input_roles=(),
+    )
+
+    @property
+    def descriptor(self) -> DispatchBinderDescriptor:
+        return self._DESCRIPTOR
+
+    def bind(
+        self,
+        work_order: ProductionWorkOrder,
+        bundle: InputResolutionBundle,
+    ) -> object:
+        if not isinstance(work_order, ProductionWorkOrder) or not isinstance(
+            bundle, InputResolutionBundle
+        ):
+            raise TypeError("build binder requires a WorkOrder and input bundle")
+        if (
+            work_order.work_order_id != bundle.work_order_id
+            or work_order.content_hash != bundle.work_order_hash
+            or work_order.selected_adapter_id != BUILD_ADAPTER_ID
+            or work_order.dispatch_contract_id != BUILD_CONTRACT_ID
+            or work_order.input_refs
+        ):
+            raise DispatchBindingError("build binder relation is not exact")
+        if work_order.payload != {"operation": "BUILD"}:
+            raise DispatchBindingError("build WorkOrder payload is not the exact BUILD selector")
+        return {"task_id": work_order.task_id, "operation": "BUILD"}
+
+
 class DispatchInputBinderRegistry:
     def __init__(self, binders: Sequence[DispatchInputBinder]):
         values = tuple(binders)
@@ -239,7 +298,7 @@ class DispatchInputBinderRegistry:
 
 
 def builtin_dispatch_binders() -> tuple[DispatchInputBinder, ...]:
-    return (CodeBoundedRetryInputBinder(),)
+    return (BuildIntegrationInputBinder(), CodeBoundedRetryInputBinder())
 
 
 def build_builtin_dispatch_binder_registry() -> DispatchInputBinderRegistry:

@@ -37,6 +37,7 @@ _PIPER_EXECUTION_OWNER_ID = "originforge.execution.audio.piper-tts@1"
 _FFMPEG_EXECUTION_OWNER_ID = "originforge.execution.audio.ffmpeg-process@1"
 _RUNTIME_EXECUTION_OWNER_ID = "originforge.execution.runtime.observe@1"
 _PLAYTEST_EXECUTION_OWNER_ID = "originforge.execution.playtest.cooperative@1"
+_BUILD_EXECUTION_OWNER_ID = "originforge.execution.build.integration@1"
 
 
 class ProductionDispatchExecutionError(RuntimeError):
@@ -574,7 +575,12 @@ def begin_dispatch_execution(
 
         task_transition: tuple[int, str] | None = None
         task_transition_reason: str | None = None
-        if dependencies.plan.owner_id == _SIMULATION_EXECUTION_OWNER_ID:
+        if dependencies.plan.owner_id == _BUILD_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime, conn, claim, execution_id, now
+            )
+            task_transition_reason = "BUILD_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _SIMULATION_EXECUTION_OWNER_ID:
             task_transition = _transition_simulation_task_running_connection(
                 runtime,
                 conn,

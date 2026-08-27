@@ -6,6 +6,7 @@ from .production_dispatch_binding_audio import (
 )
 from .production_dispatch_binding_blender import BlenderExportGLBInputBinder
 from .production_dispatch_binding_core import (
+    BuildIntegrationInputBinder,
     CodeBoundedRetryInputBinder,
     DispatchBindingError,  # noqa: F401
     DispatchInputBinder,
@@ -31,6 +32,7 @@ def builtin_dispatch_binders() -> tuple[DispatchInputBinder, ...]:
     """Return exactly the reviewed production input binders through Phase 51B."""
 
     return (
+        BuildIntegrationInputBinder(),
         CodeBoundedRetryInputBinder(),
         DeterministicSimulationInputBinder(),
         PixeloramaSpritesheetExportInputBinder(),

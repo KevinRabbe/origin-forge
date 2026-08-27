@@ -72,6 +72,7 @@ from .scheduled_model_adapter import RuntimeModelScheduleRecorder, ScheduledMode
 from .workspaces import GitWorkspaceManager
 
 _BOUNDED_RETRY_OWNER_ID = "originforge.execution.bounded-retry@1"
+_BUILD_OWNER_ID = "originforge.execution.build.integration@1"
 _SIMULATION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 _PIXELORAMA_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
 _BLENDER_OWNER_ID = "originforge.execution.blender.export-glb@1"
@@ -185,6 +186,12 @@ class BoundedRetryExecutionPayload:
     sandbox_backend: SandboxBackend
     workspaces: GitWorkspaceManager
     bounded_retry_policy: BoundedRetryPolicy
+
+
+@dataclass(frozen=True)
+class BuildIntegrationExecutionPayload:
+    sandbox_backend: SandboxBackend
+    workspaces: GitWorkspaceManager
 
 
 @dataclass(frozen=True)
@@ -341,6 +348,7 @@ class CooperativePlaytestExecutionPayload:
 
 ExecutionDependencyPayload = (
     BoundedRetryExecutionPayload
+    | BuildIntegrationExecutionPayload
     | DeterministicSimulationExecutionPayload
     | PixeloramaSpritesheetExportExecutionPayload
     | BlenderExportGLBExecutionPayload
@@ -375,6 +383,11 @@ class ProductionExecutionDependencies:
             if not isinstance(self.payload, BoundedRetryExecutionPayload):
                 raise ProductionExecutionAssemblyError(
                     "bounded-retry owner requires bounded execution payload"
+                )
+        elif self.owner.owner_id == _BUILD_OWNER_ID:
+            if not isinstance(self.payload, BuildIntegrationExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "build owner requires sandbox/workspace execution payload"
                 )
         elif self.owner.owner_id == _SIMULATION_OWNER_ID:
             if not isinstance(self.payload, DeterministicSimulationExecutionPayload):
@@ -930,6 +943,66 @@ def _assemble_playtest_dependencies(
     return ProductionExecutionDependencies(plan, owner, CooperativePlaytestExecutionPayload(scenario, infrastructure))
 
 
+def _assemble_build_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _BUILD_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "build dependency assembler received an unexpected owner"
+        )
+    config = load_config(runtime.project_root)
+    if config.version < 2:
+        raise ProductionExecutionAssemblyError(
+            "build integration requires protected config version 2"
+        )
+    _require_executable_sandbox(config)
+    if not any(command.required for command in config.approved_build_commands):
+        raise ProductionExecutionAssemblyError(
+            "build integration requires at least one approved build command"
+        )
+    try:
+        backend = create_sandbox_backend(runtime)
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "configured build sandbox backend is unavailable"
+        ) from exc
+    command_projection = [
+        {
+            "name": command.name,
+            "argv": list(command.argv),
+            "timeout_seconds": command.timeout_seconds,
+            "max_output_bytes": command.max_output_bytes,
+            "required": command.required,
+        }
+        for command in config.approved_build_commands
+    ]
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=config.version,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=config.sandbox_backend.lower(),
+        sandbox_config_hash=_sandbox_config_hash(config),
+        owner_dependency_hash=content_hash({"build_commands": command_projection}),
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=BuildIntegrationExecutionPayload(
+            sandbox_backend=backend,
+            workspaces=GitWorkspaceManager(runtime),
+        ),
+    )
+
+
 def _assemble_bounded_retry_dependencies(
     runtime: OriginForgeRuntime,
     claim,
@@ -1086,6 +1159,10 @@ def assemble_production_execution_dependencies(
             "no trusted execution owner matches the exact current dispatch binding"
         ) from exc
 
+    if owner.owner_id == _BUILD_OWNER_ID:
+        return _assemble_build_dependencies(
+            runtime, claim, binding, owner, owner_registry
+        )
     if owner.owner_id == _BLENDER_OWNER_ID:
         return _assemble_blender_dependencies(
             runtime,

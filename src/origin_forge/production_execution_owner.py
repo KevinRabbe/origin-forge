@@ -8,7 +8,10 @@ from dataclasses import dataclass
 
 from .model_scheduler import ModelRole
 from .production_capability_builtin import builtin_trusted_production_adapters
-from .production_dispatch_binding import CodeBoundedRetryInputBinder
+from .production_dispatch_binding import (
+    BuildIntegrationInputBinder,
+    CodeBoundedRetryInputBinder,
+)
 from .production_dispatch_binding_blender import BlenderExportGLBInputBinder
 from .production_dispatch_binding_pixelorama import (
     PixeloramaSpritesheetExportInputBinder,
@@ -208,6 +211,34 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
     adapters = {
         value.adapter_id: value for value in builtin_trusted_production_adapters()
     }
+    try:
+        build_adapter = adapters["originforge.build.integration"]
+    except KeyError as exc:
+        raise ProductionExecutionOwnerError(
+            "built-in capability inventory lacks build integration adapter"
+        ) from exc
+    build_binder = BuildIntegrationInputBinder().descriptor
+    if (
+        build_binder.adapter_id != build_adapter.adapter_id
+        or build_binder.dispatch_contract_id != "build.integration@1"
+    ):
+        raise ProductionExecutionOwnerError(
+            "built-in build integration binder relation drifted"
+        )
+    build_owner = ProductionExecutionOwnerDescriptor(
+        owner_id="originforge.execution.build.integration@1",
+        owner_version="1",
+        adapter_id=build_adapter.adapter_id,
+        adapter_fingerprint=build_adapter.implementation_fingerprint,
+        dispatch_contract_id=build_binder.dispatch_contract_id,
+        binder_id=build_binder.binder_id,
+        binder_fingerprint=build_binder.binder_fingerprint,
+        request_type_id=build_binder.request_type_id,
+        request_schema_hash=build_binder.request_schema_hash,
+        model_strategy_roles=(),
+        requires_sandbox=True,
+        requires_workspace_manager=True,
+    )
     from .production_execution_owner_audio import (
         ffmpeg_execution_owner_descriptor,
         piper_execution_owner_descriptor,
@@ -335,6 +366,7 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         requires_workspace_manager=False,
     )
     return (
+        build_owner,
         code_owner,
         simulation_owner,
         pixelorama_owner,

@@ -21,6 +21,7 @@ class BuiltinProductionCapabilityTests(unittest.TestCase):
         catalog = build_builtin_capability_catalog()
         expected_capabilities = {
             "design.specify",
+            "build.integration",
             "code.change",
             "media.2d.export",
             "media.3d.blender",

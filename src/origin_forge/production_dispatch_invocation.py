@@ -52,6 +52,7 @@ from .runtime_observation_models import (
     content_hash as simulation_content_hash,
 )
 from .runtime_observation_service import RuntimeObservationServiceResult
+from .sandbox_verification import WorkspaceVerificationResult
 from .simulation_models import (
     SimulationInvariant,
     SimulationModelError,
@@ -293,6 +294,7 @@ class CompletedDispatchInvocation:
     audio_result: AudioOperationServiceResult | None = None
     runtime_result: RuntimeObservationServiceResult | None = None
     playtest_result: PlaytestServiceResult | None = None
+    build_result: WorkspaceVerificationResult | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.execution, DispatchExecution):
@@ -308,7 +310,8 @@ class CompletedDispatchInvocation:
         has_audio = self.audio_result is not None
         has_runtime = self.runtime_result is not None
         has_playtest = self.playtest_result is not None
-        if sum((has_policy, has_simulation, has_pixelorama, has_image, has_audio, has_runtime, has_playtest)) != 1:
+        has_build = self.build_result is not None
+        if sum((has_policy, has_simulation, has_pixelorama, has_image, has_audio, has_runtime, has_playtest, has_build)) != 1:
             raise ProductionDispatchInvocationError(
                 "completed invocation requires exactly one reviewed owner result"
             )
@@ -380,6 +383,16 @@ class CompletedDispatchInvocation:
             ):
                 raise ProductionDispatchInvocationError(
                     "playtest execution requires exactly one PlaytestServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.build.integration@1":
+            if (
+                not isinstance(self.build_result, WorkspaceVerificationResult)
+                or has_policy or has_simulation or has_pixelorama or has_image
+                or has_audio or has_runtime or has_playtest
+                or not self.build_result.passed
+            ):
+                raise ProductionDispatchInvocationError(
+                    "build execution requires one passed WorkspaceVerificationResult"
                 )
         else:
             raise ProductionDispatchInvocationError(

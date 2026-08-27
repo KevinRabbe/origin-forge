@@ -57,6 +57,12 @@ def builtin_production_capabilities() -> tuple[ProductionCapability, ...]:
 
     return (
         _capability(
+            "build.integration",
+            "Build integration",
+            "Run project-approved build commands in the governed sandbox.",
+            CapabilityDomain.GENERAL,
+        ),
+        _capability(
             "design.specify",
             "Design specification",
             "Produce bounded design/specification evidence without implementation authority.",
@@ -134,6 +140,14 @@ def builtin_trusted_production_adapters() -> tuple[TrustedProductionAdapter, ...
     """
 
     return (
+        _adapter(
+            "originforge.build.integration",
+            "originforge.build",
+            ("build.integration",),
+            AdapterExecutionEffect.WORKSPACE_MUTATION,
+            AdapterReplayClass.REVISION_BOUND,
+            "build integration sandbox boundary",
+        ),
         _adapter(
             "originforge.code.bounded-retry",
             "originforge.code",
