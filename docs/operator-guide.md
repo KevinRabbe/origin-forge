@@ -215,6 +215,19 @@ origin-forge verify --help
 origin-forge sandbox --help
 ```
 
+To run only the required project-approved build commands against an audited
+Workspace, use the bounded build operation:
+
+```bash
+origin-forge sandbox build WSPACE-...
+```
+
+It records build Verifications against the Workspace and leaves the Workspace
+audited. Combined `sandbox verify` remains the operation that runs required
+build and test commands and may promote an audited Workspace after all
+configured checks pass. Neither command accepts shell text, arbitrary command
+paths, or Task acceptance/adoption authority.
+
 A fresh bounded coding attempt requires the target Task and parent Flow to satisfy the orchestration preconditions. The attempt command does not invent Tasks or silently repair lifecycle state.
 
 ## Inspect, bootstrap, or recover one explicit Goal
