@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 
 from .image_png import inspect_truecolor8_png
 from .lineage import OriginForgeLineage
@@ -23,6 +24,7 @@ from .production_runtime_dispatch_output_binding import (
     read_runtime_dispatch_output_binding,
 )
 from .production_runtime_dispatch_output_binding_models import RuntimeDispatchCapture
+from .runtime_observation_models import canonical_bytes
 from .runtime_observation_service import (
     RuntimeCaptureArtifactEvidence,
     RuntimeObservationService,
@@ -93,6 +95,83 @@ def _materialize(binding):
     )
 
 
+def _require_runtime_binding_evidence(runtime, binding) -> None:
+    """Revalidate every persisted runtime Artifact before recovery terminalization."""
+    lineage = OriginForgeLineage(runtime)
+    request_artifact = lineage.get_artifact(binding.request_artifact_id)
+    result_artifact = lineage.get_artifact(binding.result_artifact_id)
+    request_path = lineage.local_artifact_path(binding.request_artifact_id)
+    result_path = lineage.local_artifact_path(binding.result_artifact_id)
+    request_bytes = request_path.read_bytes()
+    result_bytes = result_path.read_bytes()
+    try:
+        request_payload = json.loads(request_bytes.decode("utf-8"))
+        result_payload = json.loads(result_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProductionDispatchInvocationError(
+            "runtime request/result evidence is not strict JSON"
+        ) from exc
+    expected_request_hash = "sha256:" + hashlib.sha256(request_bytes).hexdigest()
+    expected_result_hash = "sha256:" + hashlib.sha256(result_bytes).hexdigest()
+    if (
+        request_artifact.get("type") != "RUNTIME_OBSERVATION_REQUEST"
+        or request_artifact.get("parent_artifact_id") is not None
+        or request_artifact.get("created_by_run_id") != binding.run_id
+        or request_artifact.get("status") != "CAPTURED"
+        or request_artifact.get("content_hash") != expected_request_hash
+        or result_artifact.get("type") != "RUNTIME_OBSERVATION_RESULT"
+        or result_artifact.get("parent_artifact_id") != binding.request_artifact_id
+        or result_artifact.get("created_by_run_id") != binding.run_id
+        or result_artifact.get("status") != "CAPTURED"
+        or result_artifact.get("content_hash") != expected_result_hash
+        or canonical_bytes(request_payload) != request_bytes
+        or canonical_bytes(result_payload) != result_bytes
+    ):
+        raise ProductionDispatchInvocationError(
+            "runtime request/result Artifact lineage or bytes drifted"
+        )
+    for artifact_id in (binding.stdout_artifact_id, binding.stderr_artifact_id):
+        artifact = lineage.get_artifact(artifact_id)
+        path = lineage.local_artifact_path(artifact_id)
+        data = path.read_bytes()
+        if (
+            artifact.get("parent_artifact_id") != binding.result_artifact_id
+            or artifact.get("created_by_run_id") != binding.run_id
+            or artifact.get("status") != "CAPTURED"
+            or artifact.get("content_hash") != "sha256:" + hashlib.sha256(data).hexdigest()
+        ):
+            raise ProductionDispatchInvocationError(
+                "runtime log Artifact lineage or bytes drifted"
+            )
+    for capture in binding.captures:
+        artifact = lineage.get_artifact(capture.artifact_id)
+        path = lineage.local_artifact_path(capture.artifact_id)
+        data = path.read_bytes()
+        inspection = inspect_truecolor8_png(data)
+        verification_ids = {
+            value["id"]
+            for value in lineage.list_artifact_verifications(capture.artifact_id)
+        }
+        if (
+            artifact.get("parent_artifact_id") != binding.result_artifact_id
+            or artifact.get("created_by_run_id") != binding.run_id
+            or artifact.get("status") != "PRODUCED"
+            or artifact.get("content_hash") != "sha256:" + capture.content_hash
+            or len(data) != capture.byte_count
+            or inspection.pixel_hash != capture.pixel_hash
+            or inspection.width != capture.width
+            or inspection.height != capture.height
+            or capture.integrity_verification_id not in verification_ids
+            or (
+                capture.visual_verification_id is not None
+                and capture.visual_verification_id not in verification_ids
+            )
+        ):
+            raise ProductionDispatchInvocationError(
+                f"runtime capture evidence drifted: {capture.capture_id}"
+            )
+
+
 def dispatch_runtime_claim_once_if_applicable(runtime, claim_id: str, expected_claim_revision: int):
     import origin_forge.production_dispatch_invocation as legacy
 
@@ -156,7 +235,9 @@ def recover_runtime_dispatch_execution_once(runtime, execution_id: str) -> Compl
     if execution.execution_owner_id != RUNTIME_EXECUTION_OWNER_ID:
         raise ProductionDispatchInvocationError("execution is not owned by runtime observation")
     try:
-        result = _materialize(read_runtime_dispatch_output_binding(runtime, execution_id))
+        binding = read_runtime_dispatch_output_binding(runtime, execution_id)
+        _require_runtime_binding_evidence(runtime, binding)
+        result = _materialize(binding)
     except Exception as exc:
         raise ProductionDispatchInvocationRecoveryRequired(
             execution_id, "OWNER_RETURN_CONTRACT_MISMATCH"
