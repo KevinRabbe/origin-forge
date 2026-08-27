@@ -2,9 +2,11 @@
 
 Status: **Phase 57A–57C implemented; Phase 57D evidence synchronization in progress**
 
-Latest candidate evidence head: `25a7cf9`.
+Latest candidate evidence head: `caa4422`.
 Remote CI is not yet present for this head; the branch remains a draft PR and
-the final Phase 57D release gate is therefore still open.
+the final Phase 57D release gate is therefore still open. The candidate also
+contains the later governed Pixelorama source/animation vertical and its
+read-only trace evidence; those additions do not alter Phase-57 authority.
 
 Phase 57 now closes the semantic-request boundary from accepted design evidence
 to the existing protected Blender request registry. The implementation keeps
@@ -24,7 +26,7 @@ request hash. Publication is create-only and revalidated through the existing
 Phase-51 protected reader. Phase-51 admission requires the exact current
 Task/publication/request relation and rejects stale upstream lineage.
 
-Subsequent foundation work has advanced the composed candidate schema to v30.
+Subsequent foundation work has advanced the composed candidate schema to v32.
 Migration v28 records a `sha256:` hash for each migration after validating its
 version; historical rows with no hash are backfilled only when their versions
 and SQL identity are known. Migration v29 preserves existing shared Piper
@@ -33,7 +35,10 @@ rewriting those rows. A stored hash mismatch fails closed before further
 upgrade work. These migrations change migration-integrity and owner-compatibility
 evidence only; migration v30 adds the dedicated Pixelorama source/animation
 multi-output binding surface without rewriting domain IDs, receipts, or
-existing production evidence.
+existing production evidence. Migration v31 adds the dedicated create-only
+Pixelorama source adoption receipt, and migration v32 adds the explicit
+actor-bound source Task-acceptance receipt. Both are immutable and preserve
+the existing Phase-57 rows byte-for-byte.
 
 The module-only operator surface is:
 
@@ -52,7 +57,9 @@ release authority was added.
 The focused Phase 57A/57B/57C and migration suite covers exact approval retry,
 create-only publication, protected-request tampering, competing proposals,
 immutable evidence, exact Phase-51 admission matching, and stale-lineage
-rejection. The current remote verification baseline also includes 23 Phase-51
+rejection. The focused candidate verification also covers source execution,
+adoption, acceptance, trace, migration, and doctor behavior. The current
+remote verification baseline also includes 23 Phase-51
 and Phase-57 tests with one explicit symlink capability skip, five migration
 tests, and the 15-test Blender invocation/currentness regression suite. The
 canonical workflow runs the Windows/Linux Python matrix, strict doctor

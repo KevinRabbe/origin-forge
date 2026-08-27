@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from origin_forge.ids import IdKind, new_id
 from origin_forge.pixelorama_models import (
+    AnimationSpec,
     BridgeBudget,
     BridgeOutputType,
     ExportSpec,
@@ -179,7 +180,8 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
             2,
             2,
             (RasterLayerSpec("base", "Base"),),
-            (FrameSpec("idle-0"),),
+            (FrameSpec("idle-0"), FrameSpec("idle-1", duration_ms=120)),
+            animations=(AnimationSpec("idle", 0, 1),),
             output_basename="player",
         )
         payload = {
