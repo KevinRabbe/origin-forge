@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import ClassVar
 
 from .audio_profiles import AudioProfileError, AudioProfileStore
+from .audio_wav import WavError, inspect_pcm16_wav
+from .lineage import OriginForgeLineage
 from .model3d_requests import Model3DRequestError, Model3DRequestReader
 from .production_dispatch_resolution_models import (
     InputResolverDescriptor,
@@ -11,15 +14,29 @@ from .production_dispatch_resolution_models import (
     ResolverClaim,
 )
 from .production_dispatch_resolvers import (
-    DispatchInputResolutionError,
-    WorkOrderInputResolver,
-    WorkOrderInputResolverRegistry,
+    AcceptedDesignInputResolver,
     ArtifactInputResolver,
     DesignRuleInputResolver,
+    DispatchInputResolutionError,
     ProjectEntityInputResolver,
     VerificationInputResolver,
+    WorkOrderInputResolver,
+    WorkOrderInputResolverRegistry,
+    WorkspaceInputResolver,
 )
-from .production_work_order_models import WorkOrderInputRef, WorkOrderRefType, content_hash
+from .production_playtest_scenario_store import (
+    PlaytestScenarioStore,
+    PlaytestScenarioStoreError,
+)
+from .production_runtime_observation_store import (
+    RuntimeObservationRequestStore,
+    RuntimeObservationRequestStoreError,
+)
+from .production_work_order_models import (
+    WorkOrderInputRef,
+    WorkOrderRefType,
+    content_hash,
+)
 from .runtime import OriginForgeRuntime
 
 
@@ -53,7 +70,7 @@ class AudioProfileInputResolver:
         "AUDIO_PROFILE",
         "audio_profile",
     )
-    _PROJECTION_CONTRACT = {
+    _PROJECTION_CONTRACT: ClassVar[dict[str, object]] = {
         "source": "GovernedAudioProfile.to_dict",
         "hash_semantics": "WorkOrder digest equals AudioProfile.profile_hash digest",
         "revision": None,
@@ -121,6 +138,87 @@ class AudioProfileInputResolver:
         )
 
 
+class AudioSourceInputResolver:
+    """Resolve exact PCM16 WAV evidence for a governed audio operation."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.ARTIFACT, "ART-", "AUDIO_SOURCE", "audio_source"
+    )
+    _PROJECTION_CONTRACT: ClassVar[dict[str, object]] = {
+        "source": "protected Artifact bytes + inspect_pcm16_wav",
+        "fields": (
+            "source_id", "relative_path", "content_hash", "pcm_hash",
+            "byte_count", "frame_count", "sample_rate", "channels",
+        ),
+        "accepted_statuses": ("CAPTURED", "PRODUCED"),
+        "artifact_bytes": True,
+        "backend_invocation": False,
+    }
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.phase.audio-source@1",
+        content_hash({
+            "implementation_id": "origin-forge-dispatch-audio-source-resolver@1",
+            "claim": _CLAIM.to_dict(),
+            "projection_contract": _PROJECTION_CONTRACT,
+        }),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(
+        self,
+        runtime: OriginForgeRuntime,
+        ref: WorkOrderInputRef,
+    ) -> ResolvedWorkOrderInput:
+        if not isinstance(ref, WorkOrderInputRef):
+            raise TypeError("ref must be a WorkOrderInputRef")
+        if ref.ref_type is not WorkOrderRefType.ARTIFACT or not ref.ref_id.startswith("ART-"):
+            raise DispatchInputResolutionError("WorkOrder ref does not match audio-source resolver claim")
+        if ref.role != "audio_source":
+            raise DispatchInputResolutionError("audio source resolver requires the audio_source role")
+        if ref.revision is not None:
+            raise DispatchInputResolutionError("Audio source refs are not revision-numbered")
+        try:
+            lineage = OriginForgeLineage(runtime)
+            artifact = lineage.get_artifact(ref.ref_id)
+            path = lineage.local_artifact_path(ref.ref_id)
+            inspection = inspect_pcm16_wav(path.read_bytes())
+        except (KeyError, OSError, RuntimeError, TypeError, ValueError, WavError) as exc:
+            raise DispatchInputResolutionError(
+                "audio source Artifact is not a valid protected PCM16 WAV"
+            ) from exc
+        if artifact.get("content_hash") != "sha256:" + ref.content_hash:
+            raise DispatchInputResolutionError("audio source Artifact content hash drifted")
+        if artifact.get("status") not in {"CAPTURED", "PRODUCED"}:
+            raise DispatchInputResolutionError("audio source Artifact status is not usable")
+        location = artifact.get("path_or_uri")
+        if not isinstance(location, str) or "://" in location:
+            raise DispatchInputResolutionError("audio source Artifact is not a local file")
+        if inspection.content_hash != "sha256:" + ref.content_hash:
+            raise DispatchInputResolutionError("audio source WAV bytes drifted")
+        projection = {
+            "source_id": ref.ref_id,
+            "relative_path": location,
+            "content_hash": inspection.content_hash,
+            "pcm_hash": inspection.pcm_hash,
+            "byte_count": inspection.byte_count,
+            "frame_count": inspection.frame_count,
+            "sample_rate": inspection.sample_rate,
+            "channels": inspection.channels,
+        }
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="AUDIO_SOURCE",
+            resolution_class="PROTECTED_PCM16_WAV",
+            projection=projection,
+        )
+
+
 class Model3DRequestInputResolver:
     """Resolve one exact immutable MODEL3DREQ object without runtime allocation."""
 
@@ -130,7 +228,7 @@ class Model3DRequestInputResolver:
         "MODEL3D_REQUEST",
         "model3d_request",
     )
-    _PROJECTION_CONTRACT = {
+    _PROJECTION_CONTRACT: ClassVar[dict[str, object]] = {
         "source": "Model3DProductionRequest.to_dict",
         "hash_semantics": "WorkOrder digest equals request_hash digest",
         "revision": None,
@@ -199,6 +297,123 @@ class Model3DRequestInputResolver:
         )
 
 
+class RuntimeObservationRequestInputResolver:
+    """Resolve one exact immutable OBS request without launching the target."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.RUNTIME_OBSERVATION_REQUEST,
+        "OBS-",
+        "RUNTIME_OBSERVATION_REQUEST",
+        "runtime_observation_request",
+    )
+    _PROJECTION_CONTRACT: ClassVar[dict[str, object]] = {
+        "source": "RuntimeObservationRequestStore.get",
+        "hash_semantics": "WorkOrder digest equals RuntimeObservationRequest.content_hash",
+        "revision": None,
+        "backend_invocation": False,
+        "workspace_allocation": False,
+    }
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.phase.runtime-observation-request@1",
+        content_hash(
+            {
+                "implementation_id": "origin-forge-runtime-observation-request-resolver@1",
+                "claim": _CLAIM.to_dict(),
+                "projection_contract": _PROJECTION_CONTRACT,
+            }
+        ),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(self, runtime: OriginForgeRuntime, ref: WorkOrderInputRef) -> ResolvedWorkOrderInput:
+        if not isinstance(ref, WorkOrderInputRef):
+            raise TypeError("ref must be a WorkOrderInputRef")
+        if (
+            ref.ref_type is not WorkOrderRefType.RUNTIME_OBSERVATION_REQUEST
+            or not ref.ref_id.startswith("OBS-")
+            or ref.role != "runtime_observation_request"
+        ):
+            raise DispatchInputResolutionError("WorkOrder ref does not match runtime-observation request claim")
+        if ref.revision is not None:
+            raise DispatchInputResolutionError("runtime observation request refs are not revision-numbered")
+        exact_hash = "sha256:" + ref.content_hash
+        try:
+            request = RuntimeObservationRequestStore(runtime).get(ref.ref_id, exact_hash)
+        except KeyError as exc:
+            raise DispatchInputResolutionError("runtime observation request is not available under the exact ID/hash") from exc
+        except (RuntimeObservationRequestStoreError, RuntimeError, TypeError, ValueError) as exc:
+            raise DispatchInputResolutionError("runtime observation request failed protected-store revalidation") from exc
+        if request.content_hash != exact_hash:
+            raise DispatchInputResolutionError("runtime observation request content hash drifted")
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="RUNTIME_OBSERVATION_REQUEST",
+            resolution_class="PROTECTED_RUNTIME_OBSERVATION_REQUEST",
+            projection=request.to_dict(),
+        )
+
+
+class PlaytestScenarioInputResolver:
+    """Resolve one exact immutable PLAYSCEN scenario without invoking a harness."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.PLAYTEST_SCENARIO,
+        "PLAYSCEN-",
+        "PLAYTEST_SCENARIO",
+        "playtest_scenario",
+    )
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.phase.playtest-scenario@1",
+        content_hash(
+            {
+                "implementation_id": "origin-forge-playtest-scenario-resolver@1",
+                "claim": _CLAIM.to_dict(),
+                "projection_contract": {
+                    "source": "PlaytestScenarioStore.get",
+                    "backend_invocation": False,
+                },
+            }
+        ),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(self, runtime: OriginForgeRuntime, ref: WorkOrderInputRef) -> ResolvedWorkOrderInput:
+        if (
+            not isinstance(ref, WorkOrderInputRef)
+            or ref.ref_type is not WorkOrderRefType.PLAYTEST_SCENARIO
+            or not ref.ref_id.startswith("PLAYSCEN-")
+            or ref.role != "playtest_scenario"
+            or ref.revision is not None
+        ):
+            raise DispatchInputResolutionError("WorkOrder ref does not match playtest scenario claim")
+        try:
+            scenario = PlaytestScenarioStore(runtime).get(ref.ref_id, "sha256:" + ref.content_hash)
+        except KeyError as exc:
+            raise DispatchInputResolutionError("playtest scenario is not available under the exact ID/hash") from exc
+        except (PlaytestScenarioStoreError, RuntimeError, TypeError, ValueError) as exc:
+            raise DispatchInputResolutionError("playtest scenario failed protected-store revalidation") from exc
+        if scenario.content_hash != "sha256:" + ref.content_hash:
+            raise DispatchInputResolutionError("playtest scenario content hash drifted")
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="PLAYTEST_SCENARIO",
+            resolution_class="PROTECTED_PLAYTEST_SCENARIO",
+            projection=scenario.to_dict(),
+        )
+
+
 def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
     """Freeze the evidence-driven resolver inclusion/defer boundary.
 
@@ -224,8 +439,8 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
         ),
         PhaseSpecificResolverReview(
             "playtest-scenario",
-            PhaseSpecificResolverReviewStatus.DEFERRED_NO_TYPED_READER,
-            "PLAYSCEN data is persisted inside playtest workspaces/artifacts without a direct exact PLAYSCEN reader; resolver scanning is forbidden",
+            PhaseSpecificResolverReviewStatus.SUPPORTED,
+            "PLAYSCEN scenarios are content-addressed and PlaytestScenarioStore.get performs exact non-creating canonical/symlink-safe revalidation",
         ),
         PhaseSpecificResolverReview(
             "image-workflow",
@@ -239,8 +454,8 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
         ),
         PhaseSpecificResolverReview(
             "runtime-observation-request",
-            PhaseSpecificResolverReviewStatus.DEFERRED_NO_TYPED_READER,
-            "OBS request data is operation/workspace-bound and has no direct exact OBS reader; resolver scanning is forbidden",
+            PhaseSpecificResolverReviewStatus.SUPPORTED,
+            "OBS requests are content-addressed and RuntimeObservationRequestStore.get performs exact non-creating canonical/symlink-safe revalidation",
         ),
         PhaseSpecificResolverReview(
             "phase-specific-evidence",
@@ -252,7 +467,22 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
 
 
 def phase_specific_input_resolvers() -> tuple[WorkOrderInputResolver, ...]:
-    return (AudioProfileInputResolver(), Model3DRequestInputResolver())
+    return (
+        AudioProfileInputResolver(),
+        AudioSourceInputResolver(),
+        Model3DRequestInputResolver(),
+        RuntimeObservationRequestInputResolver(),
+        PlaytestScenarioInputResolver(),
+    )
+
+
+def build_source_dispatch_input_resolver_registry() -> WorkOrderInputResolverRegistry:
+    """Build the isolated resolver registry for source/animation WorkOrders.
+
+    It is intentionally separate so adding this new claim cannot invalidate
+    resolver-registry fingerprints of historical dispatch evidence.
+    """
+    return WorkOrderInputResolverRegistry((AcceptedDesignInputResolver(),))
 
 
 def build_dispatch_input_resolver_registry() -> WorkOrderInputResolverRegistry:
@@ -262,6 +492,7 @@ def build_dispatch_input_resolver_registry() -> WorkOrderInputResolverRegistry:
         (
             ArtifactInputResolver(),
             VerificationInputResolver(),
+            WorkspaceInputResolver(),
             ProjectEntityInputResolver(),
             DesignRuleInputResolver(),
             *phase_specific_input_resolvers(),

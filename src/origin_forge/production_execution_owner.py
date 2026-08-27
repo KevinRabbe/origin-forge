@@ -3,16 +3,23 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 from .model_scheduler import ModelRole
 from .production_capability_builtin import builtin_trusted_production_adapters
-from .production_dispatch_binding import CodeBoundedRetryInputBinder
+from .production_dispatch_binding import (
+    BuildIntegrationInputBinder,
+    CodeBoundedRetryInputBinder,
+)
 from .production_dispatch_binding_blender import BlenderExportGLBInputBinder
+from .production_dispatch_binding_pixelorama import (
+    PixeloramaSpritesheetExportInputBinder,
+)
+from .production_dispatch_binding_pixelorama_source import (
+    PixeloramaSourceCreationInputBinder,
+)
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
-from .production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
-
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,255}$")
@@ -208,6 +215,47 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         value.adapter_id: value for value in builtin_trusted_production_adapters()
     }
     try:
+        build_adapter = adapters["originforge.build.integration"]
+    except KeyError as exc:
+        raise ProductionExecutionOwnerError(
+            "built-in capability inventory lacks build integration adapter"
+        ) from exc
+    build_binder = BuildIntegrationInputBinder().descriptor
+    if (
+        build_binder.adapter_id != build_adapter.adapter_id
+        or build_binder.dispatch_contract_id != "build.integration@1"
+    ):
+        raise ProductionExecutionOwnerError(
+            "built-in build integration binder relation drifted"
+        )
+    build_owner = ProductionExecutionOwnerDescriptor(
+        owner_id="originforge.execution.build.integration@1",
+        owner_version="1",
+        adapter_id=build_adapter.adapter_id,
+        adapter_fingerprint=build_adapter.implementation_fingerprint,
+        dispatch_contract_id=build_binder.dispatch_contract_id,
+        binder_id=build_binder.binder_id,
+        binder_fingerprint=build_binder.binder_fingerprint,
+        request_type_id=build_binder.request_type_id,
+        request_schema_hash=build_binder.request_schema_hash,
+        model_strategy_roles=(),
+        requires_sandbox=True,
+        requires_workspace_manager=True,
+    )
+    from .production_execution_owner_audio import (
+        ffmpeg_execution_owner_descriptor,
+        piper_execution_owner_descriptor,
+    )
+    from .production_execution_owner_image import (
+        image_generation_execution_owner_descriptor,
+    )
+    from .production_execution_owner_playtest import (
+        cooperative_playtest_execution_owner_descriptor,
+    )
+    from .production_execution_owner_runtime import (
+        runtime_observation_execution_owner_descriptor,
+    )
+    try:
         adapter = adapters["originforge.code.bounded-retry"]
     except KeyError as exc:
         raise ProductionExecutionOwnerError(
@@ -293,6 +341,34 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         requires_workspace_manager=False,
     )
     try:
+        pixelorama_source_adapter = adapters["originforge.pixelorama.source"]
+    except KeyError as exc:
+        raise ProductionExecutionOwnerError(
+            "built-in capability inventory lacks Pixelorama source adapter"
+        ) from exc
+    pixelorama_source_binder = PixeloramaSourceCreationInputBinder().descriptor
+    if (
+        pixelorama_source_binder.adapter_id != pixelorama_source_adapter.adapter_id
+        or pixelorama_source_binder.dispatch_contract_id != "pixelorama.source-create@1"
+    ):
+        raise ProductionExecutionOwnerError(
+            "built-in Pixelorama source binder relation drifted"
+        )
+    pixelorama_source_owner = ProductionExecutionOwnerDescriptor(
+        owner_id="originforge.execution.pixelorama.source-create@1",
+        owner_version="1",
+        adapter_id=pixelorama_source_adapter.adapter_id,
+        adapter_fingerprint=pixelorama_source_adapter.implementation_fingerprint,
+        dispatch_contract_id=pixelorama_source_binder.dispatch_contract_id,
+        binder_id=pixelorama_source_binder.binder_id,
+        binder_fingerprint=pixelorama_source_binder.binder_fingerprint,
+        request_type_id=pixelorama_source_binder.request_type_id,
+        request_schema_hash=pixelorama_source_binder.request_schema_hash,
+        model_strategy_roles=(),
+        requires_sandbox=False,
+        requires_workspace_manager=False,
+    )
+    try:
         blender_adapter = adapters["originforge.blender.model3d"]
     except KeyError as exc:
         raise ProductionExecutionOwnerError(
@@ -320,7 +396,19 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         requires_sandbox=False,
         requires_workspace_manager=False,
     )
-    return (code_owner, simulation_owner, pixelorama_owner, blender_owner)
+    return (
+        build_owner,
+        code_owner,
+        simulation_owner,
+        pixelorama_owner,
+        pixelorama_source_owner,
+        blender_owner,
+        image_generation_execution_owner_descriptor(),
+        ffmpeg_execution_owner_descriptor(),
+        piper_execution_owner_descriptor(),
+        runtime_observation_execution_owner_descriptor(),
+        cooperative_playtest_execution_owner_descriptor(),
+    )
 
 
 def build_builtin_execution_owner_registry() -> ProductionExecutionOwnerRegistry:

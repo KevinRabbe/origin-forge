@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from .production_capability_store import CapabilityRouteDecision, ProductionCapabilityStore
+from .production_capability_store import (
+    CapabilityRouteDecision,
+    ProductionCapabilityStore,
+)
 from .production_preparation_models import (
     PreparationStage,
     PreparationStatus,
@@ -197,6 +200,11 @@ def _resume_validated_routed_preparation_planner_once(
     # The no-replay fence is now durable. Only this CAS winner may invoke the
     # model-backed planner, and it does so exactly once.
     try:
+        route_decision_id = started.route_decision_id
+        if route_decision_id is None:
+            raise PreparationReceiptError(
+                "PLANNER_STARTED receipt lacks exact route decision identity"
+            )
         planner = BoundedProductionWorkOrderPlanner(
             runtime,
             ProductionCapabilityStore(runtime),
@@ -205,7 +213,7 @@ def _resume_validated_routed_preparation_planner_once(
             boundary.dependencies.model,
         )
         planner_result = planner.propose(
-            started.route_decision_id,
+            route_decision_id,
             allowed_input_refs=boundary.allowed_input_refs,
         )
         returned = checkpoint_preparation_planner_returned(

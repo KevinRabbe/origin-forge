@@ -28,11 +28,17 @@ from .task_readiness import (
     resolve_task_dependency_readiness_connection,
 )
 
-
 _MAX_DETAIL_CHARS = 4096
 _SIMULATION_EXECUTION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 _PIXELORAMA_EXECUTION_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
+_PIXELORAMA_SOURCE_EXECUTION_OWNER_ID = "originforge.execution.pixelorama.source-create@1"
 _BLENDER_EXECUTION_OWNER_ID = "originforge.execution.blender.export-glb@1"
+_IMAGE_EXECUTION_OWNER_ID = "originforge.execution.image.generate@1"
+_PIPER_EXECUTION_OWNER_ID = "originforge.execution.audio.piper-tts@1"
+_FFMPEG_EXECUTION_OWNER_ID = "originforge.execution.audio.ffmpeg-process@1"
+_RUNTIME_EXECUTION_OWNER_ID = "originforge.execution.runtime.observe@1"
+_PLAYTEST_EXECUTION_OWNER_ID = "originforge.execution.playtest.cooperative@1"
+_BUILD_EXECUTION_OWNER_ID = "originforge.execution.build.integration@1"
 
 
 class ProductionDispatchExecutionError(RuntimeError):
@@ -360,6 +366,55 @@ def _transition_blender_task_running_connection(
     return new_revision, updated_hash
 
 
+def _transition_image_task_running_connection(
+    runtime: OriginForgeRuntime,
+    conn,
+    claim: DispatchClaim,
+    execution_id: str,
+    now: str,
+) -> tuple[int, str]:
+    """Bind image execution to the exact READY -> RUNNING Task revision."""
+    ensure_transition(TaskStatus.READY, TaskStatus.RUNNING, TASK_TRANSITIONS)
+    new_revision = claim.task_revision + 1
+    cursor = conn.execute(
+        """UPDATE tasks
+           SET status = ?, revision = ?, updated_at = ?
+           WHERE id = ? AND status = ? AND revision = ?""",
+        (
+            TaskStatus.RUNNING.value,
+            new_revision,
+            now,
+            claim.task_id,
+            TaskStatus.READY.value,
+            claim.task_revision,
+        ),
+    )
+    if cursor.rowcount != 1:
+        raise StaleRevision(f"task {claim.task_id} changed concurrently")
+    updated = conn.execute("SELECT * FROM tasks WHERE id = ?", (claim.task_id,)).fetchone()
+    if updated is None:
+        raise ProductionDispatchExecutionError(
+            "image Task disappeared during execution begin"
+        )
+    try:
+        updated_status = TaskStatus(updated["status"])
+        updated_revision = int(updated["revision"])
+        updated_hash = task_routing_hash(updated)
+    except (TypeError, ValueError) as exc:
+        raise ProductionDispatchExecutionError(
+            "image Task failed canonical validation after RUNNING transition"
+        ) from exc
+    if updated_status is not TaskStatus.RUNNING or updated_revision != new_revision:
+        raise ProductionDispatchExecutionError(
+            "image Task did not enter exact RUNNING revision"
+        )
+    if updated_hash == claim.task_content_hash:
+        raise ProductionDispatchExecutionError(
+            "image Task RUNNING transition did not change revision-bound content hash"
+        )
+    return new_revision, updated_hash
+
+
 def _claim_matches_execution(claim: DispatchClaim, execution: DispatchExecution) -> bool:
     return (
         claim.project_id == execution.project_id
@@ -521,7 +576,12 @@ def begin_dispatch_execution(
 
         task_transition: tuple[int, str] | None = None
         task_transition_reason: str | None = None
-        if dependencies.plan.owner_id == _SIMULATION_EXECUTION_OWNER_ID:
+        if dependencies.plan.owner_id == _BUILD_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime, conn, claim, execution_id, now
+            )
+            task_transition_reason = "BUILD_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _SIMULATION_EXECUTION_OWNER_ID:
             task_transition = _transition_simulation_task_running_connection(
                 runtime,
                 conn,
@@ -530,7 +590,10 @@ def begin_dispatch_execution(
                 now,
             )
             task_transition_reason = "SIMULATION_DISPATCH_EXECUTION_STARTED"
-        elif dependencies.plan.owner_id == _PIXELORAMA_EXECUTION_OWNER_ID:
+        elif dependencies.plan.owner_id in {
+            _PIXELORAMA_EXECUTION_OWNER_ID,
+            _PIXELORAMA_SOURCE_EXECUTION_OWNER_ID,
+        }:
             task_transition = _transition_pixelorama_task_running_connection(
                 runtime,
                 conn,
@@ -548,6 +611,35 @@ def begin_dispatch_execution(
                 now,
             )
             task_transition_reason = "BLENDER_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _IMAGE_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime,
+                conn,
+                claim,
+                execution_id,
+                now,
+            )
+            task_transition_reason = "IMAGE_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _PIPER_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime, conn, claim, execution_id, now
+            )
+            task_transition_reason = "PIPER_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _FFMPEG_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime, conn, claim, execution_id, now
+            )
+            task_transition_reason = "FFMPEG_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _RUNTIME_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime, conn, claim, execution_id, now
+            )
+            task_transition_reason = "RUNTIME_OBSERVATION_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _PLAYTEST_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime, conn, claim, execution_id, now
+            )
+            task_transition_reason = "PLAYTEST_DISPATCH_EXECUTION_STARTED"
 
         runtime.store._append_event(
             conn,

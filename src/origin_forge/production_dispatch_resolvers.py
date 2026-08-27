@@ -1,21 +1,31 @@
 from __future__ import annotations
 
 import json
-from typing import Protocol, Sequence
+from collections.abc import Sequence
+from typing import ClassVar, Protocol
 
 from .dream_evidence import canonical_verification_record
+from .production_design_specification_currentness import (
+    AcceptedDesignError,
+    inspect_accepted_design,
+)
 from .production_dispatch_resolution_models import (
     DispatchResolutionModelError,
     InputResolverDescriptor,
-    ResolvedInputCurrentness,
     ResolvedWorkOrderInput,
     ResolverClaim,
 )
 from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import production_read_connection
-from .production_work_order_models import WorkOrderInputRef, WorkOrderRefType, content_hash
+from .production_work_order_models import (
+    WorkOrderInputRef,
+    WorkOrderRefType,
+    content_hash,
+)
 from .project_intelligence_read import ProjectIntelligenceReadService
 from .runtime import OriginForgeRuntime
+from .state import WorkspaceStatus
+from .workspaces import GitWorkspaceManager
 
 
 class DispatchInputResolutionError(RuntimeError):
@@ -66,19 +76,20 @@ def _project_id(runtime: OriginForgeRuntime, conn) -> str:
 
 class ArtifactInputResolver:
     _CLAIM = ResolverClaim(WorkOrderRefType.ARTIFACT, "ART-", "ARTIFACT")
-    _PROJECTION = {
-        "fields": [
-            "id",
-            "change_id",
-            "type",
-            "path_or_uri",
-            "content_hash",
-            "parent_artifact_id",
-            "created_by_run_id",
-            "model_id",
-            "status",
-            "created_at",
-        ],
+    _FIELDS = (
+        "id",
+        "change_id",
+        "type",
+        "path_or_uri",
+        "content_hash",
+        "parent_artifact_id",
+        "created_by_run_id",
+        "model_id",
+        "status",
+        "created_at",
+    )
+    _PROJECTION: ClassVar[dict[str, object]] = {
+        "fields": _FIELDS,
         "artifact_bytes": False,
     }
     _DESCRIPTOR = InputResolverDescriptor(
@@ -114,7 +125,7 @@ class ArtifactInputResolver:
             raise DispatchInputResolutionError("Artifact content hash drifted")
         safe_projection = {
             key: projection[key]
-            for key in self._PROJECTION["fields"]
+            for key in self._FIELDS
         }
         return ResolvedWorkOrderInput.create(
             ref,
@@ -126,13 +137,62 @@ class ArtifactInputResolver:
         )
 
 
+class WorkspaceInputResolver:
+    """Resolve one exact audited Workspace for governed build execution."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.WORKSPACE, "WSPACE-", "WORKSPACE", "build_workspace"
+    )
+    _FIELDS = ("id", "task_id", "path", "base_commit", "status", "revision")
+    _PROJECTION = {"fields": _FIELDS, "required_status": WorkspaceStatus.AUDITED.value}
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.core.workspace@1",
+        _resolver_fingerprint(
+            "origin-forge-dispatch-workspace-resolver@1", _CLAIM, _PROJECTION
+        ),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(
+        self, runtime: OriginForgeRuntime, ref: WorkOrderInputRef
+    ) -> ResolvedWorkOrderInput:
+        _require_ref(ref, WorkOrderRefType.WORKSPACE, "WSPACE-")
+        if ref.revision is None:
+            raise DispatchInputResolutionError("Workspace refs must be revision-numbered")
+        try:
+            workspace = GitWorkspaceManager(runtime).get(ref.ref_id)
+        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
+            raise DispatchInputResolutionError(
+                "Workspace ref is not available in the current project"
+            ) from exc
+        projection = {key: workspace[key] for key in self._FIELDS}
+        if workspace["status"] != WorkspaceStatus.AUDITED.value:
+            raise DispatchInputResolutionError("build Workspace ref must be AUDITED")
+        if int(workspace["revision"]) != ref.revision:
+            raise DispatchInputResolutionError("Workspace revision drifted")
+        if content_hash(projection) != ref.content_hash:
+            raise DispatchInputResolutionError("Workspace content hash drifted")
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="WORKSPACE",
+            resolution_class="AUDITED_WORKSPACE",
+            projection=projection,
+        )
+
+
 class VerificationInputResolver:
     _CLAIM = ResolverClaim(
         WorkOrderRefType.VERIFICATION,
         "VERIFY-",
         "VERIFICATION",
     )
-    _PROJECTION = {
+    _PROJECTION: ClassVar[dict[str, object]] = {
         "fields": [
             "id",
             "target_type",
@@ -268,7 +328,7 @@ class ProjectEntityInputResolver:
         "ENTITY-",
         "PROJECT_ENTITY",
     )
-    _PROJECTION = {
+    _PROJECTION: ClassVar[dict[str, object]] = {
         "fields": [
             "id",
             "kind",
@@ -328,7 +388,7 @@ class DesignRuleInputResolver:
         "RULE-",
         "DESIGN_RULE",
     )
-    _PROJECTION = {
+    _PROJECTION: ClassVar[dict[str, object]] = {
         "fields": [
             "id",
             "category",
@@ -386,6 +446,91 @@ class DesignRuleInputResolver:
         )
 
 
+class AcceptedDesignInputResolver:
+    """Resolve one current, immutable accepted design for production planning."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,
+        "DESIGNACC-",
+        "ACCEPTED_DESIGN",
+        "accepted_design",
+    )
+    _PROJECTION = {
+        "fields": (
+            "acceptance_id",
+            "acceptance_hash",
+            "design_input_id",
+            "design_input_hash",
+            "design_specification_id",
+            "design_specification_hash",
+            "goal_id",
+            "goal_revision",
+            "goal_content_hash",
+        ),
+        "currentness": "inspect_accepted_design.current == true",
+        "artifact_bytes": False,
+    }
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.core.accepted-design@1",
+        _resolver_fingerprint(
+            "origin-forge-dispatch-accepted-design-resolver@1",
+            _CLAIM,
+            _PROJECTION,
+        ),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(
+        self,
+        runtime: OriginForgeRuntime,
+        ref: WorkOrderInputRef,
+    ) -> ResolvedWorkOrderInput:
+        _require_ref(
+            ref,
+            WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,
+            "DESIGNACC-",
+        )
+        if ref.revision is not None:
+            raise DispatchInputResolutionError(
+                "accepted design refs are immutable and must not carry a revision"
+            )
+        try:
+            inspection = inspect_accepted_design(runtime, ref.ref_id)
+        except (AcceptedDesignError, KeyError, RuntimeError, TypeError, ValueError) as exc:
+            raise DispatchInputResolutionError(
+                "accepted design ref is not available in the current project"
+            ) from exc
+        if not inspection.current:
+            raise DispatchInputResolutionError(
+                f"accepted design ref is stale: {inspection.stale_reason or 'unknown reason'}"
+            )
+        projection = {
+            "acceptance_id": inspection.acceptance.acceptance_id,
+            "acceptance_hash": inspection.acceptance.content_hash,
+            "design_input_id": inspection.design_input.design_input_id,
+            "design_input_hash": inspection.design_input.content_hash,
+            "design_specification_id": inspection.specification.design_specification_id,
+            "design_specification_hash": inspection.specification.content_hash,
+            "goal_id": inspection.design_input.goal_id,
+            "goal_revision": inspection.design_input.goal_revision,
+            "goal_content_hash": inspection.design_input.goal_content_hash,
+        }
+        if content_hash(projection) != ref.content_hash:
+            raise DispatchInputResolutionError("accepted design projection hash drifted")
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="ACCEPTED_DESIGN",
+            resolution_class="CURRENT_ACCEPTED_DESIGN",
+            projection=projection,
+        )
+
+
 class WorkOrderInputResolverRegistry:
     def __init__(self, resolvers: Sequence[WorkOrderInputResolver]):
         values = tuple(resolvers)
@@ -410,9 +555,12 @@ class WorkOrderInputResolverRegistry:
                         claim.ref_type is other.ref_type
                         and claim.source_id_prefix == other.source_id_prefix
                         and (
-                            claim.role is None
-                            or other.role is None
-                            or claim.role == other.role
+                            (claim.role is None and other.role is None)
+                            or (
+                                claim.role is not None
+                                and other.role is not None
+                                and claim.role == other.role
+                            )
                         )
                     ):
                         raise ValueError(
@@ -445,7 +593,7 @@ class WorkOrderInputResolverRegistry:
     def resolver_for(self, ref: WorkOrderInputRef) -> WorkOrderInputResolver:
         if not isinstance(ref, WorkOrderInputRef):
             raise TypeError("ref must be a WorkOrderInputRef")
-        matches: list[str] = []
+        matches: list[tuple[bool, str]] = []
         for descriptor in self._descriptors:
             if any(
                 claim.ref_type is ref.ref_type
@@ -453,14 +601,23 @@ class WorkOrderInputResolverRegistry:
                 and (claim.role is None or claim.role == ref.role)
                 for claim in descriptor.claims
             ):
-                matches.append(descriptor.resolver_id)
+                exact_role = any(
+                    claim.ref_type is ref.ref_type
+                    and ref.ref_id.startswith(claim.source_id_prefix)
+                    and claim.role is not None
+                    and claim.role == ref.role
+                    for claim in descriptor.claims
+                )
+                matches.append((exact_role, descriptor.resolver_id))
         if not matches:
             raise DispatchInputResolutionError(
                 f"no trusted input resolver for {ref.ref_type.value}:{ref.ref_id}:{ref.role}"
             )
-        if len(matches) != 1:
+        exact_matches = [value for exact, value in matches if exact]
+        selected = exact_matches if exact_matches else [value for _, value in matches]
+        if len(selected) != 1:
             raise DispatchInputResolutionError("input resolver selection is ambiguous")
-        return self._by_id[matches[0]]
+        return self._by_id[selected[0]]
 
     def resolve(
         self,

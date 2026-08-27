@@ -1,0 +1,409 @@
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+
+from .lineage import OriginForgeLineage
+from .path_policy import portable_relative_path
+from .pixelorama_bridge import PixeloramaBridgeProfile
+from .pixelorama_media import PixeloramaMediaResult, PixeloramaMediaService
+from .pixelorama_models import (
+    AnimationLoopMode,
+    AnimationSpec,
+    BridgeBudget,
+    BridgeOperation,
+    ExportSpec,
+    PixeloramaBridgeRequest,
+    SpriteProjectSpec,
+)
+from .production_design_specification_currentness import (
+    AcceptedDesignInspection,
+    AcceptedDesignError,
+    bridge_accepted_design_to_planning_input,
+    inspect_accepted_design,
+)
+from .production_evidence_read import ProductionEvidenceReadService
+from .records import create_artifact
+from .runtime import OriginForgeRuntime, RuntimeInvariantError
+
+
+class PixeloramaSourceImportError(RuntimeError):
+    pass
+
+
+def _bind_design_animation_intents(
+    sprite_spec: SpriteProjectSpec,
+    inspection: AcceptedDesignInspection,
+) -> SpriteProjectSpec:
+    """Bind accepted design animation semantics to explicit raster source state."""
+    specification = getattr(inspection, "specification", None)
+    deliverables = getattr(specification, "deliverables", ())
+    intents = tuple(
+        intent
+        for deliverable in deliverables
+        for intent in getattr(deliverable, "animation_intents", ())
+    )
+    if not intents:
+        return sprite_spec
+    if sprite_spec.animations:
+        raise AcceptedDesignError(
+            "animation intents must be the sole animation authority for accepted-design source creation"
+        )
+    animations = tuple(
+        AnimationSpec(
+            name=intent.name,
+            first_frame=intent.first_frame,
+            last_frame=intent.first_frame + intent.frame_count - 1,
+            loop_mode=AnimationLoopMode(intent.loop_mode),
+        )
+        for intent in intents
+    )
+    if any(animation.last_frame >= len(sprite_spec.frames) for animation in animations):
+        raise AcceptedDesignError("accepted design animation exceeds supplied raster frames")
+    return SpriteProjectSpec(
+        width=sprite_spec.width,
+        height=sprite_spec.height,
+        layers=sprite_spec.layers,
+        frames=sprite_spec.frames,
+        animations=animations,
+        palette=sprite_spec.palette,
+        transparency_required=sprite_spec.transparency_required,
+        output_basename=sprite_spec.output_basename,
+        schema_version=sprite_spec.schema_version,
+    )
+
+
+def build_pixelorama_source_work_order_payload_from_accepted_design(
+    runtime: OriginForgeRuntime,
+    acceptance_id: str,
+    sprite_spec: SpriteProjectSpec,
+    *,
+    export_specs: tuple[ExportSpec, ...] = (),
+    budget: BridgeBudget | None = None,
+) -> dict[str, object]:
+    """Build a canonical source WorkOrder payload from current design evidence."""
+    bridge_accepted_design_to_planning_input(runtime, acceptance_id)
+    inspection = inspect_accepted_design(runtime, acceptance_id)
+    if not inspection.current:
+        raise AcceptedDesignError(
+            f"accepted design is stale: {inspection.stale_reason or 'unknown reason'}"
+        )
+    if inspection.acceptance.project_id != runtime.project_id():
+        raise AcceptedDesignError("accepted design belongs to another project")
+    if not isinstance(sprite_spec, SpriteProjectSpec):
+        raise TypeError("sprite_spec must be a SpriteProjectSpec")
+    bound_spec = _bind_design_animation_intents(sprite_spec, inspection)
+    request = PixeloramaBridgeRequest.create(
+        operation=BridgeOperation.CREATE_SPRITE_PROJECT,
+        sprite_spec=bound_spec,
+        export_specs=export_specs,
+        budget=budget,
+    )
+    return {
+        "operation": request.operation.value,
+        "sprite_spec": request.sprite_spec.to_dict(),
+        "export_specs": [value.to_dict() for value in request.export_specs],
+        "budget": request.budget.to_dict(),
+    }
+
+
+def create_pixelorama_source(
+    runtime: OriginForgeRuntime,
+    task_id: str,
+    profile: PixeloramaBridgeProfile,
+    sprite_spec: SpriteProjectSpec,
+    *,
+    export_specs: tuple[ExportSpec, ...] = (),
+    budget: BridgeBudget | None = None,
+) -> PixeloramaMediaResult:
+    """Create a governed Pixelorama source through the bounded bridge service."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    if not isinstance(profile, PixeloramaBridgeProfile):
+        raise TypeError("profile must be a PixeloramaBridgeProfile")
+    if not isinstance(sprite_spec, SpriteProjectSpec):
+        raise TypeError("sprite_spec must be a SpriteProjectSpec")
+    request = PixeloramaBridgeRequest.create(
+        operation=BridgeOperation.CREATE_SPRITE_PROJECT,
+        sprite_spec=sprite_spec,
+        export_specs=export_specs,
+        budget=budget,
+    )
+    return PixeloramaMediaService(runtime, profile).execute(task_id, request)
+
+
+def create_pixelorama_source_from_accepted_design(
+    runtime: OriginForgeRuntime,
+    task_id: str,
+    acceptance_id: str,
+    profile: PixeloramaBridgeProfile,
+    sprite_spec: SpriteProjectSpec,
+    *,
+    export_specs: tuple[ExportSpec, ...] = (),
+    budget: BridgeBudget | None = None,
+) -> PixeloramaMediaResult:
+    """Create 2D source only from an exact, currently accepted design.
+
+    The caller still supplies the explicit raster contract.  Accepted design
+    evidence is a currentness and provenance precondition, not a source of
+    implicit dimensions, exports, or semantic acceptance.
+    """
+    planning_input = bridge_accepted_design_to_planning_input(runtime, acceptance_id)
+    inspection = inspect_accepted_design(runtime, acceptance_id)
+    if not inspection.current:
+        raise AcceptedDesignError(
+            f"accepted design is stale: {inspection.stale_reason or 'unknown reason'}"
+        )
+    if inspection.acceptance.project_id != runtime.project_id():
+        raise AcceptedDesignError("accepted design belongs to another project")
+    if not isinstance(sprite_spec, SpriteProjectSpec):
+        raise TypeError("sprite_spec must be a SpriteProjectSpec")
+    sprite_spec = _bind_design_animation_intents(sprite_spec, inspection)
+    request = PixeloramaBridgeRequest.create(
+        operation=BridgeOperation.CREATE_SPRITE_PROJECT,
+        sprite_spec=sprite_spec,
+        export_specs=export_specs,
+        budget=budget,
+    )
+    return PixeloramaMediaService(runtime, profile).execute(
+        task_id,
+        request,
+        accepted_design_lineage={
+            "acceptance_id": inspection.acceptance.acceptance_id,
+            "acceptance_hash": inspection.acceptance.content_hash,
+            "design_input_id": inspection.design_input.design_input_id,
+            "planning_input_id": planning_input.planning_input_id,
+            "planning_input_hash": planning_input.content_hash,
+        },
+    )
+
+
+@dataclass(frozen=True)
+class PixeloramaSourceImportResult:
+    artifact_id: str
+    relative_path: str
+    content_hash: str
+    byte_count: int
+    verification_id: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "artifact_id": self.artifact_id,
+            "relative_path": self.relative_path,
+            "content_hash": self.content_hash,
+            "byte_count": self.byte_count,
+            "verification_id": self.verification_id,
+        }
+
+
+@dataclass(frozen=True)
+class PixeloramaSourceInspection:
+    artifact: dict[str, object]
+    verification_ids: tuple[str, ...]
+    byte_count: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "artifact": self.artifact,
+            "verification_ids": list(self.verification_ids),
+            "byte_count": self.byte_count,
+            "read_only": True,
+        }
+
+
+def _read_source_file(
+    runtime: OriginForgeRuntime, source_path: str
+) -> tuple[Path, str, int, str]:
+    try:
+        relative = portable_relative_path(source_path)
+    except ValueError as exc:
+        raise PixeloramaSourceImportError(f"invalid Pixelorama source path: {exc}") from exc
+    if relative.suffix.casefold() != ".pxo":
+        raise PixeloramaSourceImportError("Pixelorama source must use the .pxo extension")
+    candidate = runtime.project_root / Path(relative.as_posix())
+    if candidate.is_symlink():
+        raise PixeloramaSourceImportError("Pixelorama source must be a regular non-symlink file")
+    path = candidate.resolve()
+    try:
+        path.relative_to(runtime.project_root)
+    except ValueError as exc:
+        raise PixeloramaSourceImportError("Pixelorama source escaped project root") from exc
+    if not path.is_file():
+        raise PixeloramaSourceImportError("Pixelorama source must be a regular non-symlink file")
+    byte_count = path.stat().st_size
+    if byte_count <= 0 or byte_count > 256 * 1024 * 1024:
+        raise PixeloramaSourceImportError("Pixelorama source byte count is outside bounds")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    return path, relative.as_posix(), byte_count, digest
+
+
+def import_pixelorama_source(
+    runtime: OriginForgeRuntime,
+    source_path: str,
+) -> PixeloramaSourceImportResult:
+    """Explicitly register an existing project-contained Pixelorama source."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    _, relative_path, byte_count, digest = _read_source_file(runtime, source_path)
+    lineage = OriginForgeLineage(runtime)
+    with runtime.store.session() as conn:
+        existing = conn.execute(
+            """SELECT id FROM artifacts
+               WHERE project_id = ? AND type = 'PIXELORAMA_PROJECT'
+                 AND path_or_uri = ? AND content_hash = ?
+               ORDER BY rowid DESC LIMIT 1""",
+            (runtime.project_id(), relative_path, digest),
+        ).fetchone()
+        if existing is not None:
+            verification = conn.execute(
+                """SELECT id FROM verifications
+                   WHERE target_type = 'ARTIFACT' AND target_id = ?
+                     AND verification_type = 'pixelorama-source-import-integrity'
+                     AND status = 'PASS'
+                   ORDER BY rowid DESC LIMIT 1""",
+                (existing["id"],),
+            ).fetchone()
+            if verification is not None:
+                return PixeloramaSourceImportResult(
+                    str(existing["id"]),
+                    relative_path,
+                    digest,
+                    byte_count,
+                    str(verification["id"]),
+                )
+    artifact_id = create_artifact(
+        runtime.store,
+        runtime.project_id(),
+        artifact_type="PIXELORAMA_PROJECT",
+        path_or_uri=relative_path,
+        status="PRODUCED",
+        content_hash=digest,
+    )
+    artifact = lineage.get_artifact(artifact_id)
+    content_hash = artifact.get("content_hash")
+    if not isinstance(content_hash, str) or content_hash != digest:
+        raise RuntimeInvariantError("imported Pixelorama source did not receive a content hash")
+    verification_id = lineage.record_artifact_verification(
+        artifact_id,
+        verification_type="pixelorama-source-import-integrity",
+        verifier="OriginForge.PixeloramaSourceImporter",
+        status="PASS",
+        evidence={
+            "source_path": relative_path,
+            "content_hash": content_hash,
+            "byte_count": byte_count,
+            "semantic_acceptance": False,
+        },
+    )
+    return PixeloramaSourceImportResult(
+        artifact_id, relative_path, content_hash, byte_count, verification_id
+    )
+
+
+def replace_pixelorama_source(
+    runtime: OriginForgeRuntime,
+    previous_artifact_id: str,
+    source_path: str,
+) -> PixeloramaSourceImportResult:
+    """Register a new immutable source revision linked to an exact predecessor."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    previous = inspect_pixelorama_source(runtime, previous_artifact_id).artifact
+    _, relative_path, byte_count, digest = _read_source_file(runtime, source_path)
+    lineage = OriginForgeLineage(runtime)
+    artifact_id = create_artifact(
+        runtime.store,
+        runtime.project_id(),
+        artifact_type="PIXELORAMA_PROJECT",
+        path_or_uri=relative_path,
+        parent_artifact_id=previous_artifact_id,
+        status="PRODUCED",
+        content_hash=digest,
+    )
+    content_hash = lineage.get_artifact(artifact_id).get("content_hash")
+    if content_hash != digest:
+        raise RuntimeInvariantError("replaced Pixelorama source did not receive a content hash")
+    verification_id = lineage.record_artifact_verification(
+        artifact_id,
+        verification_type="pixelorama-source-replacement-integrity",
+        verifier="OriginForge.PixeloramaSourceReplacer",
+        status="PASS",
+        evidence={
+            "source_path": relative_path,
+            "content_hash": content_hash,
+            "byte_count": byte_count,
+            "supersedes_artifact_id": previous["id"],
+            "semantic_acceptance": False,
+        },
+    )
+    return PixeloramaSourceImportResult(
+        artifact_id, relative_path, content_hash, byte_count, verification_id
+    )
+
+
+def inspect_pixelorama_source(
+    runtime: OriginForgeRuntime,
+    artifact_id: str,
+) -> PixeloramaSourceInspection:
+    """Inspect one imported Pixelorama source without changing durable state."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    lineage = OriginForgeLineage(runtime)
+    try:
+        artifact = lineage.get_artifact(artifact_id)
+    except KeyError as exc:
+        raise PixeloramaSourceImportError("Pixelorama source artifact does not exist") from exc
+    if artifact.get("type") != "PIXELORAMA_PROJECT":
+        raise PixeloramaSourceImportError(
+            "artifact is not a governed PIXELORAMA_PROJECT source"
+        )
+    location = artifact.get("path_or_uri")
+    if not isinstance(location, str) or "://" in location:
+        raise PixeloramaSourceImportError("Pixelorama source artifact is not a local file")
+    candidate = runtime.project_root / Path(location)
+    if candidate.is_symlink():
+        raise PixeloramaSourceImportError("Pixelorama source artifact may not be a symlink")
+    path = candidate.resolve()
+    try:
+        path.relative_to(runtime.project_root)
+    except ValueError as exc:
+        raise PixeloramaSourceImportError("Pixelorama source artifact escaped project root") from exc
+    if not path.is_file():
+        raise PixeloramaSourceImportError("Pixelorama source artifact file is missing")
+    actual_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    expected_hash = artifact.get("content_hash")
+    if expected_hash not in {actual_hash, "sha256:" + actual_hash}:
+        raise PixeloramaSourceImportError("Pixelorama source artifact integrity drifted")
+    verifications = ProductionEvidenceReadService(runtime).list_artifact_verifications()
+    verification_ids = tuple(
+        str(item["id"])
+        for item in verifications
+        if item.get("target_id") == artifact_id and item.get("status") == "PASS"
+    )
+    return PixeloramaSourceInspection(
+        artifact=artifact,
+        verification_ids=verification_ids,
+        byte_count=path.stat().st_size,
+    )
+
+
+def inspect_pixelorama_source_history(
+    runtime: OriginForgeRuntime,
+    artifact_id: str,
+) -> dict[str, object]:
+    """Return the immutable predecessor chain for one governed source."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    revisions: list[dict[str, object]] = []
+    visited: set[str] = set()
+    current_id: str | None = artifact_id
+    while current_id is not None:
+        if current_id in visited or len(revisions) >= 128:
+            raise PixeloramaSourceImportError("Pixelorama source revision chain is invalid")
+        visited.add(current_id)
+        inspection = inspect_pixelorama_source(runtime, current_id)
+        revisions.append(inspection.to_dict())
+        parent_id = inspection.artifact.get("parent_artifact_id")
+        current_id = parent_id if isinstance(parent_id, str) else None
+    return {"source_artifact_id": artifact_id, "revisions": revisions, "read_only": True}

@@ -1274,3 +1274,19 @@ Do not prioritize early:
 - fully autonomous one-prompt game creation
 
 Build the smallest reliable production loop first.
+
+## Phase 58 — Governed Image Generation Production Dispatch — IN PROGRESS
+
+Phase 58 promotes the existing local ComfyUI/image-generation substrate into
+the governed Manager dispatch lifecycle. The current implementation freezes an
+exact image request projection, resolves a protected workflow template,
+assembles a local-only execution owner, publishes per-output PNG evidence in
+schema v24, and recovers from durable output bindings without replaying
+ComfyUI. Image generation remains evidence-only; human acceptance, canonical
+adoption, signing, and release authority are unchanged.
+
+The remaining v1.0 blockers are intentionally separate: governed 2D source
+creation, design-to-production composition, audio, runtime observation,
+playtesting, and unified human refinement across all capability families.
+See `docs/phase-58-governed-image-generation-production-dispatch.md` for the
+frozen boundary and verification scope.

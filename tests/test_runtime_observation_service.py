@@ -6,11 +6,20 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from origin_forge.ids import IdKind, new_id
 from origin_forge.image_png import inspect_truecolor8_png
 from origin_forge.lineage import OriginForgeLineage
 from origin_forge.pixelorama_models import PixelPlane
 from origin_forge.pixelorama_png import encode_rgba8_png
-from origin_forge.runtime import OriginForgeRuntime
+from origin_forge.production_dispatch_invocation_runtime_owner import (
+    _require_runtime_binding_evidence,
+)
+from origin_forge.production_runtime_dispatch_output_binding_models import (
+    RUNTIME_EXECUTION_OWNER_ID,
+    RuntimeDispatchCapture,
+    RuntimeDispatchOutputBinding,
+)
+from origin_forge.runtime import OriginForgeRuntime, RuntimeInvariantError
 from origin_forge.runtime_observation_models import (
     RuntimeCaptureEvidence,
     RuntimeCaptureKind,
@@ -29,7 +38,6 @@ from origin_forge.runtime_observation_service import (
     RuntimeObservationServiceError,
 )
 from origin_forge.state import FlowStatus, RunStatus, TaskStatus
-
 
 EXECUTABLE_HASH = "sha256:" + "9" * 64
 
@@ -217,6 +225,68 @@ class RuntimeObservationServiceTests(unittest.TestCase):
         self.assertFalse(result.to_dict()["production_task_verified"])
         self.assertFalse(result.to_dict()["visual_semantics_verified"])
         self.assertFalse(result.to_dict()["performance_requirement_verified"])
+
+    def test_recovery_evidence_rejects_tampered_capture_before_terminalization(self) -> None:
+        request = self._request()
+        result = RuntimeObservationService(
+            self.runtime, _FakeObserver(self.runtime, self.baseline_png)
+        ).execute(
+            self.task,
+            request,
+            baseline_artifact_ids={"main-menu": self.baseline_artifact_id},
+        )
+        captures = []
+        for evidence in result.captures:
+            path = self.lineage.local_artifact_path(evidence.artifact_id)
+            data = path.read_bytes()
+            inspection = inspect_truecolor8_png(data)
+            relative_path = path.relative_to(
+                self.runtime.state_dir / "runtime-observations" / request.workspace_id
+            ).as_posix()
+            captures.append(
+                RuntimeDispatchCapture(
+                    capture_id=evidence.capture_id,
+                    artifact_id=evidence.artifact_id,
+                    integrity_verification_id=evidence.integrity_verification_id,
+                    visual_verification_id=evidence.visual_verification_id,
+                    relative_path=relative_path,
+                    content_hash=self.lineage.get_artifact(evidence.artifact_id)[
+                        "content_hash"
+                    ].removeprefix("sha256:"),
+                    pixel_hash=inspection.pixel_hash.removeprefix("sha256:"),
+                    byte_count=len(data),
+                    width=inspection.width,
+                    height=inspection.height,
+                )
+            )
+        binding = RuntimeDispatchOutputBinding(
+            execution_id=new_id(IdKind.DISPATCH_EXECUTION),
+            claim_id=new_id(IdKind.DISPATCH_CLAIM),
+            task_id=self.task,
+            task_revision=2,
+            task_content_hash="a" * 64,
+            work_order_id=new_id(IdKind.PRODUCTION_WORK_ORDER),
+            work_order_hash="b" * 64,
+            dispatch_binding_id=new_id(IdKind.DISPATCH_BINDING),
+            dispatch_binding_hash="c" * 64,
+            execution_owner_id=RUNTIME_EXECUTION_OWNER_ID,
+            run_id=result.run_id,
+            request_artifact_id=result.request_artifact_id,
+            result_artifact_id=result.result_artifact_id,
+            stdout_artifact_id=result.stdout_artifact_id,
+            stderr_artifact_id=result.stderr_artifact_id,
+            captures=tuple(captures),
+            backend_result_hash=result.backend_result_hash.removeprefix("sha256:"),
+            schema_version=1,
+            created_at="2026-08-27T00:00:00Z",
+        )
+        _require_runtime_binding_evidence(self.runtime, binding)
+        capture_path = self.lineage.local_artifact_path(captures[0].artifact_id)
+        capture_path.write_bytes(
+            encode_rgba8_png(PixelPlane(1, 1, bytes((0, 0, 255, 255))))
+        )
+        with self.assertRaises(RuntimeInvariantError):
+            _require_runtime_binding_evidence(self.runtime, binding)
 
     def test_visual_regression_is_fail_evidence_without_task_failure_authority(self) -> None:
         changed = encode_rgba8_png(PixelPlane(1, 1, bytes((0, 0, 255, 255))))

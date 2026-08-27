@@ -42,6 +42,12 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
 
     rows = (
         BuiltinBindingReview(
+            "originforge.build.integration",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 63 exposes build.integration@1 with an audited Workspace input and bounded sandbox verification; it never grants Task acceptance or release authority",
+        ),
+        BuiltinBindingReview(
             "originforge.code.bounded-retry",
             BuiltinBindingReviewStatus.BINDABLE,
             None,
@@ -61,9 +67,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.image.generate",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_TYPED_IMAGE_WORKFLOW_REF",
-            "governed image workflows use bounded workflow tokens rather than a typed infrastructure ref that 34C can resolve exactly",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 57 image integration reconstructs the exact local-only workflow projection and promotes ComfyUI through the governed claim/execution/output-binding chain",
         ),
         BuiltinBindingReview(
             "originforge.vision.inspect",
@@ -73,27 +79,33 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.audio.ffmpeg",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 62 resolves a role-specific protected PCM16 WAV source projection and promotes FFmpeg through the governed claim/execution/output-binding chain",
+        ),
+        BuiltinBindingReview(
+            "originforge.pixelorama.source",
             BuiltinBindingReviewStatus.DEFERRED,
-            "AUDIO_SOURCE_STRUCTURE_NOT_RESOLVED",
-            "Artifact plus AUDIO_PROFILE resolution is insufficient: AudioSourceRef also requires exact PCM hash, byte/frame counts, sample rate, and channels not present in the generic Artifact projection",
+            "NO_LEGACY_REGISTRY_FINGERPRINT_CHANGE",
+            "the source/animation binder is isolated until its complete execution and recovery vertical lands, preserving historical global binder-registry fingerprints",
         ),
         BuiltinBindingReview(
             "originforge.audio.piper",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "AUDIO_NATIVE_REQUEST_IDENTITY_INCOMPLETE",
-            "AUDIO_PROFILE is resolvable, but AudioOperationRequest still requires execution-owned operation/workspace identity and Phase-33 has no complete audio request payload contract",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 59 reconstructs the exact Piper speech projection, assembles configured local infrastructure, and persists v25 output evidence with no-replay recovery",
         ),
         BuiltinBindingReview(
             "originforge.runtime.observe",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_DIRECT_RUNTIME_OBSERVATION_REQUEST_READER",
-            "34C found runtime-observation request data operation/workspace-bound with no direct exact OBS reader",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 60 resolves the exact protected OBS request and persists evidence-only output bindings with no-replay recovery",
         ),
         BuiltinBindingReview(
             "originforge.playtest.cooperative",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "NO_DIRECT_PLAYTEST_SCENARIO_READER",
-            "34C found PLAYSCEN data inside playtest workspaces/artifacts with no direct exact PLAYSCEN reader",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 61 resolves the exact protected PLAYSCEN scenario and persists evidence-only output bindings with no-replay recovery",
         ),
         BuiltinBindingReview(
             "originforge.simulation.deterministic",
@@ -105,6 +117,11 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
 
     phase32 = build_builtin_capability_catalog()
     code_dispatch_catalog = build_builtin_dispatch_catalog(phase32)
+    build_phase32 = CapabilityCatalog.create(
+        (phase32.capability("build.integration"),),
+        (phase32.adapter("originforge.build.integration"),),
+    )
+    build_dispatch_catalog = build_builtin_dispatch_catalog(build_phase32)
     simulation_phase32 = CapabilityCatalog.create(
         (phase32.capability("simulation.run"),),
         (phase32.adapter("originforge.simulation.deterministic"),),
@@ -120,6 +137,31 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         (phase32.adapter("originforge.blender.model3d"),),
     )
     blender_dispatch_catalog = build_builtin_dispatch_catalog(blender_phase32)
+    image_phase32 = CapabilityCatalog.create(
+        (phase32.capability("image.generate"),),
+        (phase32.adapter("originforge.image.generate"),),
+    )
+    image_dispatch_catalog = build_builtin_dispatch_catalog(image_phase32)
+    ffmpeg_phase32 = CapabilityCatalog.create(
+        (phase32.capability("media.audio.process"),),
+        (phase32.adapter("originforge.audio.ffmpeg"),),
+    )
+    ffmpeg_dispatch_catalog = build_builtin_dispatch_catalog(ffmpeg_phase32)
+    piper_phase32 = CapabilityCatalog.create(
+        (phase32.capability("media.audio.tts"),),
+        (phase32.adapter("originforge.audio.piper"),),
+    )
+    piper_dispatch_catalog = build_builtin_dispatch_catalog(piper_phase32)
+    playtest_phase32 = CapabilityCatalog.create(
+        (phase32.capability("runtime.playtest"),),
+        (phase32.adapter("originforge.playtest.cooperative"),),
+    )
+    playtest_dispatch_catalog = build_builtin_dispatch_catalog(playtest_phase32)
+    runtime_phase32 = CapabilityCatalog.create(
+        (phase32.capability("runtime.observe"),),
+        (phase32.adapter("originforge.runtime.observe"),),
+    )
+    runtime_dispatch_catalog = build_builtin_dispatch_catalog(runtime_phase32)
     resolver_registry = build_dispatch_input_resolver_registry()
     binder_registry = build_builtin_dispatch_binder_registry()
 
@@ -134,9 +176,15 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
     }
     reviewed_contracts = (
         *code_dispatch_catalog.contracts,
+        *build_dispatch_catalog.contracts,
         *simulation_dispatch_catalog.contracts,
         *pixelorama_dispatch_catalog.contracts,
         *blender_dispatch_catalog.contracts,
+        *image_dispatch_catalog.contracts,
+        *ffmpeg_dispatch_catalog.contracts,
+        *piper_dispatch_catalog.contracts,
+        *runtime_dispatch_catalog.contracts,
+        *playtest_dispatch_catalog.contracts,
     )
     contract_by_adapter = {value.adapter_id: value for value in reviewed_contracts}
     if len(contract_by_adapter) != len(reviewed_contracts):

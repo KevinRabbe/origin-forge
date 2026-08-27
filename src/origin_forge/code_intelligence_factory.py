@@ -5,14 +5,16 @@ from .podman_lsp import PodmanLspBackend, PodmanLspServerSpec
 from .runtime import OriginForgeRuntime
 
 
-def podman_lsp_spec_from_config(config: LspServerConfig) -> PodmanLspServerSpec:
+def podman_lsp_spec_from_config(
+    config: LspServerConfig, *, podman_executable: str | None = None
+) -> PodmanLspServerSpec:
     if config.backend != "podman":
         raise ValueError(f"unsupported LSP backend: {config.backend}")
     return PodmanLspServerSpec(
         server_id=config.server_id,
         image=config.image,
         argv=config.argv,
-        podman_executable=config.podman_executable,
+        podman_executable=podman_executable or config.podman_executable,
         memory=config.memory,
         cpus=config.cpus,
         pids_limit=config.pids_limit,
@@ -37,5 +39,7 @@ def create_configured_lsp_backend(
     server = config.lsp_server(server_id)
     return PodmanLspBackend(
         runtime.state_dir,
-        podman_lsp_spec_from_config(server),
+        podman_lsp_spec_from_config(
+            server, podman_executable=config.external_tools.path("podman")
+        ),
     )

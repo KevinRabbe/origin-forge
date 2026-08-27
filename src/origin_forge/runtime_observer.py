@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import os
 import signal
@@ -22,8 +23,63 @@ from .runtime_observation_models import (
     canonical_bytes,
 )
 
-
 _MAX_CAPTURE_BYTES = 128 * 1024 * 1024
+
+
+class _WindowsProcessJob:
+    """Kill-on-close Windows Job Object for one observer process tree."""
+
+    _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
+    _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+
+    def __init__(self, process: subprocess.Popen[bytes]) -> None:
+        if os.name != "nt":
+            raise RuntimeObserverError("Windows process jobs are only available on Windows")
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel32.CreateJobObjectW(None, None)
+        if not handle:
+            raise RuntimeObserverError("failed to create runtime observation process job")
+        self._kernel32 = kernel32
+        self._handle = handle
+        try:
+            class _Basic(ctypes.Structure):
+                _fields_ = [
+                    ("per_process_user_time", ctypes.c_longlong),
+                    ("per_job_user_time", ctypes.c_longlong),
+                    ("limit_flags", ctypes.c_uint32),
+                    ("minimum_working_set", ctypes.c_size_t),
+                    ("maximum_working_set", ctypes.c_size_t),
+                    ("active_process_limit", ctypes.c_uint32),
+                    ("affinity", ctypes.c_size_t),
+                    ("priority", ctypes.c_uint32),
+                    ("scheduling_class", ctypes.c_uint32),
+                ]
+
+            class _IoCounters(ctypes.Structure):
+                _fields_ = [("values", ctypes.c_ulonglong * 6)]
+
+            class _Extended(ctypes.Structure):
+                _fields_ = [("basic", _Basic), ("io", _IoCounters), ("process_memory_limit", ctypes.c_size_t), ("job_memory_limit", ctypes.c_size_t), ("peak_process_memory", ctypes.c_size_t), ("peak_job_memory", ctypes.c_size_t)]
+
+            info = _Extended()
+            info.basic.limit_flags = self._JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            if not kernel32.SetInformationJobObject(
+                handle,
+                self._JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                ctypes.byref(info),
+                ctypes.sizeof(info),
+            ):
+                raise RuntimeObserverError("failed to configure runtime observation process job")
+            if not kernel32.AssignProcessToJobObject(handle, ctypes.c_void_p(int(process._handle))):
+                raise RuntimeObserverError("failed to assign runtime process to process job")
+        except Exception:
+            kernel32.CloseHandle(handle)
+            raise
+
+    def close(self) -> None:
+        if self._handle:
+            self._kernel32.CloseHandle(self._handle)
+            self._handle = None
 
 
 class RuntimeObserverError(RuntimeError):
@@ -89,6 +145,22 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
     cleanup must not stop merely because ``process.poll()`` is non-None.
     """
 
+    if os.name == "nt":
+        taskkill = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32" / "taskkill.exe"
+        argv = [str(taskkill) if taskkill.is_file() else "taskkill.exe", "/PID", str(process.pid), "/T", "/F"]
+        try:
+            subprocess.run(
+                argv,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                shell=False,
+                check=False,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        return
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -151,8 +223,6 @@ class LocalProcessRuntimeObserver:
         target_version: str,
         fixed_args: tuple[str, ...] = (),
     ):
-        if os.name != "posix":
-            raise RuntimeObserverError("local runtime observer v1 requires POSIX process groups")
         self.workspace_root = Path(workspace_root)
         self.executable = Path(executable)
         self.executable_hash = executable_hash
@@ -310,38 +380,68 @@ class LocalProcessRuntimeObserver:
         }
         argv = [str(self.executable), *self.fixed_args]
         started = time.monotonic()
-        process = subprocess.Popen(
-            argv,
-            cwd=workspace,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=False,
-            start_new_session=True,
-        )
-        assert process.stdout is not None
-        assert process.stderr is not None
+        stdout_file = None
+        stderr_file = None
+        process_job = None
+        if os.name == "nt":
+            stdout_file = (workspace / "logs" / "stdout.log").open("xb")
+            stderr_file = (workspace / "logs" / "stderr.log").open("xb")
+            process = subprocess.Popen(
+                argv,
+                cwd=workspace,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                shell=False,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+            process_job = _WindowsProcessJob(process)
+        else:
+            process = subprocess.Popen(
+                argv,
+                cwd=workspace,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                shell=False,
+                start_new_session=True,
+            )
+            assert process.stdout is not None
+            assert process.stderr is not None
         stdout = bytearray()
         stderr = bytearray()
         overflow = threading.Event()
-        stdout_thread = threading.Thread(
-            target=_drain_bounded,
-            args=(process.stdout, stdout, request.max_log_bytes, overflow),
-            daemon=True,
-        )
-        stderr_thread = threading.Thread(
-            target=_drain_bounded,
-            args=(process.stderr, stderr, request.max_log_bytes, overflow),
-            daemon=True,
-        )
-        stdout_thread.start()
-        stderr_thread.start()
+        stdout_thread = None
+        stderr_thread = None
+        if os.name != "nt":
+            stdout_thread = threading.Thread(
+                target=_drain_bounded,
+                args=(process.stdout, stdout, request.max_log_bytes, overflow),
+                daemon=True,
+            )
+            stderr_thread = threading.Thread(
+                target=_drain_bounded,
+                args=(process.stderr, stderr, request.max_log_bytes, overflow),
+                daemon=True,
+            )
+            stdout_thread.start()
+            stderr_thread.start()
         deadline = started + request.timeout_seconds
         peak_rss_kib = 0
         timed_out = False
         while process.poll() is None:
             peak_rss_kib = max(peak_rss_kib, _read_peak_rss_kib(process.pid))
+            if os.name == "nt" and (
+                stdout_file is not None
+                and stderr_file is not None
+                and (
+                    (workspace / "logs" / "stdout.log").stat().st_size > request.max_log_bytes
+                    or (workspace / "logs" / "stderr.log").stat().st_size > request.max_log_bytes
+                )
+            ):
+                overflow.set()
             if overflow.is_set():
                 _terminate_process_group(process)
                 break
@@ -356,14 +456,29 @@ class LocalProcessRuntimeObserver:
             _terminate_process_group(process)
             process.wait(timeout=2)
         _terminate_process_group(process)
-        stdout_thread.join(timeout=2)
-        stderr_thread.join(timeout=2)
+        if process_job is not None:
+            process_job.close()
+        if stdout_file is not None and stderr_file is not None:
+            stdout_file.close()
+            stderr_file.close()
+            stdout_bytes = (workspace / "logs" / "stdout.log").read_bytes()
+            stderr_bytes = (workspace / "logs" / "stderr.log").read_bytes()
+            if len(stdout_bytes) > request.max_log_bytes or len(stderr_bytes) > request.max_log_bytes:
+                overflow.set()
+            stdout = bytearray(stdout_bytes[: request.max_log_bytes])
+            stderr = bytearray(stderr_bytes[: request.max_log_bytes])
+        else:
+            assert stdout_thread is not None
+            assert stderr_thread is not None
+            stdout_thread.join(timeout=2)
+            stderr_thread.join(timeout=2)
         duration_ms = max(0, int((time.monotonic() - started) * 1000))
 
         stdout_bytes = bytes(stdout)
         stderr_bytes = bytes(stderr)
-        _write_new(workspace / "logs" / "stdout.log", stdout_bytes)
-        _write_new(workspace / "logs" / "stderr.log", stderr_bytes)
+        if stdout_file is None and stderr_file is None:
+            _write_new(workspace / "logs" / "stdout.log", stdout_bytes)
+            _write_new(workspace / "logs" / "stderr.log", stderr_bytes)
         stdout_evidence = RuntimeLogEvidence(
             relative_path="logs/stdout.log",
             content_hash=_hash_bytes(stdout_bytes),
@@ -410,8 +525,12 @@ class LocalProcessRuntimeObserver:
             exit_code = returncode
             if returncode == 0:
                 exit_kind = RuntimeExitKind.EXITED
-            elif returncode < 0:
+            elif returncode < 0 or (
+                os.name == "nt" and returncode in {signal.SIGINT, signal.SIGTERM, signal.SIGBREAK}
+            ):
                 exit_kind = RuntimeExitKind.SIGNALED
+                if os.name == "nt" and returncode > 0:
+                    exit_code = -returncode
             else:
                 exit_kind = RuntimeExitKind.FAILED
 

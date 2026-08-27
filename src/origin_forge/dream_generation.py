@@ -8,7 +8,6 @@ from .dream_evidence import verification_evidence_ref
 from .dream_models import (
     DreamCandidate,
     DreamInputManifest,
-    EvidenceClass,
     EvidenceRef,
     MemoryEntry,
     MemoryGeneration,

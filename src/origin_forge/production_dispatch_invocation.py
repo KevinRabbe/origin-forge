@@ -4,9 +4,13 @@ import json
 import re
 from dataclasses import dataclass
 
+from .audio_service import AudioOperationServiceResult
 from .ids import IdKind, validate_id
+from .image_vision_service import ImageGenerationServiceResult
 from .lineage import OriginForgeLineage
 from .orchestration_policy import PolicyResult
+from .pixelorama_media import PixeloramaMediaResult
+from .playtest_service import PlaytestServiceResult
 from .production_dispatch_binding import CodeBoundedRetryInputBinder
 from .production_dispatch_binding_models import BindingAuditStatus, DispatchBinding
 from .production_dispatch_binding_simulation import DeterministicSimulationInputBinder
@@ -44,8 +48,12 @@ from .production_work_order_models import content_hash
 from .runtime import OriginForgeRuntime
 from .runtime_observation_models import (
     canonical_bytes as simulation_canonical_bytes,
+)
+from .runtime_observation_models import (
     content_hash as simulation_content_hash,
 )
+from .runtime_observation_service import RuntimeObservationServiceResult
+from .sandbox_verification import WorkspaceVerificationResult
 from .simulation_models import (
     SimulationInvariant,
     SimulationModelError,
@@ -59,7 +67,6 @@ from .simulation_spec_template import (
     SimulationSpecTemplate,
 )
 from .state import RunStatus, TaskStatus
-
 
 _HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 _EXCEPTION_TYPE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,255}$")
@@ -284,6 +291,12 @@ class CompletedDispatchInvocation:
     policy_result: PolicyResult | None = None
     simulation_result: SimulationServiceResult | None = None
     pixelorama_result: PixeloramaCliExportServiceResult | None = None
+    pixelorama_source_result: PixeloramaMediaResult | None = None
+    image_result: ImageGenerationServiceResult | None = None
+    audio_result: AudioOperationServiceResult | None = None
+    runtime_result: RuntimeObservationServiceResult | None = None
+    playtest_result: PlaytestServiceResult | None = None
+    build_result: WorkspaceVerificationResult | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.execution, DispatchExecution):
@@ -295,7 +308,13 @@ class CompletedDispatchInvocation:
         has_policy = self.policy_result is not None
         has_simulation = self.simulation_result is not None
         has_pixelorama = self.pixelorama_result is not None
-        if sum((has_policy, has_simulation, has_pixelorama)) != 1:
+        has_pixelorama_source = self.pixelorama_source_result is not None
+        has_image = self.image_result is not None
+        has_audio = self.audio_result is not None
+        has_runtime = self.runtime_result is not None
+        has_playtest = self.playtest_result is not None
+        has_build = self.build_result is not None
+        if sum((has_policy, has_simulation, has_pixelorama, has_pixelorama_source, has_image, has_audio, has_runtime, has_playtest, has_build)) != 1:
             raise ProductionDispatchInvocationError(
                 "completed invocation requires exactly one reviewed owner result"
             )
@@ -326,9 +345,68 @@ class CompletedDispatchInvocation:
                 not isinstance(self.pixelorama_result, PixeloramaCliExportServiceResult)
                 or has_policy
                 or has_simulation
+                or has_image
             ):
                 raise ProductionDispatchInvocationError(
                     "Pixelorama execution requires exactly one PixeloramaCliExportServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.pixelorama.source-create@1":
+            if (
+                not isinstance(self.pixelorama_source_result, PixeloramaMediaResult)
+                or has_policy
+                or has_simulation
+                or has_pixelorama
+                or has_image
+            ):
+                raise ProductionDispatchInvocationError(
+                    "Pixelorama source execution requires exactly one PixeloramaMediaResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.image.generate@1":
+            if (
+                not isinstance(self.image_result, ImageGenerationServiceResult)
+                or has_policy
+                or has_simulation
+                or has_pixelorama
+            ):
+                raise ProductionDispatchInvocationError(
+                    "image execution requires exactly one ImageGenerationServiceResult"
+                )
+        elif self.execution.execution_owner_id in {
+            "originforge.execution.audio.piper-tts@1",
+            "originforge.execution.audio.ffmpeg-process@1",
+        }:
+            if (
+                not isinstance(self.audio_result, AudioOperationServiceResult)
+                or has_policy or has_simulation or has_pixelorama or has_image
+            ):
+                raise ProductionDispatchInvocationError(
+                    "audio execution requires exactly one AudioOperationServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.runtime.observe@1":
+            if (
+                not isinstance(self.runtime_result, RuntimeObservationServiceResult)
+                or has_policy or has_simulation or has_pixelorama or has_image or has_audio
+            ):
+                raise ProductionDispatchInvocationError(
+                    "runtime observation execution requires exactly one RuntimeObservationServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.playtest.cooperative@1":
+            if (
+                not isinstance(self.playtest_result, PlaytestServiceResult)
+                or has_policy or has_simulation or has_pixelorama or has_image or has_audio or has_runtime
+            ):
+                raise ProductionDispatchInvocationError(
+                    "playtest execution requires exactly one PlaytestServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.build.integration@1":
+            if (
+                not isinstance(self.build_result, WorkspaceVerificationResult)
+                or has_policy or has_simulation or has_pixelorama or has_image
+                or has_audio or has_runtime or has_playtest
+                or not self.build_result.passed
+            ):
+                raise ProductionDispatchInvocationError(
+                    "build execution requires one passed WorkspaceVerificationResult"
                 )
         else:
             raise ProductionDispatchInvocationError(

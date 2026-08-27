@@ -4,7 +4,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Callable, Iterable, TypeVar
+from typing import Callable, TypeVar
 from uuid import uuid4
 
 from .dream_models import (

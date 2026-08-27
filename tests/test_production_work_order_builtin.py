@@ -32,18 +32,17 @@ class BuiltinProductionWorkOrderTests(unittest.TestCase):
             "originforge.simulation.deterministic",
             "originforge.pixelorama.export",
             "originforge.blender.model3d",
+            "originforge.runtime.observe",
+            "originforge.playtest.cooperative",
+            "originforge.audio.ffmpeg",
         ):
             self.assertEqual(
                 rows[adapter_id].status,
                 BuiltinDispatchReviewStatus.SUPPORTED,
             )
         for adapter_id in (
-            "originforge.image.generate",
             "originforge.vision.inspect",
-            "originforge.audio.ffmpeg",
             "originforge.audio.piper",
-            "originforge.runtime.observe",
-            "originforge.playtest.cooperative",
         ):
             self.assertEqual(
                 rows[adapter_id].status,
@@ -147,15 +146,14 @@ class BuiltinProductionWorkOrderTests(unittest.TestCase):
             "src\\windows.py",
             "src//noncanonical.py",
         ):
-            with self.subTest(path=path):
-                with self.assertRaises(DispatchValidatorError):
-                    validator.validate(
-                        {
-                            "context_mode": "manual",
-                            "selected_paths": [path],
-                        },
-                        (),
-                    )
+            with self.subTest(path=path), self.assertRaises(DispatchValidatorError):
+                validator.validate(
+                    {
+                        "context_mode": "manual",
+                        "selected_paths": [path],
+                    },
+                    (),
+                )
 
     def test_code_validator_identity_is_deterministic(self) -> None:
         first = CodeBoundedRetryDispatchValidator()

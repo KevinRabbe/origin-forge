@@ -17,7 +17,6 @@ from .production_pixelorama_adoption_receipt import (
     PRODUCTION_ADOPTION_VERIFICATION_TYPE,
     PRODUCTION_ADOPTION_VERIFIER,
     PixeloramaProductionAdoptionReceipt,
-    PixeloramaProductionAdoptionReceiptError,
     PixeloramaProductionAdoptionStatus,
     read_pixelorama_production_adoption_receipt,
 )

@@ -41,7 +41,6 @@ from .production_preparation_status import (
 from .production_read_guard import ProductionReadGuardError, production_read_connection
 from .runtime import OriginForgeRuntime
 
-
 _MAX_MANAGER_ADVANCE_CANDIDATES = 1_024
 
 
@@ -563,14 +562,14 @@ def inspect_manager_advance_admission_readonly(
             if any(projection.current for _, projection in terminal):
                 terminal_retry_blockers.add(task_id)
 
-        for task_id, candidate in dispatch_by_task.items():
+        for task_id, dispatch_candidate in dispatch_by_task.items():
             if task_id in chosen:
                 raise ValueError("Task has conflicting dispatch and preparation action authority")
             chosen[task_id] = ManagerAdvanceCandidate(
                 ManagerAdvanceActionKind.DISPATCH,
                 task_id,
-                candidate.created_at,
-                dispatch_candidate=candidate,
+                dispatch_candidate.created_at,
+                dispatch_candidate=dispatch_candidate,
             )
     except (ProductionReadGuardError, TypeError, ValueError) as exc:
         return _empty(
@@ -592,8 +591,10 @@ def inspect_manager_advance_admission_readonly(
                 raise ValueError(
                     f"PREPPOL {policy.preparation_policy_id} admission is {policy_admission.status.value}: {policy_admission.detail}"
                 )
-            for candidate in policy_admission.candidates:
-                prepare_by_task[candidate.task_id].append((policy, candidate))
+            for preparation_candidate in policy_admission.candidates:
+                prepare_by_task[preparation_candidate.task_id].append(
+                    (policy, preparation_candidate)
+                )
     except (ProductionReadGuardError, KeyError, TypeError, ValueError) as exc:
         return _empty(
             ManagerAdvanceAdmissionStatus.INVALID_STATE,

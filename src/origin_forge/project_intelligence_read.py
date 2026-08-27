@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from .ids import IdKind, validate_id
 from .production_read_guard import (

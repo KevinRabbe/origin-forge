@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from .config import load_config
 from .ids import IdKind, validate_id
+from .model_runtime_config import ManagedModelRuntimeProviderConfig
 from .model_scheduler_factory import create_model_scheduling
 from .production_dispatch_binding import build_builtin_dispatch_binder_registry
 from .production_dispatch_binding_models import DispatchBindingCurrentnessStatus
@@ -372,7 +373,7 @@ def _reconstruct_dependency_plan(
 
     profile_ids: list[str] = []
     runtime_ids: set[str] = set()
-    provider_by_runtime: dict[str, object] = {}
+    provider_by_runtime: dict[str, ManagedModelRuntimeProviderConfig] = {}
     for policy in policies:
         for profile_id in policy.ordered_profile_ids:
             try:

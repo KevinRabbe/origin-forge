@@ -1,47 +1,89 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypedDict
 
+from .adapters.comfyui import ComfyUiProfile
+from .audio_profiles import AudioProfileStore, GovernedAudioProfile
 from .blender_adapter import BlenderRuntimeProfile
 from .config import ProjectConfig, load_config
+from .image_workflows import GovernedComfyWorkflowTemplate, ImageWorkflowStore
 from .managed_llamacpp_loader import ManagedLlamaCppCpuLoader
-from .model_runtime_registry import ModelRuntimeBinding, ModelRuntimeRegistry, RuntimeDispatchLoader
+from .model_runtime_config import ManagedModelRuntimeProviderConfig
+from .model_runtime_registry import (
+    ModelRuntimeBinding,
+    ModelRuntimeRegistry,
+    RuntimeDispatchLoader,
+)
 from .model_scheduler import ModelRole, ModelSelectionPolicy
 from .model_scheduler_factory import ConfiguredModelScheduling, create_model_scheduling
 from .orchestration_policy import BoundedRetryPolicy
+from .pixelorama_bridge import PixeloramaBridgeProfile
 from .pixelorama_cli_export import PixeloramaCliProfile
 from .production_blender_profile import (
     ProductionBlenderProfileError,
     blender_runtime_profile_dependency_hash,
     load_infrastructure_blender_runtime_profile,
 )
-from .production_pixelorama_profile import (
-    ProductionPixeloramaProfileError,
-    load_infrastructure_pixelorama_cli_profile,
-    pixelorama_cli_profile_dependency_hash,
-)
 from .production_dispatch_claim_read import (
     DispatchClaimCurrentnessStatus,
     inspect_dispatch_claim_currentness_readonly,
     read_dispatch_claim,
 )
+from .production_dispatch_invocation_ffmpeg import FfmpegInvocationRequest
+from .production_dispatch_invocation_image import ImageGenerationInvocationRequest
+from .production_dispatch_invocation_piper import PiperInvocationRequest
 from .production_dispatch_read import read_dispatch_binding
 from .production_execution_owner import (
     ProductionExecutionOwnerDescriptor,
+    ProductionExecutionOwnerRegistry,
     build_builtin_execution_owner_registry,
+)
+from .production_execution_owner_audio import FFMPEG_EXECUTION_OWNER_ID
+from .production_execution_owner_image import IMAGE_EXECUTION_OWNER_ID
+from .production_ffmpeg_profile import (
+    FfmpegInfrastructure,
+    load_infrastructure_ffmpeg_profile,
+)
+from .production_piper_profile import (
+    PiperInfrastructure,
+    load_infrastructure_piper_profile,
+)
+from .production_pixelorama_profile import (
+    ProductionPixeloramaProfileError,
+    load_infrastructure_pixelorama_bridge_profile,
+    load_infrastructure_pixelorama_cli_profile,
+    pixelorama_bridge_profile_dependency_hash,
+    pixelorama_cli_profile_dependency_hash,
+)
+from .production_playtest_profile import (
+    CooperativePlaytestInfrastructure,
+    load_cooperative_playtest_infrastructure,
+)
+from .production_playtest_scenario_store import PlaytestScenarioStore
+from .production_runtime_observation_store import RuntimeObservationRequestStore
+from .production_runtime_profile import (
+    RuntimeObservationInfrastructure,
+    load_runtime_observation_infrastructure,
 )
 from .production_work_order_models import content_hash
 from .runtime import OriginForgeRuntime
+from .runtime_observation_models import RuntimeObservationRequest
 from .sandbox import SandboxBackend
 from .sandbox_factory import create_sandbox_backend
 from .scheduled_model_adapter import RuntimeModelScheduleRecorder, ScheduledModelAdapter
 from .workspaces import GitWorkspaceManager
 
-
 _BOUNDED_RETRY_OWNER_ID = "originforge.execution.bounded-retry@1"
+_BUILD_OWNER_ID = "originforge.execution.build.integration@1"
 _SIMULATION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 _PIXELORAMA_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
+_PIXELORAMA_SOURCE_OWNER_ID = "originforge.execution.pixelorama.source-create@1"
 _BLENDER_OWNER_ID = "originforge.execution.blender.export-glb@1"
+_PIPER_OWNER_ID = "originforge.execution.audio.piper-tts@1"
+_FFMPEG_OWNER_ID = FFMPEG_EXECUTION_OWNER_ID
+_RUNTIME_OBSERVER_OWNER_ID = "originforge.execution.runtime.observe@1"
+_PLAYTEST_OWNER_ID = "originforge.execution.playtest.cooperative@1"
 _NOT_REQUIRED_RESOURCE_MODEL_HASH = content_hash(
     {"kind": "NO_MODEL_RESOURCE_CONFIG", "version": 1}
 )
@@ -122,6 +164,22 @@ class ProductionExecutionDependencyPlan:
         return content_hash(self.to_dict())
 
 
+class _CommonPlanFields(TypedDict):
+    claim_id: str
+    claim_revision: int
+    task_id: str
+    task_revision: int
+    task_content_hash: str
+    dispatch_binding_id: str
+    dispatch_binding_hash: str
+    request_type_id: str
+    request_schema_hash: str
+    request_content_hash: str
+    owner_id: str
+    owner_fingerprint: str
+    owner_registry_fingerprint: str
+
+
 @dataclass(frozen=True)
 class BoundedRetryExecutionPayload:
     model_scheduling: ConfiguredModelScheduling
@@ -132,6 +190,12 @@ class BoundedRetryExecutionPayload:
     sandbox_backend: SandboxBackend
     workspaces: GitWorkspaceManager
     bounded_retry_policy: BoundedRetryPolicy
+
+
+@dataclass(frozen=True)
+class BuildIntegrationExecutionPayload:
+    sandbox_backend: SandboxBackend
+    workspaces: GitWorkspaceManager
 
 
 @dataclass(frozen=True)
@@ -161,6 +225,21 @@ class PixeloramaSpritesheetExportExecutionPayload:
 
 
 @dataclass(frozen=True)
+class PixeloramaSourceCreationExecutionPayload:
+    profile: PixeloramaBridgeProfile
+    profile_dependency_hash: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.profile, PixeloramaBridgeProfile):
+            raise TypeError("profile must be a PixeloramaBridgeProfile")
+        expected = pixelorama_bridge_profile_dependency_hash(self.profile)
+        if self.profile_dependency_hash != expected:
+            raise ProductionExecutionAssemblyError(
+                "Pixelorama source profile dependency hash is not current"
+            )
+
+
+@dataclass(frozen=True)
 class BlenderExportGLBExecutionPayload:
     profile: BlenderRuntimeProfile
     profile_dependency_hash: str
@@ -175,11 +254,129 @@ class BlenderExportGLBExecutionPayload:
             )
 
 
+@dataclass(frozen=True)
+class ImageGenerationExecutionPayload:
+    request: ImageGenerationInvocationRequest
+    profile: ComfyUiProfile
+    template: GovernedComfyWorkflowTemplate
+    profile_dependency_hash: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, ImageGenerationInvocationRequest):
+            raise TypeError("request must be an ImageGenerationInvocationRequest")
+        if not isinstance(self.profile, ComfyUiProfile):
+            raise TypeError("profile must be a ComfyUiProfile")
+        if not isinstance(self.template, GovernedComfyWorkflowTemplate):
+            raise TypeError("template must be a governed image workflow template")
+        expected = content_hash(
+            {
+                "base_url": self.profile.base_url,
+                "expected_version": self.profile.expected_version,
+                "allow_remote": self.profile.allow_remote,
+                "request_timeout_seconds": self.profile.request_timeout_seconds,
+                "poll_interval_seconds": self.profile.poll_interval_seconds,
+                "max_json_bytes": self.profile.max_json_bytes,
+                "max_image_bytes": self.profile.max_image_bytes,
+                "workflow_id": self.template.workflow_id,
+                "workflow_hash": self.template.workflow_hash,
+            }
+        )
+        if self.profile_dependency_hash != expected:
+            raise ProductionExecutionAssemblyError(
+                "ComfyUI profile/workflow dependency hash is not current"
+            )
+        if (
+            self.template.workflow_id != self.request.workflow_id
+            or self.template.workflow_hash != self.request.workflow_hash
+            or self.template.model_id != self.request.model_id
+            or self.template.model_hash != self.request.model_hash
+            or self.template.backend_version != self.request.backend_version
+        ):
+            raise ProductionExecutionAssemblyError(
+                "trusted image workflow does not match the frozen invocation"
+            )
+
+
+@dataclass(frozen=True)
+class PiperExecutionPayload:
+    request: PiperInvocationRequest
+    profile: GovernedAudioProfile
+    infrastructure: PiperInfrastructure
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, PiperInvocationRequest):
+            raise TypeError("request must be a PiperInvocationRequest")
+        if not isinstance(self.profile, GovernedAudioProfile):
+            raise TypeError("profile must be a GovernedAudioProfile")
+        if not isinstance(self.infrastructure, PiperInfrastructure):
+            raise TypeError("infrastructure must be PiperInfrastructure")
+        if self.profile.profile_id != self.request.profile_id or self.profile.profile_hash != "sha256:" + self.request.profile_hash:
+            raise ProductionExecutionAssemblyError("Piper profile does not match frozen request")
+
+
+@dataclass(frozen=True)
+class FfmpegExecutionPayload:
+    request: FfmpegInvocationRequest
+    profile: GovernedAudioProfile
+    infrastructure: FfmpegInfrastructure
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, FfmpegInvocationRequest):
+            raise TypeError("request must be a FfmpegInvocationRequest")
+        if not isinstance(self.profile, GovernedAudioProfile):
+            raise TypeError("profile must be a GovernedAudioProfile")
+        if not isinstance(self.infrastructure, FfmpegInfrastructure):
+            raise TypeError("infrastructure must be FfmpegInfrastructure")
+        if self.profile.profile_id != self.request.profile_id or self.profile.profile_hash != "sha256:" + self.request.profile_hash:
+            raise ProductionExecutionAssemblyError("FFmpeg profile does not match frozen request")
+
+
+@dataclass(frozen=True)
+class RuntimeObservationExecutionPayload:
+    request: RuntimeObservationRequest
+    infrastructure: RuntimeObservationInfrastructure
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, RuntimeObservationRequest):
+            raise TypeError("request must be a RuntimeObservationRequest")
+        if not isinstance(self.infrastructure, RuntimeObservationInfrastructure):
+            raise TypeError("infrastructure must be RuntimeObservationInfrastructure")
+        if self.request.executable_hash != self.infrastructure.executable_hash:
+            raise ProductionExecutionAssemblyError(
+                "runtime executable does not match frozen observation request"
+            )
+
+
+@dataclass(frozen=True)
+class CooperativePlaytestExecutionPayload:
+    scenario: object
+    infrastructure: CooperativePlaytestInfrastructure
+
+    def __post_init__(self) -> None:
+        from .playtest_models import PlaytestScenario
+
+        if not isinstance(self.scenario, PlaytestScenario):
+            raise TypeError("scenario must be a PlaytestScenario")
+        if not isinstance(self.infrastructure, CooperativePlaytestInfrastructure):
+            raise TypeError("infrastructure must be CooperativePlaytestInfrastructure")
+        if self.scenario.harness_hash != self.infrastructure.executable_hash:
+            raise ProductionExecutionAssemblyError(
+                "playtest harness does not match frozen scenario"
+            )
+
+
 ExecutionDependencyPayload = (
     BoundedRetryExecutionPayload
+    | BuildIntegrationExecutionPayload
     | DeterministicSimulationExecutionPayload
     | PixeloramaSpritesheetExportExecutionPayload
+    | PixeloramaSourceCreationExecutionPayload
     | BlenderExportGLBExecutionPayload
+    | ImageGenerationExecutionPayload
+    | PiperExecutionPayload
+    | FfmpegExecutionPayload
+    | RuntimeObservationExecutionPayload
+    | CooperativePlaytestExecutionPayload
 )
 
 
@@ -207,6 +404,11 @@ class ProductionExecutionDependencies:
                 raise ProductionExecutionAssemblyError(
                     "bounded-retry owner requires bounded execution payload"
                 )
+        elif self.owner.owner_id == _BUILD_OWNER_ID:
+            if not isinstance(self.payload, BuildIntegrationExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "build owner requires sandbox/workspace execution payload"
+                )
         elif self.owner.owner_id == _SIMULATION_OWNER_ID:
             if not isinstance(self.payload, DeterministicSimulationExecutionPayload):
                 raise ProductionExecutionAssemblyError(
@@ -217,10 +419,40 @@ class ProductionExecutionDependencies:
                 raise ProductionExecutionAssemblyError(
                     "Pixelorama owner requires trusted CLI profile payload"
                 )
+        elif self.owner.owner_id == _PIXELORAMA_SOURCE_OWNER_ID:
+            if not isinstance(self.payload, PixeloramaSourceCreationExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "Pixelorama source owner requires trusted bridge profile payload"
+                )
         elif self.owner.owner_id == _BLENDER_OWNER_ID:
             if not isinstance(self.payload, BlenderExportGLBExecutionPayload):
                 raise ProductionExecutionAssemblyError(
                     "Blender owner requires trusted runtime profile payload"
+                )
+        elif self.owner.owner_id == IMAGE_EXECUTION_OWNER_ID:
+            if not isinstance(self.payload, ImageGenerationExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "image owner requires trusted ComfyUI workflow/profile payload"
+                )
+        elif self.owner.owner_id == _PIPER_OWNER_ID:
+            if not isinstance(self.payload, PiperExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "Piper owner requires trusted profile/infrastructure payload"
+                )
+        elif self.owner.owner_id == _FFMPEG_OWNER_ID:
+            if not isinstance(self.payload, FfmpegExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "FFmpeg owner requires trusted profile/infrastructure payload"
+                )
+        elif self.owner.owner_id == _RUNTIME_OBSERVER_OWNER_ID:
+            if not isinstance(self.payload, RuntimeObservationExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "runtime observer owner requires trusted request/infrastructure payload"
+                )
+        elif self.owner.owner_id == _PLAYTEST_OWNER_ID:
+            if not isinstance(self.payload, CooperativePlaytestExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "playtest owner requires trusted scenario/infrastructure payload"
                 )
         else:
             raise ProductionExecutionAssemblyError(
@@ -349,7 +581,12 @@ def _role_policies(
     return tuple(result)
 
 
-def _common_plan_fields(claim, binding, owner, owner_registry) -> dict[str, object]:
+def _common_plan_fields(
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry: ProductionExecutionOwnerRegistry,
+) -> _CommonPlanFields:
     return {
         "claim_id": claim.claim_id,
         "claim_revision": claim.revision,
@@ -406,6 +643,7 @@ def _assemble_simulation_dependencies(
 
 
 def _assemble_pixelorama_dependencies(
+    runtime: OriginForgeRuntime,
     claim,
     binding,
     owner: ProductionExecutionOwnerDescriptor,
@@ -424,7 +662,7 @@ def _assemble_pixelorama_dependencies(
             "Pixelorama export owner must not require coding sandbox or Git workspace authority"
         )
     try:
-        profile = load_infrastructure_pixelorama_cli_profile()
+        profile = load_infrastructure_pixelorama_cli_profile(runtime.project_root)
     except ProductionPixeloramaProfileError as exc:
         raise ProductionExecutionAssemblyError(
             "trusted Pixelorama CLI profile is unavailable"
@@ -454,6 +692,7 @@ def _assemble_pixelorama_dependencies(
 
 
 def _assemble_blender_dependencies(
+    runtime: OriginForgeRuntime,
     claim,
     binding,
     owner: ProductionExecutionOwnerDescriptor,
@@ -472,7 +711,7 @@ def _assemble_blender_dependencies(
             "Blender export owner must not require coding sandbox or Git workspace authority"
         )
     try:
-        profile = load_infrastructure_blender_runtime_profile()
+        profile = load_infrastructure_blender_runtime_profile(runtime.project_root)
     except ProductionBlenderProfileError as exc:
         raise ProductionExecutionAssemblyError(
             "trusted Blender runtime profile is unavailable"
@@ -497,6 +736,339 @@ def _assemble_blender_dependencies(
         payload=BlenderExportGLBExecutionPayload(
             profile=profile,
             profile_dependency_hash=profile_hash,
+        ),
+    )
+
+
+def _assemble_image_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != IMAGE_EXECUTION_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "image dependency assembler received an unexpected owner"
+        )
+    if owner.model_strategy_roles or owner.requires_sandbox or owner.requires_workspace_manager:
+        raise ProductionExecutionAssemblyError(
+            "image generation owner must not require coding model or workspace authority"
+        )
+    try:
+        request = ImageGenerationInvocationRequest.from_projection(
+            binding.request_projection,
+            binding.request_content_hash,
+        )
+        template = ImageWorkflowStore(runtime).get(
+            request.workflow_id,
+            request.workflow_hash,
+        )
+        profile = ComfyUiProfile(expected_version=template.backend_version)
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted ComfyUI workflow/profile dependencies are unavailable"
+        ) from exc
+    dependency_hash = content_hash(
+        {
+            "base_url": profile.base_url,
+            "expected_version": profile.expected_version,
+            "allow_remote": profile.allow_remote,
+            "request_timeout_seconds": profile.request_timeout_seconds,
+            "poll_interval_seconds": profile.poll_interval_seconds,
+            "max_json_bytes": profile.max_json_bytes,
+            "max_image_bytes": profile.max_image_bytes,
+            "workflow_id": template.workflow_id,
+            "workflow_hash": template.workflow_hash,
+        }
+    )
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=dependency_hash,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=ImageGenerationExecutionPayload(
+            request=request,
+            profile=profile,
+            template=template,
+            profile_dependency_hash=dependency_hash,
+        ),
+    )
+
+
+def _assemble_pixelorama_source_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _PIXELORAMA_SOURCE_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "Pixelorama source dependency assembler received an unexpected owner"
+        )
+    if owner.model_strategy_roles or owner.requires_sandbox or owner.requires_workspace_manager:
+        raise ProductionExecutionAssemblyError(
+            "Pixelorama source owner must not require model, sandbox, or Git workspace authority"
+        )
+    try:
+        profile = load_infrastructure_pixelorama_bridge_profile(runtime.project_root)
+    except ProductionPixeloramaProfileError as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted Pixelorama CLI profile is unavailable"
+        ) from exc
+    profile_hash = pixelorama_bridge_profile_dependency_hash(profile)
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=profile_hash,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=PixeloramaSourceCreationExecutionPayload(
+            profile=profile,
+            profile_dependency_hash=profile_hash,
+        ),
+    )
+
+
+def _assemble_piper_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _PIPER_OWNER_ID:
+        raise ProductionExecutionAssemblyError("Piper dependency assembler received an unexpected owner")
+    if owner.model_strategy_roles or owner.requires_sandbox or owner.requires_workspace_manager:
+        raise ProductionExecutionAssemblyError("Piper owner must not require coding or workspace authority")
+    try:
+        request = PiperInvocationRequest.from_projection(
+            binding.request_projection,
+            binding.request_content_hash,
+        )
+        profile = AudioProfileStore(runtime).get(
+            request.profile_id, "sha256:" + request.profile_hash
+        )
+        infrastructure = load_infrastructure_piper_profile()
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted Piper profile/infrastructure dependencies are unavailable"
+        ) from exc
+    dependency_hash = content_hash({
+        "profile_hash": profile.profile_hash,
+        "infrastructure_hash": infrastructure.dependency_hash,
+    })
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(), model_profile_ids=(), runtime_ids=(),
+        runtime_provider_fingerprints=(), sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=dependency_hash,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=PiperExecutionPayload(request, profile, infrastructure),
+    )
+
+
+def _assemble_ffmpeg_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _FFMPEG_OWNER_ID:
+        raise ProductionExecutionAssemblyError("FFmpeg dependency assembler received an unexpected owner")
+    try:
+        request = FfmpegInvocationRequest.from_projection(
+            binding.request_projection, binding.request_content_hash
+        )
+        profile = AudioProfileStore(runtime).get(
+            request.profile_id, "sha256:" + request.profile_hash
+        )
+        infrastructure = load_infrastructure_ffmpeg_profile(runtime, profile.runtime_hash)
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted FFmpeg profile/infrastructure dependencies are unavailable"
+        ) from exc
+    dependency_hash = content_hash({
+        "profile_hash": profile.profile_hash,
+        "infrastructure_hash": infrastructure.dependency_hash,
+    })
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(), model_profile_ids=(), runtime_ids=(),
+        runtime_provider_fingerprints=(), sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=dependency_hash,
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=FfmpegExecutionPayload(request, profile, infrastructure),
+    )
+
+
+def _assemble_runtime_observation_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _RUNTIME_OBSERVER_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "runtime observer assembler received an unexpected owner"
+        )
+    try:
+        projection = binding.request_projection
+        request = RuntimeObservationRequestStore(runtime).get(
+            projection["request_id"], "sha256:" + projection["request_hash"]
+        )
+        infrastructure = load_runtime_observation_infrastructure()
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted runtime observation request/infrastructure is unavailable"
+        ) from exc
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=content_hash(
+            {
+                "request_hash": request.content_hash,
+                "infrastructure_hash": infrastructure.dependency_hash,
+            }
+        ),
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=RuntimeObservationExecutionPayload(request, infrastructure),
+    )
+
+
+def _assemble_playtest_dependencies(
+    runtime: OriginForgeRuntime, claim, binding, owner, owner_registry
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _PLAYTEST_OWNER_ID:
+        raise ProductionExecutionAssemblyError("playtest assembler received an unexpected owner")
+    try:
+        projection = binding.request_projection
+        scenario = PlaytestScenarioStore(runtime).get(
+            projection["scenario_id"], "sha256:" + projection["scenario_hash"]
+        )
+        infrastructure = load_cooperative_playtest_infrastructure()
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "trusted playtest scenario/harness infrastructure is unavailable"
+        ) from exc
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=0,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(), model_profile_ids=(), runtime_ids=(),
+        runtime_provider_fingerprints=(), sandbox_backend=_NOT_REQUIRED_SANDBOX_BACKEND,
+        sandbox_config_hash=_NOT_REQUIRED_SANDBOX_HASH,
+        owner_dependency_hash=content_hash({"scenario_hash": scenario.content_hash, "infrastructure_hash": infrastructure.dependency_hash}),
+    )
+    return ProductionExecutionDependencies(plan, owner, CooperativePlaytestExecutionPayload(scenario, infrastructure))
+
+
+def _assemble_build_dependencies(
+    runtime: OriginForgeRuntime,
+    claim,
+    binding,
+    owner: ProductionExecutionOwnerDescriptor,
+    owner_registry,
+) -> ProductionExecutionDependencies:
+    if owner.owner_id != _BUILD_OWNER_ID:
+        raise ProductionExecutionAssemblyError(
+            "build dependency assembler received an unexpected owner"
+        )
+    config = load_config(runtime.project_root)
+    if config.version < 2:
+        raise ProductionExecutionAssemblyError(
+            "build integration requires protected config version 2"
+        )
+    _require_executable_sandbox(config)
+    if not any(command.required for command in config.approved_build_commands):
+        raise ProductionExecutionAssemblyError(
+            "build integration requires at least one approved build command"
+        )
+    try:
+        backend = create_sandbox_backend(runtime, config)
+    except Exception as exc:
+        raise ProductionExecutionAssemblyError(
+            "configured build sandbox backend is unavailable"
+        ) from exc
+    command_projection = [
+        {
+            "name": command.name,
+            "argv": list(command.argv),
+            "timeout_seconds": command.timeout_seconds,
+            "max_output_bytes": command.max_output_bytes,
+            "required": command.required,
+        }
+        for command in config.approved_build_commands
+    ]
+    plan = ProductionExecutionDependencyPlan(
+        **_common_plan_fields(claim, binding, owner, owner_registry),
+        config_version=config.version,
+        resource_model_config_hash=_NOT_REQUIRED_RESOURCE_MODEL_HASH,
+        model_runtime_config_fingerprint=_NOT_REQUIRED_MODEL_RUNTIME_HASH,
+        model_strategy_roles=(),
+        model_profile_ids=(),
+        runtime_ids=(),
+        runtime_provider_fingerprints=(),
+        sandbox_backend=config.sandbox_backend.lower(),
+        sandbox_config_hash=_sandbox_config_hash(config),
+        owner_dependency_hash=content_hash({"build_commands": command_projection}),
+    )
+    return ProductionExecutionDependencies(
+        plan=plan,
+        owner=owner,
+        payload=BuildIntegrationExecutionPayload(
+            sandbox_backend=backend,
+            workspaces=GitWorkspaceManager(runtime),
         ),
     )
 
@@ -531,7 +1103,7 @@ def _assemble_bounded_retry_dependencies(
 
     profile_ids: list[str] = []
     runtime_ids: set[str] = set()
-    provider_by_runtime: dict[str, object] = {}
+    provider_by_runtime: dict[str, ManagedModelRuntimeProviderConfig] = {}
     for policy in policies:
         for profile_id in policy.ordered_profile_ids:
             profile = scheduling.registry.profile(profile_id)
@@ -657,19 +1229,47 @@ def assemble_production_execution_dependencies(
             "no trusted execution owner matches the exact current dispatch binding"
         ) from exc
 
+    if owner.owner_id == _BUILD_OWNER_ID:
+        return _assemble_build_dependencies(
+            runtime, claim, binding, owner, owner_registry
+        )
     if owner.owner_id == _BLENDER_OWNER_ID:
         return _assemble_blender_dependencies(
+            runtime,
             claim,
             binding,
             owner,
             owner_registry,
         )
-    if owner.owner_id == _PIXELORAMA_OWNER_ID:
-        return _assemble_pixelorama_dependencies(
+    if owner.owner_id == IMAGE_EXECUTION_OWNER_ID:
+        return _assemble_image_dependencies(
+            runtime,
             claim,
             binding,
             owner,
             owner_registry,
+        )
+    if owner.owner_id == _PIPER_OWNER_ID:
+        return _assemble_piper_dependencies(runtime, claim, binding, owner, owner_registry)
+    if owner.owner_id == _FFMPEG_OWNER_ID:
+        return _assemble_ffmpeg_dependencies(runtime, claim, binding, owner, owner_registry)
+    if owner.owner_id == _RUNTIME_OBSERVER_OWNER_ID:
+        return _assemble_runtime_observation_dependencies(
+            runtime, claim, binding, owner, owner_registry
+        )
+    if owner.owner_id == _PLAYTEST_OWNER_ID:
+        return _assemble_playtest_dependencies(runtime, claim, binding, owner, owner_registry)
+    if owner.owner_id == _PIXELORAMA_OWNER_ID:
+        return _assemble_pixelorama_dependencies(
+            runtime,
+            claim,
+            binding,
+            owner,
+            owner_registry,
+        )
+    if owner.owner_id == _PIXELORAMA_SOURCE_OWNER_ID:
+        return _assemble_pixelorama_source_dependencies(
+            runtime, claim, binding, owner, owner_registry
         )
     if owner.owner_id == _SIMULATION_OWNER_ID:
         return _assemble_simulation_dependencies(

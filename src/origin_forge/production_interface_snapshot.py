@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, cast
 
 from .dream_read import DreamReadService
 from .model_resource_read import inspect_model_resources
 from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import ensure_production_runtime_readable
 from .production_runtime_read import ProductionRuntimeReadService
+from .production_trace import inspect_task_production_trace
 from .project_intelligence_read import ProjectIntelligenceReadService
 from .provenance_read import ProvenanceReadService
 from .runtime import OriginForgeRuntime
 from .runtime_observation_models import content_hash
-
 
 _MAX_TEXT_CHARS = 4096
 _MAX_SECTION_ROWS = 10_000
@@ -68,7 +69,7 @@ def _goal_projection(row: dict[str, Any]) -> dict[str, object]:
     return {
         "id": row["id"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "priority": int(row["priority"]),
         "objective": objective,
         "objective_truncated": truncated,
@@ -84,7 +85,7 @@ def _flow_projection(row: dict[str, Any]) -> dict[str, object]:
         "id": row["id"],
         "goal_id": row["goal_id"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "controller": controller,
         "controller_truncated": controller_truncated,
         "blocked_reason": blocked_reason,
@@ -101,7 +102,7 @@ def _task_projection(row: dict[str, Any]) -> dict[str, object]:
         "flow_id": row["flow_id"],
         "parent_task_id": row["parent_task_id"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "attempt_count": int(row["attempt_count"]),
         "priority": int(row["priority"]),
         "objective": objective,
@@ -154,7 +155,7 @@ def _entity_projection(row: dict[str, object]) -> dict[str, object]:
         "description": description,
         "description_truncated": description_truncated,
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -168,7 +169,7 @@ def _relation_projection(row: dict[str, object]) -> dict[str, object]:
         "relation_type": row["relation_type"],
         "target_entity_id": row["target_entity_id"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "rationale": rationale,
         "rationale_truncated": rationale_truncated,
         "created_at": row["created_at"],
@@ -187,7 +188,7 @@ def _binding_projection(row: dict[str, object]) -> dict[str, object]:
         "target_ref_truncated": target_ref_truncated,
         "target_hash": row["target_hash"],
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "metadata_disclosed": False,
@@ -213,7 +214,7 @@ def _design_rule_projection(row: dict[str, object]) -> dict[str, object]:
         "authority": row["authority"],
         "scope_entity_ids": scopes,
         "status": row["status"],
-        "revision": int(row["revision"]),
+        "revision": cast(int, row["revision"]),
         "supersedes_rule_id": row["supersedes_rule_id"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
@@ -340,6 +341,7 @@ class ProductionInterfaceSnapshot:
     dream_memory: dict[str, object]
     total_counts: dict[str, int]
     truncated: dict[str, bool]
+    production_trace: tuple[dict[str, object], ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -363,6 +365,7 @@ class ProductionInterfaceSnapshot:
             "dream_memory": self.dream_memory,
             "total_counts": dict(sorted(self.total_counts.items())),
             "truncated": dict(sorted(self.truncated.items())),
+            "production_trace": list(self.production_trace),
             "authority": {
                 "read_only": True,
                 "task_mutation": False,
@@ -449,6 +452,27 @@ def build_production_interface_snapshot(
     goals, goals_truncated = _limit_rows(raw_goals, max_goals)
     flows, flows_truncated = _limit_rows(raw_flows, max_flows)
     tasks, tasks_truncated = _limit_rows(raw_tasks, max_tasks)
+    production_trace = tuple(
+        {
+            "task_id": task["id"],
+            "claims": len(trace["dispatch"]["claims"]),
+            "executions": len(trace["dispatch"]["executions"]),
+            "output_bindings": {
+                table: len(rows)
+                for table, rows in trace["dispatch"]["output_bindings"].items()
+            },
+            "next_action": trace["next_action"],
+            "pixelorama_source_adoptions": len(
+                trace["dispatch"]["pixelorama_source_adoptions"]
+            ),
+            "pixelorama_source_acceptances": len(
+                trace["dispatch"]["pixelorama_source_acceptances"]
+            ),
+            "read_only": True,
+        }
+        for task in tasks
+        for trace in (inspect_task_production_trace(runtime, str(task["id"])),)
+    )
     runs, runs_truncated = _limit_rows(raw_runs, max_runs)
 
     verification_rows: list[dict[str, Any]] = []
@@ -618,4 +642,5 @@ def build_production_interface_snapshot(
             "memory_entries": dream_counts["memory_entries"] > len(memory_entries),
             "memory_generations": dream_counts["generations"] > len(memory_generations),
         },
+        production_trace=production_trace,
     )

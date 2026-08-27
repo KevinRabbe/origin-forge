@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 from .ids import IdKind, validate_id
 from .production_capability_store import ProductionCapabilityStore
@@ -24,9 +25,13 @@ from .production_dispatch_binding_models import (
 from .production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
 from .production_dispatch_resolution_models import InputResolutionBundle
 from .production_dispatch_store import (
+    _MAX_OBJECTS_PER_CATEGORY,
     ProductionDispatchStore,
     ProductionDispatchStoreError,
-    _MAX_OBJECTS_PER_CATEGORY,
+)
+from .production_model3d_request_publication import (
+    Model3DRequestPublicationError,
+    require_current_model3d_publication,
 )
 from .production_preparation_models import (
     PreparationStage,
@@ -47,8 +52,12 @@ from .production_work_order_audit import (
     WorkOrderCurrentnessStatus,
     inspect_work_order_currentness,
 )
+from .production_work_order_blender import BLENDER_ADAPTER_ID
 from .production_work_order_builtin import build_builtin_dispatch_validator_registry
-from .production_work_order_store import ProductionWorkOrderStore, ProductionWorkOrderStoreError
+from .production_work_order_store import (
+    ProductionWorkOrderStore,
+    ProductionWorkOrderStoreError,
+)
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision, utc_now
 
@@ -97,11 +106,15 @@ class PreparationPhase34FinalizeResult:
         }
 
 
+class _CanonicalDictModel(Protocol):
+    def to_dict(self) -> dict[str, object]: ...
+
+
 def _detail(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"[:4096]
 
 
-def _semantic_dict(value: object, id_field: str) -> dict[str, object]:
+def _semantic_dict(value: _CanonicalDictModel, id_field: str) -> dict[str, object]:
     payload = dict(value.to_dict())
     payload.pop(id_field)
     return payload
@@ -116,9 +129,7 @@ def _enumerate_ids(
     if not directory.exists():
         return ()
     ids: list[str] = []
-    count = 0
-    for path in directory.iterdir():
-        count += 1
+    for count, path in enumerate(directory.iterdir(), start=1):
         if count > _MAX_OBJECTS_PER_CATEGORY:
             raise OverflowError(f"{category} scan limit exceeded")
         if path.is_symlink() or not path.is_file() or path.suffix != ".json":
@@ -167,6 +178,23 @@ def _build_stores(runtime: OriginForgeRuntime, receipt: TaskPreparationReceipt):
         raise PreparationReceiptError(
             f"PREP WorkOrder is not CURRENT_READY: {currentness.status.value}"
         )
+    if work_order.selected_adapter_id == BLENDER_ADAPTER_ID:
+        if len(work_order.input_refs) != 1:
+            raise PreparationReceiptError(
+                "Blender WorkOrder must contain exactly one Phase-57 request ref"
+            )
+        request_ref = work_order.input_refs[0]
+        try:
+            require_current_model3d_publication(
+                runtime,
+                task_id=work_order.task_id,
+                request_id=request_ref.ref_id,
+                request_hash=f"sha256:{request_ref.content_hash}",
+            )
+        except (Model3DRequestPublicationError, RuntimeError, TypeError, ValueError) as exc:
+            raise PreparationReceiptError(
+                "Blender WorkOrder is not backed by an exact current Phase-57 publication"
+            ) from exc
     resolvers = build_dispatch_input_resolver_registry()
     binders = build_builtin_dispatch_binder_registry()
     dispatch_store = ProductionDispatchStore(work_order_store, resolvers, binders)
@@ -459,7 +487,16 @@ def finalize_preparation_phase34(
     if receipt.status is PreparationStatus.READY and receipt.stage is PreparationStage.BOUND:
         try:
             bundle, binding, audit = _validate_ready_checkpoint(runtime, receipt)
-        except Exception as exc:
+        except (
+            PreparationReceiptError,
+            ProductionPreparationPolicyStoreError,
+            ProductionWorkOrderStoreError,
+            ProductionDispatchStoreError,
+            DispatchBindingError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:
             return PreparationPhase34FinalizeResult(
                 PreparationPhase34FinalizeStatus.INVALID_AUTHORITY,
                 preparation_id,
@@ -502,6 +539,8 @@ def finalize_preparation_phase34(
         )
 
     try:
+        if receipt.work_order_id is None or receipt.work_order_audit_id is None:
+            raise PreparationReceiptError("PREP lacks exact audited Phase-33 authority")
         _, _, store, _, _, _, _ = _build_stores(runtime, receipt)
         bundle, reused_bundle = _select_or_publish_bundle(
             store,

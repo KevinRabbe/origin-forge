@@ -428,6 +428,13 @@ Replaceable local models for:
 
 - rFXGen for structured SFX
 - FFmpeg for deterministic processing
+
+Governed FFmpeg production dispatch uses a typed `audio_source` resolver for
+protected PCM16 evidence, an explicit `audio_profile`, and the shared audio
+Artifact/Verification/output-binding lifecycle. Schema v29 permits the
+FFmpeg execution owner alongside the historical Piper owner while preserving
+existing rows. Recovery revalidates durable evidence and never replays an
+uncertain STARTED execution.
 - replaceable local music model
 - replaceable local TTS
 
@@ -517,3 +524,58 @@ Only after a large corpus of verified trajectories exists should fine-tuning or 
 The permanent invariant is:
 
 > The model may reason, propose, create, and repair. The infrastructure owns identity, authority, state, history, and truth.
+
+## 20. Governed image-generation vertical
+
+The integrated image path is now a first-class production vertical:
+
+```text
+WorkOrder → resolution → binding → claim → dependency assembly
+→ DISPATCH_EXECUTION_STARTED → ComfyUI adapter
+→ PNG Artifacts/Verifications → image output binding → RETURNED
+```
+
+The WorkOrder freezes the exact workflow, model identity, prompt, dimensions,
+seed, generation limits, output paths, and request hash. The protected
+`ImageWorkflowStore` supplies the immutable workflow graph and local-only
+ComfyUI profile. Runtime operation and workspace IDs are allocated only after
+the durable STARTED boundary. The image service validates request bytes,
+workspace containment, PNG bytes, dimensions, pixel hashes, Artifact parentage,
+and Verification evidence before the output binding is published.
+
+Image output bindings are stored in schema v24, one row per declared output,
+so multi-output generations retain exact per-output lineage. Recovery consumes
+that binding and revalidates its relations; it may finish terminalization but
+never invokes ComfyUI again. An interrupted STARTED execution without complete
+durable output evidence fails closed and requires explicit operator recovery.
+Image generation and visual inspection remain evidence production only: neither
+can accept a Task, adopt an Artifact, sign provenance, merge, or release.
+
+## 21. Governed Pixelorama source and animation vertical
+
+Accepted design evidence can also feed a bounded Pixelorama source-creation
+WorkOrder without requiring hidden pre-existing `.pxo` state:
+
+```text
+accepted DESIGNACC → PlanningInput lineage → WorkOrder → resolution → binding
+→ claim → dependency assembly → DISPATCH_EXECUTION_STARTED
+→ trusted Pixelorama bridge → project/PNG Artifacts and Verifications
+→ source output binding → RETURNED
+```
+
+The source request freezes the exact accepted-design projection, sprite and
+animation specification, export declarations, budget, and request hash. A
+trusted, explicitly configured bridge profile supplies the executable and
+package identity; it cannot be selected by the caller or model. Schema v30
+stores one immutable output-binding row per generated project or export and
+preserves exact Artifact and Verification parentage.
+
+Recovery independently validates the request/result JSON, bridge result,
+output paths, byte hashes, dimensions, and PASS Verifications. A durable
+binding can finish terminalization without invoking the bridge again; an
+interrupted STARTED execution without complete evidence fails closed. Source
+creation and animation production produce evidence only until explicit human
+review actions occur. Source output adoption is create-only and recorded by a
+schema-v31 receipt; Task acceptance requires an explicit actor-bound schema-v32
+receipt and exact currentness. Neither the bridge, model, adapter, or recovery
+path can accept, adopt, sign provenance, merge, or release.

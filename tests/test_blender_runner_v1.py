@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import unittest
-from pathlib import Path
 
 from origin_forge.blender_adapter import blender_runner_v1_bytes, blender_runner_v1_fingerprint
 

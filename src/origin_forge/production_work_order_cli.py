@@ -72,12 +72,12 @@ def main(argv: list[str] | None = None) -> int:
             _print(work_order_read_status(runtime))
             return 0
         if args.command == "dispatch-catalog-show":
-            value = read_dispatch_catalog(
+            catalog_value = read_dispatch_catalog(
                 runtime,
                 args.dispatch_catalog_id,
                 registry,
             )
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            _print({**catalog_value.to_dict(), "content_hash": catalog_value.content_hash})
             return 0
         if args.command == "contract-show":
             catalog = read_dispatch_catalog(
@@ -85,25 +85,25 @@ def main(argv: list[str] | None = None) -> int:
                 args.dispatch_catalog_id,
                 registry,
             )
-            value = catalog.contract(args.contract_id)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            contract_value = catalog.contract(args.contract_id)
+            _print({**contract_value.to_dict(), "content_hash": contract_value.content_hash})
             return 0
         if args.command == "work-order-show":
-            value = read_work_order(runtime, args.work_order_id, registry)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            work_order_value = read_work_order(runtime, args.work_order_id, registry)
+            _print({**work_order_value.to_dict(), "content_hash": work_order_value.content_hash})
             return 0
         if args.command == "work-order-audit-show":
-            value = read_work_order_audit(runtime, args.audit_id, registry)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            audit_value = read_work_order_audit(runtime, args.audit_id, registry)
+            _print({**audit_value.to_dict(), "content_hash": audit_value.content_hash})
             return 0
         if args.command == "work-order-currentness":
-            value = inspect_work_order_currentness_readonly(
+            currentness_value = inspect_work_order_currentness_readonly(
                 runtime,
                 args.work_order_id,
                 args.audit_id,
                 registry,
             )
-            _print(value.to_dict())
+            _print(currentness_value.to_dict())
             return 0
     except (
         KeyError,

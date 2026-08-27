@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TypedDict
 
 from .ids import IdKind, validate_id
 from .production_dispatch_claim_models import DispatchClaim, DispatchClaimStatus
@@ -132,7 +133,13 @@ def _selection_result(status: ManagerDispatchSelectionStatus) -> ManagerDispatch
     return ManagerDispatchTickResult(target[0], target[1])
 
 
-def _candidate_fields(candidate: ManagerDispatchCandidate) -> dict[str, object]:
+class _ManagerDispatchCandidateFields(TypedDict):
+    task_id: str
+    dispatch_binding_id: str
+    binding_audit_id: str
+
+
+def _candidate_fields(candidate: ManagerDispatchCandidate) -> _ManagerDispatchCandidateFields:
     return {
         "task_id": candidate.task_id,
         "dispatch_binding_id": candidate.dispatch_binding_id,

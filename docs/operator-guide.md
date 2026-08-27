@@ -20,6 +20,146 @@ origin-forge-attempt  exactly one bounded coding attempt
 origin-forge-cockpit  read-only local inspection
 ```
 
+The bounded coding attempt is also available under the unified operator CLI:
+
+```text
+origin-forge attempt TASK-... --auto-context
+```
+
+It delegates to the same single-attempt engine as `origin-forge-attempt`.
+
+Before starting or recovering work, inspect one Task's review evidence:
+
+```text
+origin-forge review inspect TASK-...
+```
+
+Before advancing a Goal, inspect its complete read-only plan projection:
+
+```text
+origin-forge plan inspect GOAL-...
+```
+
+The plan projection shows the Goal's Flows, dependency order, Task revisions,
+dependency readiness, and the next bounded operator action. It does not create
+Runs or Workspaces, publish evidence, or transition any lifecycle record.
+
+For a project-wide operator summary, use:
+
+```text
+origin-forge status
+```
+
+In addition to durable Goal, Flow, Task, and Run counts, status reports
+`task_readiness` counts (`READY`, dependency-waiting, active, terminal, and
+fail-closed states) and `operator_actions` counts for attempts, inspection or
+recovery, review, and recovery findings. This projection is read-only and is
+intended to show where the next supervised action is needed without reading
+SQLite or raw logs.
+
+To inspect one correlated production lifecycle across planning, execution,
+workspaces, dispatch, evidence, verification, and review:
+
+```text
+origin-forge production trace TASK-...
+```
+
+The trace is read-only and reports the next action as `ADVANCE`, `REVIEW`, or
+`RECOVER`. It does not infer acceptance or adoption authority.
+
+Pixelorama source state must enter the governed workflow explicitly:
+
+```text
+origin-forge production source import assets/player.pxo
+```
+
+This creates a `PIXELORAMA_PROJECT` source Artifact and integrity Verification
+for a project-contained, non-symlink `.pxo` file. It does not perform semantic
+acceptance, export, adoption, or signing.
+
+Source creation from an accepted design requires an explicit bridge profile in
+addition to the configured Pixelorama executable. Set
+`ORIGIN_FORGE_PIXELORAMA_BRIDGE_ID`,
+`ORIGIN_FORGE_PIXELORAMA_BRIDGE_VERSION`,
+`ORIGIN_FORGE_PIXELORAMA_BRIDGE_SHA256`, and
+`ORIGIN_FORGE_PIXELORAMA_BRIDGE_PACKAGE` to the exact bridge identity and
+absolute package path. Optional launcher arguments are supplied only as a JSON
+string array through `ORIGIN_FORGE_PIXELORAMA_BRIDGE_ARGS_JSON`. The bridge
+profile permits `CREATE_SPRITE_PROJECT` only; missing fields, relative paths,
+hash drift, or an unavailable package fail closed before execution.
+
+After a source-create execution is `RETURNED`, the generated project output
+can be adopted explicitly through the shared production command:
+
+```text
+origin-forge production adopt DISPEXEC-... assets/player.pxo
+```
+
+This action is create-only and requires the exact schema-v30 source output
+binding plus the schema-v31 adoption receipt. It revalidates the generated
+project bytes and lineage, refuses existing destinations, and never accepts
+the Task or signs provenance.
+
+The compatibility admin module also exposes explicit source revision
+inspection and replacement:
+
+```text
+python -m origin_forge.pixelorama_admin_cli source-inspect ART-...
+python -m origin_forge.pixelorama_admin_cli source-history ART-...
+python -m origin_forge.pixelorama_admin_cli source-replace ART-... assets/player-v2.pxo
+```
+
+`source-replace` is create-only: it links a new immutable source Artifact to
+the exact predecessor and never overwrites historical source evidence.
+
+This is read-only and combines the Task, Runs, Workspaces, Verifications, and
+Artifacts already recorded for that Task.
+
+Human review decisions are explicit and durable:
+
+```text
+origin-forge review accept TASK-... --rationale "..."
+origin-forge review reject TASK-... --rationale "..."
+origin-forge review refine TASK-... --rationale "..."
+origin-forge review replace TASK-... --rationale "..."
+```
+
+These commands record human Decision lineage. They do not silently rerun,
+replace, adopt, or transition the reviewed Task.
+
+For a governed production execution, the equivalent execution-bound review
+commands preserve the exact execution and current Task revision in the
+decision context:
+
+```text
+origin-forge production reject DISPEXEC-... --rationale "..." --revision N
+origin-forge production refine DISPEXEC-... --rationale "..." --revision N
+origin-forge production replace DISPEXEC-... --rationale "..." --revision N
+```
+
+These commands require a current `RETURNED` execution. Refinement and
+replacement create new queued child Tasks; they never mutate or replay the
+original execution. Adoption and capability-specific acceptance remain
+separate explicit actions.
+
+`review refine` additionally creates a new queued child Task linked to the
+reviewed Task. The original Task and its evidence remain immutable; the child
+Task carries the human rationale as a constraint and is the only Task eligible
+for the refined rerun.
+
+After a successful attempt and explicit current human acceptance, code may be
+adopted through the separate guarded boundary:
+
+```text
+origin-forge adopt TASK-... --revision N
+```
+
+Adoption requires exactly one current ACCEPT decision, one VERIFIED workspace,
+a clean project checkout at the workspace base commit, and a staged patch. It
+applies that patch to the project index and records durable change and patch
+Artifact lineage; it never accepts, signs, merges, or releases on behalf of a
+human.
+
 Current source metadata remains package version `0.5.0` under the Apache License 2.0. The immutable `v0.5.0` tag identifies the released bits; post-release Phase-48/49/50/51/52/53/54/55/56 commits on `main` are not retroactively part of that tagged release merely because the source version string remains `0.5.0`.
 
 ## Initialize a project
@@ -48,6 +188,58 @@ Approved commands are structured argv arrays in `.origin-forge/config.toml`; the
 
 Model execution remains separate and replaceable. The packaged one-attempt command defaults to a loopback llama.cpp-compatible endpoint and does not grant a model arbitrary shell/filesystem authority.
 
+### Configure external tools explicitly
+
+Optional production tools may be pinned in `.origin-forge/config.toml` under
+`[tools]`. Every configured value must be an absolute path; Origin Forge does
+not download tools or silently install them.
+
+```toml
+[tools]
+git = "C:/Program Files/Git/cmd/git.exe"
+blender = "C:/Program Files/Blender Foundation/Blender/blender.exe"
+ffmpeg = "C:/tools/ffmpeg/bin/ffmpeg.exe"
+piper = "C:/tools/piper/piper.exe"
+```
+
+Supported keys are `git`, `podman`, `blender`, `pixelorama`, `ffmpeg`,
+`piper`, `llama_cpp`, and `openssl`. Configured paths take precedence for the
+corresponding capability once that adapter is enabled. A configured path must
+be a regular non-symlink file. Run `origin-forge doctor --strict` to see each
+tool’s status; unconfigured optional tools are reported as `SKIP`, while a
+missing or aliased configured path is an actionable failure.
+
+Piper TTS also requires explicit absolute paths for its complete governed
+runtime. Set `ORIGIN_FORGE_PIPER_RUNTIME_ROOT`,
+`ORIGIN_FORGE_PIPER_EXECUTABLE`, `ORIGIN_FORGE_PIPER_ESPEAK_DATA`,
+`ORIGIN_FORGE_PIPER_MODEL`, `ORIGIN_FORGE_PIPER_MODEL_CONFIG`, and
+`ORIGIN_FORGE_PIPER_LICENSE`. The runtime tree, executable version, voice
+model, JSON config, and license bytes are independently hashed and checked at
+execution. A missing path, changed hash, invalid voice sample rate, malformed
+WAV, timeout, or output-budget failure stops the Task and explains the
+recovery/inspection action; it does not trigger an unbounded retry.
+
+The governed Piper path is persisted in schema v25. Its output binding can be
+inspected through the correlated production trace and is recoverable without
+running Piper a second time. See `phase-59-governed-piper-production-dispatch.md`.
+
+FFmpeg processing uses the same governed production path. Configure an
+absolute executable in `.origin-forge/config.toml`:
+
+```toml
+[tools]
+ffmpeg = "C:/tools/ffmpeg/bin/ffmpeg.exe"
+```
+
+The selected `AUDIO_PROFILE` must pin the executable hash and FFmpeg version;
+the WorkOrder must also name an exact `audio_source` Artifact containing a
+validated PCM16 WAV. If the path is missing, inaccessible, symlinked, or does
+not match the profile hash, `origin-forge doctor --strict` and dispatch report
+the configuration drift without searching PATH or installing FFmpeg. FFmpeg
+output is persisted in the shared audio binding and can be recovered after an
+interruption without invoking the executable again. See
+`phase-62-governed-ffmpeg-production-dispatch.md`.
+
 ## Create durable work state
 
 The control-plane CLI exposes explicit Goal / Flow / Task lifecycle operations:
@@ -61,7 +253,39 @@ origin-forge verify --help
 origin-forge sandbox --help
 ```
 
+To run only the required project-approved build commands against an audited
+Workspace, use the bounded build operation:
+
+```bash
+origin-forge sandbox build WSPACE-...
+```
+
+It records build Verifications against the Workspace and leaves the Workspace
+audited. Combined `sandbox verify` remains the operation that runs required
+build and test commands and may promote an audited Workspace after all
+configured checks pass. Neither command accepts shell text, arbitrary command
+paths, or Task acceptance/adoption authority.
+
 A fresh bounded coding attempt requires the target Task and parent Flow to satisfy the orchestration preconditions. The attempt command does not invent Tasks or silently repair lifecycle state.
+
+## Recover one dispatch execution explicitly
+
+For an interrupted governed production execution, inspect the exact receipt first:
+
+```text
+origin-forge --project-root /path/to/project run inspect DISPEXEC-...
+```
+
+Then invoke the owner-specific recovery route explicitly:
+
+```text
+origin-forge --project-root /path/to/project run recover DISPEXEC-...
+```
+
+Recovery consumes only the durable evidence already bound to that execution. It
+does not invoke Blender, Pixelorama, ComfyUI, FFmpeg, Piper, runtime observation,
+playtesting, or build commands a second time. Missing, conflicting, stale, or
+tampered evidence fails closed and requires operator review.
 
 ## Inspect, bootstrap, or recover one explicit Goal
 
@@ -123,6 +347,15 @@ The main control-plane CLI exposes one local Manager group over the already boun
 origin-forge --project-root /path/to/project manager status
 origin-forge --project-root /path/to/project manager advance
 ```
+
+The equivalent top-level command is available for the daily workflow:
+
+```text
+origin-forge --project-root /path/to/project advance
+```
+
+It invokes the same fixed bounded Manager driver exactly once and accepts no
+caller-selected budget or fallback authority.
 
 `manager status` performs the non-creating Manager admission/selection projection once and prints its typed JSON result. `manager advance` invokes the fixed bounded Manager driver once and prints its exact typed trace. The bounded driver owns a hard code-defined maximum of six one-shot Manager steps and stops on the first non-continuable result, including the first dispatch result; the CLI provides no budget override.
 
@@ -219,6 +452,29 @@ The optional `--max-source-bytes` argument retains the bounded source-read safet
 The selected `DISPEXEC-*` must resolve to the exact immutable Phase-51 Blender dispatch-output binding and a trustworthy terminal relation: exact Blender execution owner and frozen Task/WorkOrder/binding identity, `DISPEXEC RETURNED`, claim `CONSUMED`, the production Task still `RUNNING`, exact successful Blender Run/request/result/output/Verification lineage, and exact current regular non-symlinked GLB bytes/hash/byte count. Missing, stale, ambiguous, tampered, nonterminal, escaped, symlinked, oversized, or byte-drifted evidence fails closed before canonical publication.
 
 The destination must be a new safe project-relative path. Publication is create-only and never overwrites an existing file. One exact bound Blender production execution/output may be canonically adopted at most once. A PREPARED receipt is retryable only while the destination is absent. If the destination exists beside PREPARED state, automatic retry fails closed with recovery required rather than deleting, replacing, or guessing whether the prior publication completed.
+
+## Publish a governed Blender semantic request
+
+Phase 57 adds a separate module-only publication boundary between accepted design
+evidence and the existing Blender WorkOrder. First create the Phase-57A
+proposal and independent PASS audit, then explicitly approve and publish it:
+
+```bash
+python -m origin_forge.model3d_request_publication_admin_cli approve \
+  --proposal-id M3DREQPROP-...
+python -m origin_forge.model3d_request_publication_admin_cli publish \
+  --approval-id M3DREQAPP-...
+python -m origin_forge.model3d_request_publication_admin_cli inspect \
+  --publication-id M3DREQPUB-...
+```
+
+Approval is fixed to `HUMAN_OPERATOR`. Origin Forge allocates the final
+`MODEL3DREQ-*` identity and publishes it to the existing protected registry;
+operators and models cannot provide or replace its ID, hash, payload, path, or
+runtime authority. Blender admission requires the exact current
+`M3DREQPUB-*` relation for the Task. Missing, conflicting, stale, or tampered
+approval/publication/request evidence fails closed. Recovery can finish a
+durable approval or publication without rerunning the semantic model.
 
 A successful adoption creates one adopted child `BLENDER_GLB_EXPORT` Artifact, one exact `blender-production-adoption-integrity` PASS Verification, and finalizes the immutable Blender adoption receipt as PUBLISHED. The Task remains `RUNNING`; no Task PASS/FAIL is synthesized, semantic geometry or aesthetic quality is not asserted, and provenance is not signed.
 
@@ -449,10 +705,31 @@ Current `main` does not grant:
 - background Goal bootstrap, Manager scheduling/queue draining, production adoption, production Task acceptance, Blender execution/replay, Pixelorama execution/replay, design-specification generation/acceptance replay, or provenance signing;
 - remote/multi-user cockpit hosting.
 
-The Pixelorama post-dispatch mutation surfaces are exactly the explicit module commands documented above: Phase-49 create-only `adopt-production-new`, Phase-50 human-only `accept-production-task`, and Phase-55 explicit `sign-production-provenance`. None executes or replays the editor, selects or rewrites a different source, overwrites the canonical asset, authorizes release, or grants background/automatic authority. Only Phase 50 may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and HUMAN_OPERATOR acceptance are durable; Phase 55 requires that terminal acceptance first and may only create a Phase-18 immutable provenance manifest over the exact still-current adopted Artifact.
+The Pixelorama post-dispatch mutation surfaces are exactly the explicit module commands documented above: Phase-49 create-only `adopt-production-new`, Phase-50 human-only `accept-production-task`, Phase-55 explicit `sign-production-provenance`, and the source-create `origin-forge production adopt/accept` actions. None executes or replays the editor, selects or rewrites a different source, overwrites the canonical asset, authorizes release, or grants background/automatic authority. Acceptance may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition only after exact currentness, durable adoption, an explicit actor identity, and HUMAN_OPERATOR acceptance evidence are durable; signing remains a separate downstream authority.
 
 The Blender post-dispatch mutation surfaces are exactly the explicit module-only Phase-52 create-only `adopt-production-new`, Phase-53 human-only `accept-production-task`, and Phase-54 explicit `sign-production-provenance` commands documented above. None invokes or replays Blender, selects or rewrites a different source, overwrites the canonical asset, authorizes release, or grants background/automatic authority. Only Phase 53 may request the existing verification-gated Task `RUNNING → SUCCEEDED` transition after exact currentness and HUMAN_OPERATOR acceptance are durable; Phase 54 requires that terminal acceptance first and may only create a Phase-18 immutable provenance manifest over the exact still-current adopted Artifact.
 
 The Phase-56 design-specification mutation surface is exactly the explicit module-only `accept-design-specification --design-specification-id DESIGNSPEC-*` command documented above. It may only publish or recover the exact HUMAN_OPERATOR DESIGNACC relation after current PASS-audited evidence validation. It does not generate a proposal, create PlanningInput automatically, execute Phase-31 planning, materialize Tasks, mutate semantic truth, sign provenance, or authorize release.
+
+## Governed image generation
+
+Image generation is available as a governed production dispatch vertical when
+the project has an exact protected ComfyUI workflow template. A WorkOrder must
+freeze the workflow and model hashes, prompts, dimensions, seed, output paths,
+and byte/time budgets. The default backend profile is local-only ComfyUI at
+`127.0.0.1:8188`; Origin Forge does not download workflows, models, or hidden
+runtime state.
+
+The dispatch lifecycle publishes request/result Artifacts, one verified PNG
+Artifact per declared output, and a durable image output binding before the
+execution is returned. Inspect the correlated dispatch/run evidence to see
+those relationships. If an operation stops after `STARTED`, do not rerun the
+backend: recovery first validates the exact binding and evidence. Missing,
+conflicting, stale, or tampered evidence is reported as recovery-required and
+must be resolved explicitly.
+
+Image and vision evidence does not grant semantic acceptance or canonical
+adoption. Human review and the existing acceptance/adoption services remain
+the only authority for those transitions.
 
 Origin Forge is licensed under the Apache License 2.0; see the repository `LICENSE` file. The immutable v0.5.0 release remains documented separately in `docs/v0.5-release-readiness.md`, `docs/v0.5-acceptance-matrix.md`, and `docs/v0.5-operator-guide.md`. Phases 48, 49, 50, 51, 52, 53, 54, 55, and 56 are explicitly post-v0.5 development.

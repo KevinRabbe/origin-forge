@@ -5,9 +5,10 @@ import json
 import os
 import subprocess
 import threading
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Protocol, Sequence
+from typing import Protocol
 
 from ..audio_models import (
     AudioOperation,
@@ -22,7 +23,6 @@ from ..audio_profiles import AudioProfileKind, GovernedAudioProfile
 from ..audio_wav import WavError, inspect_pcm16_wav
 from ..runtime import OriginForgeRuntime
 from .audio_piper_wav import canonicalize_piper_output_wav
-
 
 _MAX_PROCESS_OUTPUT_BYTES = 1024 * 1024
 _MAX_RUNTIME_FILES = 8192
@@ -508,11 +508,11 @@ class PiperAudioAdapter:
         return (
             str(self.executable),
             "--model",
-            str(staged_model),
+            staged_model.as_posix(),
             "--config",
-            str(staged_config),
+            staged_config.as_posix(),
             "--output-file",
-            str(raw_output),
+            raw_output.as_posix(),
             "--speaker",
             "0",
             "--noise_scale",

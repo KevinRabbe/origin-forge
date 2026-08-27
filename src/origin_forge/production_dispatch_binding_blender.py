@@ -21,7 +21,6 @@ from .production_work_order_blender import (
 from .production_work_order_models import WorkOrderRefType, content_hash
 from .production_work_orders import ProductionWorkOrder
 
-
 BLENDER_BINDER_ID = "binder.blender.export-glb@1"
 BLENDER_REQUEST_TYPE_ID = "BlenderJobRequest@production-v1-semantic-binding"
 

@@ -60,6 +60,7 @@ class SandboxedWorkspaceVerifier:
         command: CommandSpec,
         *,
         network_allowed: bool,
+        execution_id: str | None = None,
     ) -> CommandVerificationResult:
         workspace_path = self.workspaces.path(workspace_id)
         job = SandboxJob(
@@ -78,7 +79,10 @@ class SandboxedWorkspaceVerifier:
                 verification_type=f"sandbox-{category}:{command.name}",
                 verifier=f"OriginForge.Sandbox:{self.backend.backend_id}",
                 status="BLOCKED",
-                evidence={"error": f"{type(exc).__name__}: {exc}"},
+                evidence={
+                    "error": f"{type(exc).__name__}: {exc}",
+                    **({"dispatch_execution_id": execution_id} if execution_id else {}),
+                },
             )
             return CommandVerificationResult(
                 category, command.name, verification_id, False, None
@@ -100,6 +104,7 @@ class SandboxedWorkspaceVerifier:
                 "backend_provenance": dict(self.backend.provenance),
                 "argv": list(command.argv),
                 "result": asdict(result),
+                **({"dispatch_execution_id": execution_id} if execution_id else {}),
             },
         )
         return CommandVerificationResult(
@@ -160,4 +165,43 @@ class SandboxedWorkspaceVerifier:
                 "backend_provenance": dict(self.backend.provenance),
             },
         )
+        return WorkspaceVerificationResult(workspace_id, True, tuple(results))
+
+    def verify_build(
+        self, workspace_id: str, *, execution_id: str | None = None
+    ) -> WorkspaceVerificationResult:
+        """Run only required project-approved build commands.
+
+        Build evidence is intentionally distinct from the combined workspace
+        verification promotion. This operation never marks a Workspace
+        VERIFIED and cannot accept, adopt, or terminalize a Task.
+        """
+        workspace = self.workspaces.get(workspace_id)
+        if workspace["status"] != WorkspaceStatus.AUDITED.value:
+            raise RuntimeInvariantError(
+                f"build verification requires AUDITED workspace; got {workspace['status']}"
+            )
+
+        config = load_config(self.runtime.project_root)
+        self._check_backend(network_allowed=config.sandbox_network)
+        commands = tuple(
+            command for command in config.approved_build_commands if command.required
+        )
+        if not commands:
+            raise RuntimeInvariantError(
+                "workspace has no required approved build command"
+            )
+
+        results: list[CommandVerificationResult] = []
+        for command in commands:
+            result = self._run_command(
+                workspace_id,
+                "build",
+                command,
+                network_allowed=config.sandbox_network,
+                execution_id=execution_id,
+            )
+            results.append(result)
+            if not result.passed:
+                return WorkspaceVerificationResult(workspace_id, False, tuple(results))
         return WorkspaceVerificationResult(workspace_id, True, tuple(results))

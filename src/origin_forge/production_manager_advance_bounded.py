@@ -8,8 +8,6 @@ from .production_manager_advance_once import (
     ManagerAdvanceOnceStatus,
     advance_production_manager_once,
 )
-
-
 MAX_MANAGER_ADVANCE_STEPS = 6
 
 MANAGER_ADVANCE_CONTINUATION_STATUSES = frozenset(
@@ -91,7 +89,9 @@ def _validate_once_result(result: object) -> None:
         raise TypeError("ManagerAdvanceOnceResult.status must be a ManagerAdvanceOnceStatus")
 
 
-def advance_production_manager_bounded(runtime: object) -> BoundedManagerAdvanceResult:
+def advance_production_manager_bounded(
+    runtime: object,
+) -> BoundedManagerAdvanceResult:
     """Perform fresh one-shot Manager admissions until a frozen stop boundary is reached."""
 
     steps: list[ManagerAdvanceOnceResult] = []

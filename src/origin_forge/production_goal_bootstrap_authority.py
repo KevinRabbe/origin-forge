@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass
 
 from .config import ProjectConfig, load_config
+from .model_runtime_config import ManagedModelRuntimeProviderConfig
 from .model_scheduler import ModelRole
 from .production_capability_builtin import build_builtin_capability_catalog
 from .production_capability_models import CapabilityCatalog, CapabilityRoutingPolicy
@@ -34,7 +35,6 @@ from .production_work_order_models import DispatchContractCatalog
 from .production_work_order_store import ProductionWorkOrderStore
 from .runtime import OriginForgeRuntime
 from .service import StaleRevision
-
 
 _BOOTSTRAP_OWNER_ID = "originforge.bootstrap.goal-planner@1"
 _BOOTSTRAP_CONTRACT_VERSION = "1"
@@ -372,7 +372,7 @@ def goal_planner_policy_hashes(runtime: OriginForgeRuntime) -> tuple[str, str]:
             "protected CODER_STRONG planning chain contains a role mismatch"
         )
 
-    provider_by_runtime = {}
+    provider_by_runtime: dict[str, ManagedModelRuntimeProviderConfig] = {}
     for profile in profiles:
         try:
             provider = config.model_runtimes.provider_for_profile(profile.profile_id)

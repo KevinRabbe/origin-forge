@@ -9,9 +9,16 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from origin_forge.code_adoption import VerifiedCodeAdopter
 from origin_forge.model import ModelRequest, ModelResponse
 from origin_forge.orchestration_cli import main
 from origin_forge.repository import RepositoryReader
+from origin_forge.review import (
+    inspect_task_review,
+    record_task_review_decision,
+    refine_task,
+    replace_task,
+)
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.sandbox import SandboxGuarantees, SandboxJob, SandboxResult
 from origin_forge.state import FlowStatus, TaskStatus
@@ -91,6 +98,20 @@ class OrchestrationCliTests(unittest.TestCase):
                 pass
         self.tempdir.cleanup()
 
+    def test_replace_creates_immutable_child_task(self) -> None:
+        result = replace_task(
+            self.runtime,
+            self.task,
+            rationale="replace the bounded implementation",
+            expected_revision=1,
+        )
+        replacement = self.runtime.get_task(result.replacement_task_id)
+        original = self.runtime.get_task(self.task)
+        self.assertEqual(replacement["parent_task_id"], self.task)
+        self.assertEqual(replacement["status"], TaskStatus.QUEUED.value)
+        self.assertEqual(original["revision"], 1)
+        self.assertTrue(result.decision_id.startswith("DEC-"))
+
     def _model(self) -> FakeModel:
         expected = RepositoryReader(self.root).hash_file("hello.py")
         return FakeModel(
@@ -136,6 +157,85 @@ class OrchestrationCliTests(unittest.TestCase):
         self.assertEqual(
             self.runtime.get_task(self.task)["status"], TaskStatus.SUCCEEDED.value
         )
+
+    def test_daily_loop_requires_review_before_guarded_adoption(self) -> None:
+        output = StringIO()
+        with patch(
+            "origin_forge.orchestration_cli.LlamaCppAdapter",
+            return_value=self._model(),
+        ), patch(
+            "origin_forge.orchestration_cli.create_sandbox_backend",
+            return_value=FakeSandbox(),
+        ), redirect_stdout(output):
+            code = main(
+                [
+                    "--project-root",
+                    str(self.root),
+                    self.task,
+                    "--file",
+                    "hello.py",
+                ]
+            )
+
+        self.assertEqual(code, 0)
+        revision = int(self.runtime.get_task(self.task)["revision"])
+        rejected = record_task_review_decision(
+            self.runtime,
+            self.task,
+            "reject",
+            rationale="the change needs a more explicit review pass",
+            expected_revision=revision,
+        )
+        refined = refine_task(
+            self.runtime,
+            self.task,
+            rationale="preserve the verified patch and refine the acceptance wording",
+            expected_revision=revision,
+        )
+        refined_task = refined.refined_task_id
+        self.runtime.transition_task(
+            refined_task, TaskStatus.READY, expected_revision=0
+        )
+        output = StringIO()
+        with patch(
+            "origin_forge.orchestration_cli.LlamaCppAdapter",
+            return_value=self._model(),
+        ), patch(
+            "origin_forge.orchestration_cli.create_sandbox_backend",
+            return_value=FakeSandbox(),
+        ), redirect_stdout(output):
+            rerun_code = main(
+                [
+                    "--project-root",
+                    str(self.root),
+                    refined_task,
+                    "--file",
+                    "hello.py",
+                ]
+            )
+
+        refined_revision = int(self.runtime.get_task(refined_task)["revision"])
+        accepted = record_task_review_decision(
+            self.runtime,
+            refined_task,
+            "accept",
+            rationale="the verified bounded change is ready for adoption",
+            expected_revision=refined_revision,
+        )
+
+        review = inspect_task_review(self.runtime, refined_task)
+        adoption = VerifiedCodeAdopter(self.runtime).adopt_new(
+            refined_task, expected_revision=refined_revision
+        )
+
+        self.assertTrue(rejected.startswith("DEC-"))
+        self.assertTrue(refined.decision_id.startswith("DEC-"))
+        self.assertTrue(accepted.startswith("DEC-"))
+        self.assertEqual(rerun_code, 0)
+        self.assertEqual(review["next_action"], "ADOPT")
+        self.assertEqual(adoption.task_id, refined_task)
+        self.assertIn("hello.py", adoption.adopted_paths)
+        self.assertEqual(self.source.read_text(encoding="utf-8"), "print('new')\n")
 
     def test_attempt_cli_returns_blocked_code_when_preflight_cannot_verify(self) -> None:
         output = StringIO()

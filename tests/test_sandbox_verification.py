@@ -154,6 +154,22 @@ class SandboxedVerificationTests(unittest.TestCase):
             ).fetchone()["evidence_json"]
         self.assertIn('"backend_provenance":{"fake":true}', evidence)
 
+    def test_build_only_records_evidence_without_promoting_workspace(self) -> None:
+        self._write_config(
+            commands='build = [{ name = "compile", argv = ["python", "-m", "compileall", "."], required = true }]\ntest = []'
+        )
+        backend = FakeSandboxBackend([SandboxResult(0, "ok", "", False, 10)])
+        result = SandboxedWorkspaceVerifier(
+            self.runtime, backend, self.workspaces
+        ).verify_build(self.workspace_id)
+        self.assertTrue(result.passed)
+        self.assertEqual(result.results[0].category, "build")
+        self.assertEqual(
+            self.workspaces.get(self.workspace_id)["status"],
+            WorkspaceStatus.AUDITED.value,
+        )
+        self.assertEqual(backend.jobs[0].argv, ("python", "-m", "compileall", "."))
+
     def test_nonzero_command_fails_workspace(self) -> None:
         self._write_config(
             commands='build = []\ntest = [{ name = "unit", argv = ["test-runner"], required = true }]'

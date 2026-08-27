@@ -6,10 +6,28 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from .production_capability_models import CapabilityCatalog
+from .production_work_order_audio import (
+    FFMPEG_ADAPTER_ID,
+    FFMPEG_CONTRACT_ID,
+    PIPER_ADAPTER_ID,
+    PIPER_CONTRACT_ID,
+    FfmpegAudioDispatchValidator,
+    PiperSpeechDispatchValidator,
+)
 from .production_work_order_blender import (
     BLENDER_ADAPTER_ID,
     BLENDER_CONTRACT_ID,
     BlenderExportGLBDispatchValidator,
+)
+from .production_work_order_build import (
+    BUILD_ADAPTER_ID,
+    BUILD_CONTRACT_ID,
+    BuildIntegrationDispatchValidator,
+)
+from .production_work_order_image import (
+    IMAGE_ADAPTER_ID,
+    IMAGE_CONTRACT_ID,
+    ImageGenerationDispatchValidator,
 )
 from .production_work_order_models import (
     DispatchContract,
@@ -21,12 +39,25 @@ from .production_work_order_models import (
 from .production_work_order_pixelorama import (
     PIXELORAMA_ADAPTER_ID,
     PIXELORAMA_CONTRACT_ID,
+    PIXELORAMA_SOURCE_ADAPTER_ID,
+    PIXELORAMA_SOURCE_CONTRACT_ID,
+    PixeloramaSourceCreationDispatchValidator,
     PixeloramaSpritesheetExportDispatchValidator,
 )
+from .production_work_order_playtest import (
+    PLAYTEST_ADAPTER_ID,
+    PLAYTEST_CONTRACT_ID,
+    CooperativePlaytestDispatchValidator,
+)
+from .production_work_order_runtime import (
+    RUNTIME_ADAPTER_ID,
+    RUNTIME_CONTRACT_ID,
+    RuntimeObservationDispatchValidator,
+)
 from .production_work_order_simulation import (
-    DeterministicSimulationDispatchValidator,
     SIMULATION_ADAPTER_ID,
     SIMULATION_CONTRACT_ID,
+    DeterministicSimulationDispatchValidator,
 )
 from .production_work_order_validators import (
     DispatchContractValidatorRegistry,
@@ -36,7 +67,6 @@ from .production_work_order_validators import (
     PayloadFieldRule,
     StaticObjectPayloadValidator,
 )
-
 
 _CODE_ADAPTER_ID = "originforge.code.bounded-retry"
 _CODE_VALIDATOR_ID = "validator.code.bounded-retry@1"
@@ -70,14 +100,15 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
     """Document the reviewed dispatch-contract inclusion boundary."""
 
     deferred = (
-        "originforge.image.generate",
         "originforge.vision.inspect",
-        "originforge.audio.ffmpeg",
         "originforge.audio.piper",
-        "originforge.runtime.observe",
-        "originforge.playtest.cooperative",
     )
     rows = [
+        BuiltinDispatchReview(
+            BUILD_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "build integration accepts only the inert BUILD selector; approved commands, sandbox, workspace, and environment remain infrastructure-owned",
+        ),
         BuiltinDispatchReview(
             _CODE_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
@@ -97,6 +128,31 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
             BLENDER_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
             "Blender GLB export accepts one exact protected MODEL3D_REQUEST ref and an inert payload while operation/workspace/path/profile/process authority remains downstream and infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            PIXELORAMA_SOURCE_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "Pixelorama source creation accepts one exact immutable accepted-design ref and a fully typed source/animation payload while editor/profile/process authority remains downstream and infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            IMAGE_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "ComfyUI generation accepts an exact local-only workflow projection while backend execution and output evidence remain infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            FFMPEG_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "FFmpeg processing accepts one exact typed PCM16 source and one governed audio profile while executable and output evidence remain infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            RUNTIME_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "runtime observation accepts one exact protected OBS request while target execution and evidence remain evidence-only infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            PLAYTEST_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "cooperative playtesting accepts one exact protected PLAYSCEN request while harness execution and evidence remain evidence-only infrastructure-owned",
         ),
     ]
     rows.extend(
@@ -272,10 +328,17 @@ class CodeBoundedRetryDispatchValidator:
 
 def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
     return (
+        BuildIntegrationDispatchValidator(),
         CodeBoundedRetryDispatchValidator(),
         DeterministicSimulationDispatchValidator(),
         PixeloramaSpritesheetExportDispatchValidator(),
+        PixeloramaSourceCreationDispatchValidator(),
         BlenderExportGLBDispatchValidator(),
+        ImageGenerationDispatchValidator(),
+        FfmpegAudioDispatchValidator(),
+        PiperSpeechDispatchValidator(),
+        RuntimeObservationDispatchValidator(),
+        CooperativePlaytestDispatchValidator(),
     )
 
 
@@ -351,6 +414,127 @@ def _blender_contract(adapter) -> DispatchContract:
     )
 
 
+def _pixelorama_source_contract(adapter) -> DispatchContract:
+    validator = PixeloramaSourceCreationDispatchValidator()
+    return DispatchContract(
+        contract_id=PIXELORAMA_SOURCE_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,),
+        max_payload_bytes=1024 * 1024,
+        max_input_refs=1,
+    )
+
+
+def _build_contract(adapter) -> DispatchContract:
+    validator = BuildIntegrationDispatchValidator()
+    return DispatchContract(
+        contract_id=BUILD_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.WORKSPACE,),
+        max_payload_bytes=128,
+        max_input_refs=1,
+    )
+
+
+def _image_contract(adapter) -> DispatchContract:
+    validator = ImageGenerationDispatchValidator()
+    return DispatchContract(
+        contract_id=IMAGE_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(),
+        max_payload_bytes=256 * 1024,
+        max_input_refs=0,
+    )
+
+
+def _piper_contract(adapter) -> DispatchContract:
+    validator = PiperSpeechDispatchValidator()
+    return DispatchContract(
+        contract_id=PIPER_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.AUDIO_PROFILE,),
+        max_payload_bytes=64 * 1024,
+        max_input_refs=1,
+    )
+
+
+def _ffmpeg_contract(adapter) -> DispatchContract:
+    validator = FfmpegAudioDispatchValidator()
+    return DispatchContract(
+        contract_id=FFMPEG_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.ARTIFACT, WorkOrderRefType.AUDIO_PROFILE),
+        max_payload_bytes=64 * 1024,
+        max_input_refs=2,
+    )
+
+
+def _runtime_contract(adapter) -> DispatchContract:
+    validator = RuntimeObservationDispatchValidator()
+    return DispatchContract(
+        contract_id=RUNTIME_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.RUNTIME_OBSERVATION_REQUEST,),
+        max_payload_bytes=2,
+        max_input_refs=1,
+    )
+
+
+def _playtest_contract(adapter) -> DispatchContract:
+    validator = CooperativePlaytestDispatchValidator()
+    return DispatchContract(
+        contract_id=PLAYTEST_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.PLAYTEST_SCENARIO,),
+        # The payload is intentionally only the operation selector; keep a
+        # small bounded envelope while allowing canonical JSON overhead.
+        max_payload_bytes=128,
+        max_input_refs=1,
+    )
+
+
 def build_builtin_dispatch_catalog(
     phase32_catalog: CapabilityCatalog,
 ) -> DispatchContractCatalog:
@@ -366,19 +550,41 @@ def build_builtin_dispatch_catalog(
     if not isinstance(phase32_catalog, CapabilityCatalog):
         raise TypeError("phase32_catalog must be a CapabilityCatalog")
     adapters = {value.adapter_id: value for value in phase32_catalog.adapters}
+    build = adapters.get(BUILD_ADAPTER_ID)
     code = adapters.get(_CODE_ADAPTER_ID)
     if code is not None:
         return DispatchContractCatalog.create(phase32_catalog, (_code_contract(code),))
     simulation = adapters.get(SIMULATION_ADAPTER_ID)
     pixelorama = adapters.get(PIXELORAMA_ADAPTER_ID)
+    pixelorama_source = adapters.get(PIXELORAMA_SOURCE_ADAPTER_ID)
     blender = adapters.get(BLENDER_ADAPTER_ID)
+    image = adapters.get(IMAGE_ADAPTER_ID)
+    ffmpeg = adapters.get(FFMPEG_ADAPTER_ID)
+    piper = adapters.get(PIPER_ADAPTER_ID)
+    runtime_observer = adapters.get(RUNTIME_ADAPTER_ID)
+    playtest = adapters.get(PLAYTEST_ADAPTER_ID)
     reviewed_non_code = tuple(
-        value for value in (simulation, pixelorama, blender) if value is not None
+        value
+        for value in (
+            build,
+            simulation,
+            pixelorama,
+            pixelorama_source,
+            blender,
+            image,
+            ffmpeg,
+            piper,
+            runtime_observer,
+            playtest,
+        )
+        if value is not None
     )
     if len(reviewed_non_code) > 1:
         raise ValueError(
             "Phase-32 catalog contains multiple reviewed non-code Phase-33 adapters"
         )
+    if build is not None:
+        return DispatchContractCatalog.create(phase32_catalog, (_build_contract(build),))
     if simulation is not None:
         return DispatchContractCatalog.create(
             phase32_catalog,
@@ -389,9 +595,29 @@ def build_builtin_dispatch_catalog(
             phase32_catalog,
             (_pixelorama_contract(pixelorama),),
         )
+    if pixelorama_source is not None:
+        return DispatchContractCatalog.create(
+            phase32_catalog,
+            (_pixelorama_source_contract(pixelorama_source),),
+        )
     if blender is not None:
         return DispatchContractCatalog.create(
             phase32_catalog,
             (_blender_contract(blender),),
         )
+    if image is not None:
+        return DispatchContractCatalog.create(
+            phase32_catalog,
+            (_image_contract(image),),
+        )
+    if ffmpeg is not None:
+        return DispatchContractCatalog.create(phase32_catalog, (_ffmpeg_contract(ffmpeg),))
+    if piper is not None:
+        return DispatchContractCatalog.create(phase32_catalog, (_piper_contract(piper),))
+    if runtime_observer is not None:
+        return DispatchContractCatalog.create(
+            phase32_catalog, (_runtime_contract(runtime_observer),)
+        )
+    if playtest is not None:
+        return DispatchContractCatalog.create(phase32_catalog, (_playtest_contract(playtest),))
     raise ValueError("Phase-32 catalog lacks a reviewed Phase-33 dispatch adapter")

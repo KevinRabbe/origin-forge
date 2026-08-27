@@ -184,6 +184,7 @@ class ManagedLlamaCppCpuLoaderTests(unittest.TestCase):
         )
         return profile, provider, lease, executable, model
 
+    @unittest.skipUnless(os.name == "posix", "fake executable fixture requires POSIX")
     def test_fixed_cpu_argv_minimal_environment_readiness_and_owned_unload(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -260,7 +261,10 @@ class ManagedLlamaCppCpuLoaderTests(unittest.TestCase):
             target = root / "real-llama-server"
             _write_executable(target, _FAKE_SERVER)
             link = root / "llama-server"
-            link.symlink_to(target)
+            try:
+                link.symlink_to(target)
+            except OSError as exc:
+                self.skipTest(f"symlink capability unavailable: {exc}")
             profile, provider, lease, _, model = self._fixture(root, executable=link)
             loader = ManagedLlamaCppCpuLoader(root, provider)
             with self.assertRaisesRegex(ManagedLlamaCppLoaderError, "symlink"):

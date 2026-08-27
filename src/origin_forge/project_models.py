@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Iterable
 
 from .ids import IdKind, validate_id
 

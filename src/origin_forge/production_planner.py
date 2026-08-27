@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from .model import ModelAdapter, ModelRequest, ModelResponse
 from .production_planning_evidence import (
-    ProductionPlanningEvidenceError,
     ProductionPlanningEvidenceStore,
     goal_planning_hash,
 )

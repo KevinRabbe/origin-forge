@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from .production_work_order_models import (
     DispatchContract,
@@ -12,7 +13,6 @@ from .production_work_order_models import (
     canonical_bytes,
     content_hash,
 )
-
 
 _FIELD_RE = re.compile(r"^[a-z][a-z0-9_.-]{0,95}$")
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,127}$")
@@ -64,7 +64,7 @@ class PayloadFieldRule:
     def __post_init__(self) -> None:
         object.__setattr__(self, "name", _field_name(self.name))
         if not isinstance(self.kind, PayloadFieldKind):
-            raise ValueError("payload field kind must be a PayloadFieldKind")
+            raise ValueError("payload field kind must be a PayloadFieldKind")  # noqa: TRY004
         if type(self.required) is not bool:
             raise ValueError("payload field required must be boolean")
         allowed = tuple(self.allowed_values)
@@ -127,6 +127,8 @@ class DispatchPayloadValidator(Protocol):
         payload: dict[str, Any],
         input_refs: tuple[WorkOrderInputRef, ...],
     ) -> dict[str, Any]: ...
+
+    def schema_dict(self) -> dict[str, object]: ...
 
 
 class StaticObjectPayloadValidator:

@@ -188,18 +188,25 @@ class Phase47BSimulationRequestBindingTests(unittest.TestCase):
         self.assertEqual(
             tuple(value.binder_id for value in first.descriptors),
             (
+                "binder.audio.ffmpeg-process@1",
+                "binder.audio.piper-tts@1",
                 "binder.blender.export-glb@1",
+                "binder.build.integration@1",
                 "binder.code.bounded-retry@1",
+                "binder.image.generate@1",
                 "binder.pixelorama.spritesheet-export@1",
+                "binder.playtest.cooperative@1",
+                "binder.runtime.observe@1",
                 "binder.simulation.deterministic@1",
             ),
         )
         code = CodeBoundedRetryInputBinder().descriptor
         pixelorama = PixeloramaSpritesheetExportInputBinder().descriptor
         simulation = DeterministicSimulationInputBinder().descriptor
-        self.assertEqual(first.descriptors[1], code)
-        self.assertEqual(first.descriptors[2], pixelorama)
-        self.assertEqual(first.descriptors[3], simulation)
+        descriptors = {value.binder_id: value for value in first.descriptors}
+        self.assertEqual(descriptors[code.binder_id], code)
+        self.assertEqual(descriptors[pixelorama.binder_id], pixelorama)
+        self.assertEqual(descriptors[simulation.binder_id], simulation)
         self.assertEqual(pixelorama.accepted_input_roles, ("pixelorama_project",))
         self.assertEqual(simulation.accepted_input_roles, ())
         contract = self.dispatch_catalog.contract("simulation.deterministic@1")

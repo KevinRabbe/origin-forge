@@ -13,12 +13,90 @@ permissions:
   contents: read
 
 jobs:
-  unittest:
-    name: Python ${{ matrix.python-version }}
+  fast:
+    name: Fast core / Python 3.12
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run fast core tests
+        env:
+          PYTHONPATH: src
+        run: >-
+          python -W error::ResourceWarning -m unittest -q
+          tests.test_config tests.test_state tests.test_task_dependencies
+          tests.test_doctor_and_version tests.test_worker tests.test_workspaces
+
+  integration-security:
+    name: Integration and security / Python 3.12
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run governed integration and security tests
+        env:
+          PYTHONPATH: src
+        run: >-
+          python -W error::ResourceWarning -m unittest -q
+          tests.test_migrations tests.test_production_dispatch_binding
+          tests.test_production_dispatch_claim_lifecycle
+          tests.test_production_dispatch_execution
+          tests.test_production_dispatch_invocation
+          tests.test_production_build_dispatch_vertical
+          tests.test_production_execution_assembly
+          tests.test_phase57a_model3d_request_authoring
+          tests.test_phase57b_model3d_request_publication
+          tests.test_production_pixelorama_source_dispatch
+
+  quality:
+    name: Quality / Python 3.12
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install quality tools
+        run: python -m pip install --disable-pip-version-check mypy ruff
+
+      - name: Run Ruff
+        run: python -m ruff check src tests
+
+      - name: Run incremental mypy baseline
+        env:
+          PYTHONPATH: src
+        run: python -m mypy --cache-dir "${{ runner.temp }}/origin-forge-mypy"
+
+  unittest:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    # The complete non-real-tool suite is intentionally run on every
+    # platform.  It takes about 20 minutes on the slowest hosted runner;
+    # leave bounded headroom for Python setup and Windows filesystem variance.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.12", "3.13"]
 
     steps:
@@ -30,7 +108,44 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Run strict doctor preflight
+        env:
+          PYTHONPATH: src
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+          import sys
+          from tempfile import TemporaryDirectory
+
+          from origin_forge.runtime import OriginForgeRuntime
+
+          with TemporaryDirectory() as directory:
+              root = Path(directory)
+              OriginForgeRuntime(root).initialize("ci-doctor")
+              completed = subprocess.run(
+                  [
+                      sys.executable,
+                      "-m",
+                      "origin_forge.cli",
+                      "--project-root",
+                      str(root),
+                      "doctor",
+                      "--strict",
+                  ],
+                  check=False,
+                  capture_output=True,
+                  text=True,
+              )
+              if completed.returncode != 0:
+                  raise SystemExit(
+                      "strict doctor preflight failed:\n"
+                      + completed.stdout
+                      + completed.stderr
+                  )
+
       - name: Run unit tests
         env:
           PYTHONPATH: src
-        run: python -W error::ResourceWarning -m unittest discover -s tests -v
+          PYTHONUNBUFFERED: "1"
+        run: python -W error::ResourceWarning .github/ci_unit_suite.py

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import sys
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from origin_forge.lineage import OriginForgeLineage
 from origin_forge.pixelorama_bridge import PixeloramaBridgeProfile
@@ -19,15 +20,28 @@ from origin_forge.pixelorama_models import (
     BridgeBudget,
     BridgeOperation,
     BridgeOutputType,
+    BridgeResultStatus,
     ExportSpec,
     FrameSpec,
     PixeloramaBridgeRequest,
     RasterLayerSpec,
     SpriteProjectSpec,
 )
+from origin_forge.pixelorama_source import (
+    build_pixelorama_source_work_order_payload_from_accepted_design,
+    create_pixelorama_source,
+    create_pixelorama_source_from_accepted_design,
+)
+from origin_forge.production_design_specification_models import DesignAnimationIntent
+from origin_forge.production_design_specification_currentness import AcceptedDesignError
+from origin_forge.production_work_order_models import WorkOrderInputRef, WorkOrderRefType
+from origin_forge.production_work_order_pixelorama import (
+    PIXELORAMA_SOURCE_INPUT_ROLE,
+    PixeloramaSourceCreationDispatchValidator,
+)
+from origin_forge.review import record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import FlowStatus, RunStatus, TaskStatus
-
 
 BRIDGE = r'''import binascii
 import hashlib
@@ -218,6 +232,297 @@ class PixeloramaMediaTests(unittest.TestCase):
         run_verifications = self.runtime.list_verifications("RUN", result.run_id)
         self.assertEqual(len(run_verifications), 1)
         self.assertEqual(run_verifications[0]["status"], "PASS")
+
+    def test_governed_source_creation_uses_bounded_bridge_and_returns_project_evidence(self) -> None:
+        script = self._script("create-source-bridge.py")
+        request = self._request()
+        result = create_pixelorama_source(
+            self.runtime,
+            self.task,
+            self._profile(script),
+            request.sprite_spec,
+            export_specs=request.export_specs,
+            budget=request.budget,
+        )
+        project_outputs = [
+            value
+            for value in result.output_evidence
+            if value.output_type is BridgeOutputType.PIXELORAMA_PROJECT
+        ]
+        self.assertEqual(len(project_outputs), 1)
+        self.assertEqual(result.operation.bridge_result.status, BridgeResultStatus.SUCCEEDED)
+        self.assertFalse(result.to_dict()["canonical_asset_adopted"])
+
+    def test_source_creation_from_accepted_design_records_exact_lineage(self) -> None:
+        request = self._request()
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-accepted",
+                content_hash="sha256:" + "a" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            design_input=SimpleNamespace(design_input_id="DESIGNIN-input"),
+            current=True,
+            stale_reason=None,
+        )
+        result = SimpleNamespace(run_id="RUN-pixelorama")
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                return_value=SimpleNamespace(
+                    planning_input_id="PLAN-input",
+                    content_hash="sha256:" + "c" * 64,
+                ),
+            ),
+            patch(
+                "origin_forge.pixelorama_source.inspect_accepted_design",
+                return_value=expected,
+            ),
+            patch(
+                "origin_forge.pixelorama_source.PixeloramaMediaService.execute",
+                return_value=result,
+            ) as execute,
+        ):
+            actual = create_pixelorama_source_from_accepted_design(
+                self.runtime,
+                self.task,
+                "DESIGNACC-accepted",
+                self._profile(self._script("accepted-design-bridge.py")),
+                request.sprite_spec,
+                export_specs=request.export_specs,
+                budget=request.budget,
+            )
+        self.assertIs(actual, result)
+        lineage = execute.call_args.kwargs["accepted_design_lineage"]
+        self.assertEqual(
+            lineage,
+            {
+                "acceptance_id": "DESIGNACC-accepted",
+                "acceptance_hash": "sha256:" + "a" * 64,
+                "design_input_id": "DESIGNIN-input",
+                "planning_input_id": "PLAN-input",
+                "planning_input_hash": "sha256:" + "c" * 64,
+            },
+        )
+
+    def test_accepted_design_animation_intent_binds_to_source_request(self) -> None:
+        request = self._request()
+        sprite_spec = SpriteProjectSpec(
+            2,
+            2,
+            request.sprite_spec.layers,
+            (FrameSpec("idle-0"), FrameSpec("idle-1"), FrameSpec("idle-2")),
+            output_basename=request.sprite_spec.output_basename,
+        )
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-animation",
+                content_hash="sha256:" + "a" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            design_input=SimpleNamespace(design_input_id="DESIGNIN-input"),
+            specification=SimpleNamespace(
+                deliverables=(
+                    SimpleNamespace(
+                        animation_intents=(
+                            DesignAnimationIntent("idle", 2, 120, "LOOP", 1),
+                        ),
+                    ),
+                ),
+            ),
+            current=True,
+            stale_reason=None,
+        )
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                return_value=SimpleNamespace(
+                    planning_input_id="PLAN-input",
+                    content_hash="sha256:" + "c" * 64,
+                ),
+            ),
+            patch("origin_forge.pixelorama_source.inspect_accepted_design", return_value=expected),
+            patch(
+                "origin_forge.pixelorama_source.PixeloramaMediaService.execute",
+                return_value=SimpleNamespace(run_id="RUN-animation"),
+            ) as execute,
+        ):
+            create_pixelorama_source_from_accepted_design(
+                self.runtime,
+                self.task,
+                "DESIGNACC-animation",
+                self._profile(self._script("animation-bridge.py")),
+                sprite_spec,
+                export_specs=request.export_specs,
+                budget=request.budget,
+            )
+        bound_request = execute.call_args.args[1]
+        self.assertEqual(bound_request.sprite_spec.animations[0].name, "idle")
+        self.assertEqual(bound_request.sprite_spec.animations[0].first_frame, 1)
+        self.assertEqual(bound_request.sprite_spec.animations[0].last_frame, 2)
+
+    def test_design_animation_range_cannot_exceed_supplied_frames(self) -> None:
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-overrun",
+                content_hash="sha256:" + "a" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            design_input=SimpleNamespace(design_input_id="DESIGNIN-input"),
+            specification=SimpleNamespace(
+                deliverables=(
+                    SimpleNamespace(
+                        animation_intents=(DesignAnimationIntent("idle", 2),),
+                    ),
+                ),
+            ),
+            current=True,
+            stale_reason=None,
+        )
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                return_value=SimpleNamespace(
+                    planning_input_id="PLAN-input",
+                    content_hash="sha256:" + "c" * 64,
+                ),
+            ),
+            patch("origin_forge.pixelorama_source.inspect_accepted_design", return_value=expected),
+            patch("origin_forge.pixelorama_source.PixeloramaMediaService.execute") as execute,
+            self.assertRaisesRegex(
+                AcceptedDesignError,
+                "exceeds supplied raster frames",
+            ),
+        ):
+            create_pixelorama_source_from_accepted_design(
+                self.runtime,
+                self.task,
+                "DESIGNACC-overrun",
+                self._profile(self._script("overrun-bridge.py")),
+                self._request().sprite_spec,
+            )
+        execute.assert_not_called()
+
+    def test_accepted_animation_intent_builds_canonical_work_order_payload(self) -> None:
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-work-order",
+                content_hash="sha256:" + "a" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            specification=SimpleNamespace(
+                deliverables=(
+                    SimpleNamespace(
+                        animation_intents=(DesignAnimationIntent("run", 2, 80, "LOOP", 1),),
+                    ),
+                ),
+            ),
+            current=True,
+            stale_reason=None,
+        )
+        sprite_spec = SpriteProjectSpec(
+            2,
+            2,
+            (RasterLayerSpec("base", "Base"),),
+            (FrameSpec("run-0"), FrameSpec("run-1"), FrameSpec("run-2")),
+            output_basename="runner",
+        )
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                return_value=SimpleNamespace(),
+            ),
+            patch("origin_forge.pixelorama_source.inspect_accepted_design", return_value=expected),
+        ):
+            payload = build_pixelorama_source_work_order_payload_from_accepted_design(
+                self.runtime,
+                "DESIGNACC-work-order",
+                sprite_spec,
+            )
+        self.assertEqual(payload["operation"], "CREATE_SPRITE_PROJECT")
+        self.assertEqual(
+            payload["sprite_spec"]["animations"],
+            [{"name": "run", "first_frame": 1, "last_frame": 2, "loop_mode": "LOOP"}],
+        )
+        validated = PixeloramaSourceCreationDispatchValidator().validate(
+            payload,
+            (
+                WorkOrderInputRef(
+                    ref_type=WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,
+                    ref_id="DESIGNACC-work-order",
+                    content_hash="a" * 64,
+                    role=PIXELORAMA_SOURCE_INPUT_ROLE,
+                    revision=None,
+                ),
+            ),
+        )
+        self.assertEqual(validated, payload)
+
+    def test_source_creation_from_stale_accepted_design_fails_closed(self) -> None:
+        request = self._request()
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-stale",
+                content_hash="sha256:" + "b" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            design_input=SimpleNamespace(design_input_id="DESIGNIN-input"),
+            current=False,
+            stale_reason="goal revision drifted",
+        )
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                side_effect=RuntimeError("accepted design is stale: goal revision drifted"),
+            ),
+            patch(
+                "origin_forge.pixelorama_source.inspect_accepted_design",
+                return_value=expected,
+            ),
+            self.assertRaisesRegex(RuntimeError, "accepted design is stale"),
+        ):
+            create_pixelorama_source_from_accepted_design(
+                self.runtime,
+                self.task,
+                "DESIGNACC-stale",
+                self._profile(self._script("stale-design-bridge.py")),
+                request.sprite_spec,
+            )
+
+    def test_created_project_requires_human_review_before_explicit_adoption(self) -> None:
+        script = self._script("review-source-bridge.py")
+        request = self._request()
+        before = self.runtime.get_task(self.task)
+        result = create_pixelorama_source(
+            self.runtime,
+            self.task,
+            self._profile(script),
+            request.sprite_spec,
+            export_specs=request.export_specs,
+            budget=request.budget,
+        )
+        project = next(
+            value
+            for value in result.output_evidence
+            if value.output_type is BridgeOutputType.PIXELORAMA_PROJECT
+        )
+        rejected = record_task_review_decision(
+            self.runtime, self.task, "reject", rationale="sprite silhouette needs revision"
+        )
+        refined = record_task_review_decision(
+            self.runtime, self.task, "refine", rationale="rework the silhouette"
+        )
+        adopted = PixeloramaOutputAdopter(self.runtime).adopt_new(
+            project.artifact_id, "assets/sprites/reviewed-sprite.pxo"
+        )
+        self.assertTrue(rejected.startswith("DEC-"))
+        self.assertTrue(refined.startswith("DEC-"))
+        after = self.runtime.get_task(self.task)
+        self.assertEqual(after["status"], before["status"])
+        self.assertEqual(after["revision"], before["revision"])
+        self.assertIsNone(after["assigned_run_id"])
+        self.assertEqual(self.runtime.list_verifications("TASK", self.task), [])
+        self.assertEqual(adopted.source_artifact_id, project.artifact_id)
         self.assertFalse(result.to_dict()["task_status_changed"])
         self.assertFalse(result.to_dict()["canonical_asset_adopted"])
 

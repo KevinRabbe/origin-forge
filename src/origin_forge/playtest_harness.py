@@ -19,8 +19,7 @@ from .playtest_models import (
     PlaytestTelemetryKind,
 )
 from .runtime_observation_models import canonical_bytes
-from .runtime_observer import sha256_file
-
+from .runtime_observer import _WindowsProcessJob, sha256_file
 
 _MAX_TELEMETRY_BYTES = 8 * 1024 * 1024
 
@@ -83,6 +82,20 @@ def _drain_bounded(
 
 
 def _terminate_group(process: subprocess.Popen[bytes]) -> None:
+    if os.name == "nt":
+        try:
+            process.terminate()
+        except ProcessLookupError:
+            return
+        deadline = time.monotonic() + 0.5
+        while process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if process.poll() is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+        return
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -189,8 +202,6 @@ class CooperativePlaytestHarness:
         target_version: str,
         fixed_args: tuple[str, ...] = (),
     ):
-        if os.name != "posix":
-            raise PlaytestHarnessError("cooperative playtest harness v1 requires POSIX")
         self.workspace_root = Path(workspace_root)
         self.executable = Path(executable)
         self.executable_hash = executable_hash
@@ -284,16 +295,22 @@ class CooperativePlaytestHarness:
             "ORIGIN_FORGE_PLAYTEST_SCENARIO": str(scenario_path),
             "ORIGIN_FORGE_PLAYTEST_TELEMETRY": str(telemetry_path),
         }
+        popen_options = {
+            "cwd": workspace,
+            "env": env,
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "shell": False,
+        }
+        if os.name == "posix":
+            popen_options["start_new_session"] = True
+        else:
+            popen_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
         process = subprocess.Popen(
-            [str(self.executable), *self.fixed_args],
-            cwd=workspace,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=False,
-            start_new_session=True,
+            [str(self.executable), *self.fixed_args], **popen_options
         )
+        process_job = _WindowsProcessJob(process) if os.name == "nt" else None
         assert process.stdout is not None
         assert process.stderr is not None
         stdout = bytearray()
@@ -378,17 +395,21 @@ class CooperativePlaytestHarness:
         for path in workspace.rglob("*"):
             if path.is_symlink():
                 raise PlaytestHarnessError("playtest workspace contains a symlink")
-        return PlaytestHarnessExecution(
-            scenario=scenario,
-            telemetry=telemetry,
-            workspace_path=workspace,
-            stdout_path=stdout_path,
-            stderr_path=stderr_path,
-            stdout_hash=_hash_bytes(stdout_bytes),
-            stderr_hash=_hash_bytes(stderr_bytes),
-            stdout_bytes=len(stdout_bytes),
-            stderr_bytes=len(stderr_bytes),
-            process_duration_ms=process_duration_ms,
-            exit_code=exit_code,
-            timed_out=timed_out,
-        )
+        try:
+            return PlaytestHarnessExecution(
+                scenario=scenario,
+                telemetry=telemetry,
+                workspace_path=workspace,
+                stdout_path=stdout_path,
+                stderr_path=stderr_path,
+                stdout_hash=_hash_bytes(stdout_bytes),
+                stderr_hash=_hash_bytes(stderr_bytes),
+                stdout_bytes=len(stdout_bytes),
+                stderr_bytes=len(stderr_bytes),
+                process_duration_ms=process_duration_ms,
+                exit_code=exit_code,
+                timed_out=timed_out,
+            )
+        finally:
+            if process_job is not None:
+                process_job.close()

@@ -27,6 +27,45 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(config.resource_models.profiles, ())
             self.assertEqual(config.resource_models.policies, ())
             self.assertEqual(config.model_runtimes.providers, ())
+            self.assertEqual(config.external_tools.paths, ())
+
+    def test_explicit_external_tool_paths_are_parsed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / ".origin-forge"
+            state.mkdir()
+            git_path = (root / "tools" / "git.exe").resolve()
+            blender_path = (root / "tools" / "blender.exe").resolve()
+            (state / "config.toml").write_text(
+                f'''version = 6
+[tools]
+git = "{git_path.as_posix()}"
+blender = "{blender_path.as_posix()}"
+''',
+                encoding="utf-8",
+            )
+            config = load_config(root)
+            self.assertEqual(config.external_tools.path("git"), str(git_path))
+            self.assertEqual(config.external_tools.path("blender"), str(blender_path))
+            self.assertIsNone(config.external_tools.path("ffmpeg"))
+
+    def test_external_tool_paths_must_be_absolute_and_known(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / ".origin-forge"
+            state.mkdir()
+            (state / "config.toml").write_text(
+                'version = 6\n[tools]\nffmpeg = "bin/ffmpeg"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "absolute path"):
+                load_config(root)
+            (state / "config.toml").write_text(
+                'version = 6\n[tools]\nunknown = "/opt/tool"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "unknown fields"):
+                load_config(root)
 
     def test_v1_empty_command_config_remains_readable(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

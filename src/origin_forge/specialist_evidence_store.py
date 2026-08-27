@@ -14,7 +14,7 @@ from .specialist_models import (
     SpecialistEvidenceRef,
     SpecialistModelError,
 )
-from .specialist_store import SpecialistStore, SpecialistStoreError
+from .specialist_store import SpecialistStore
 
 
 class SpecialistEvidenceStoreError(RuntimeError):

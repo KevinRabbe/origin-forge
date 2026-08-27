@@ -7,7 +7,6 @@ from origin_forge.ids import IdKind, new_id
 from origin_forge.training_research_models import (
     ResearchDisclosureClass,
     TrainingAcceptancePolicy,
-    TrainingDatasetEntry,
     TrainingDatasetManifest,
     TrainingDatasetSplit,
     TrainingEligibilityAudit,

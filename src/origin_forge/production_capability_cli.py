@@ -50,25 +50,25 @@ def main(argv: list[str] | None = None) -> int:
             _print(capability_read_status(runtime))
             return 0
         if args.command == "catalog-show":
-            value = read_capability_catalog(runtime, args.catalog_id)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            catalog_value = read_capability_catalog(runtime, args.catalog_id)
+            _print({**catalog_value.to_dict(), "content_hash": catalog_value.content_hash})
             return 0
         if args.command == "policy-show":
-            value = read_capability_policy(runtime, args.policy_id)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            policy_value = read_capability_policy(runtime, args.policy_id)
+            _print({**policy_value.to_dict(), "content_hash": policy_value.content_hash})
             return 0
         if args.command == "route-show":
-            value = read_capability_route(runtime, args.route_decision_id)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            route_value = read_capability_route(runtime, args.route_decision_id)
+            _print({**route_value.to_dict(), "content_hash": route_value.content_hash})
             return 0
         if args.command == "task-route":
-            value = inspect_task_route(
+            task_route_value = inspect_task_route(
                 runtime,
                 args.task_id,
                 args.catalog_id,
                 args.policy_id,
             )
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            _print({**task_route_value.to_dict(), "content_hash": task_route_value.content_hash})
             return 0
     except (KeyError, OSError, RuntimeError, TypeError, ValueError, ProductionCapabilityReadError) as exc:
         _print({"error": type(exc).__name__, "detail": str(exc)})

@@ -16,6 +16,7 @@ from .production_dispatch_binding_models import (
     DispatchBindingAudit,
     DispatchBindingCurrentness,
     DispatchBindingCurrentnessStatus,
+    DispatchBindingModelError,
 )
 from .production_dispatch_resolvers import WorkOrderInputResolverRegistry
 from .production_dispatch_store import (
@@ -157,7 +158,7 @@ def _load_envelope(
         envelope = json.loads(raw.decode("utf-8"), object_pairs_hook=_strict_object)
     except ProductionDispatchReadError:
         raise
-    except Exception as exc:
+    except (DispatchBindingError, DispatchBindingModelError, TypeError, ValueError) as exc:
         raise ProductionDispatchReadError(
             "production dispatch object is not strict UTF-8 JSON"
         ) from exc
@@ -384,6 +385,16 @@ def inspect_dispatch_binding_currentness_readonly(
             and resolved[0].source_object_type == "ARTIFACT"
             and resolved[0].resolution_class == "CANONICAL_ARTIFACT"
         )
+        pixelorama_source_input = (
+            binding.selected_adapter_id == "originforge.pixelorama.source"
+            and binding.dispatch_contract_id == "pixelorama.source-create@1"
+            and binding.binder_id == "binder.pixelorama.source-create@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "DESIGN_SPECIFICATION_ACCEPTANCE"
+            and resolved[0].original_ref.role == "accepted_design"
+            and resolved[0].source_object_type == "ACCEPTED_DESIGN"
+            and resolved[0].resolution_class == "CURRENT_ACCEPTED_DESIGN"
+        )
         blender_input = (
             binding.selected_adapter_id == "originforge.blender.model3d"
             and binding.dispatch_contract_id == "blender.export-glb@1"
@@ -394,7 +405,57 @@ def inspect_dispatch_binding_currentness_readonly(
             and resolved[0].source_object_type == "MODEL3D_REQUEST"
             and resolved[0].resolution_class == "PROTECTED_MODEL3D_REQUEST"
         )
-        if not (pixelorama_input or blender_input):
+        piper_input = (
+            binding.selected_adapter_id == "originforge.audio.piper"
+            and binding.dispatch_contract_id == "audio.piper-tts@1"
+            and binding.binder_id == "binder.audio.piper-tts@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "AUDIO_PROFILE"
+            and resolved[0].original_ref.role == "audio_profile"
+            and resolved[0].source_object_type == "AUDIO_PROFILE"
+            and resolved[0].resolution_class == "PROTECTED_AUDIO_PROFILE"
+        )
+        ffmpeg_input = (
+            binding.selected_adapter_id == "originforge.audio.ffmpeg"
+            and binding.dispatch_contract_id == "audio.ffmpeg-process@1"
+            and binding.binder_id == "binder.audio.ffmpeg-process@1"
+            and len(resolved) == 2
+            and {value.original_ref.role for value in resolved}
+            == {"audio_source", "audio_profile"}
+            and any(value.source_object_type == "AUDIO_SOURCE" and value.resolution_class == "PROTECTED_PCM16_WAV" for value in resolved)
+            and any(value.source_object_type == "AUDIO_PROFILE" and value.resolution_class == "PROTECTED_AUDIO_PROFILE" for value in resolved)
+        )
+        runtime_input = (
+            binding.selected_adapter_id == "originforge.runtime.observe"
+            and binding.dispatch_contract_id == "runtime.observe@1"
+            and binding.binder_id == "binder.runtime.observe@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "RUNTIME_OBSERVATION_REQUEST"
+            and resolved[0].original_ref.role == "runtime_observation_request"
+            and resolved[0].source_object_type == "RUNTIME_OBSERVATION_REQUEST"
+            and resolved[0].resolution_class == "PROTECTED_RUNTIME_OBSERVATION_REQUEST"
+        )
+        playtest_input = (
+            binding.selected_adapter_id == "originforge.playtest.cooperative"
+            and binding.dispatch_contract_id == "playtest.cooperative@1"
+            and binding.binder_id == "binder.playtest.cooperative@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "PLAYTEST_SCENARIO"
+            and resolved[0].original_ref.role == "playtest_scenario"
+            and resolved[0].source_object_type == "PLAYTEST_SCENARIO"
+            and resolved[0].resolution_class == "PROTECTED_PLAYTEST_SCENARIO"
+        )
+        build_input = (
+            binding.selected_adapter_id == "originforge.build.integration"
+            and binding.dispatch_contract_id == "build.integration@1"
+            and binding.binder_id == "binder.build.integration@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "WORKSPACE"
+            and resolved[0].original_ref.role == "build_workspace"
+            and resolved[0].source_object_type == "WORKSPACE"
+            and resolved[0].resolution_class == "AUDITED_WORKSPACE"
+        )
+        if not (pixelorama_input or pixelorama_source_input or blender_input or piper_input or ffmpeg_input or runtime_input or playtest_input or build_input):
             return result(
                 DispatchBindingCurrentnessStatus.STALE_INPUT,
                 "current read-only nonzero-ref eligibility is limited to exact reviewed production contracts",
@@ -421,7 +482,7 @@ def inspect_dispatch_binding_currentness_readonly(
             binder.bind(work_order, bundle),
             binding.dispatch_binding_id,
         )
-    except Exception as exc:
+    except (DispatchBindingError, DispatchBindingModelError, TypeError, ValueError) as exc:
         return result(
             DispatchBindingCurrentnessStatus.BINDER_DRIFT,
             f"{type(exc).__name__}: {exc}",

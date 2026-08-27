@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import cast
 
 from .production_interface_server import create_production_interface_server
 from .production_interface_snapshot import build_production_interface_snapshot
@@ -38,7 +39,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "serve":
             server = create_production_interface_server(runtime, port=args.port)
-            host, port = server.server_address[:2]
+            host = cast(str, server.server_address[0])
+            port = cast(int, server.server_address[1])
             print(f"Origin Forge read-only cockpit: http://{host}:{port}/")
             try:
                 server.serve_forever()

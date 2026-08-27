@@ -43,9 +43,22 @@ policies = []
 
 [model_runtimes]
 providers = []
+
+[tools]
+# Optional external capability executables. Values must be absolute paths.
 '''
 
 _SERVER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+EXTERNAL_TOOL_IDS = (
+    "git",
+    "podman",
+    "blender",
+    "pixelorama",
+    "ffmpeg",
+    "piper",
+    "llama_cpp",
+    "openssl",
+)
 
 
 @dataclass(frozen=True)
@@ -78,6 +91,19 @@ class LspServerConfig:
 
 
 @dataclass(frozen=True)
+class ExternalToolConfig:
+    """Explicit, local-only paths for optional external capabilities."""
+
+    paths: tuple[tuple[str, str], ...] = ()
+
+    def path(self, tool_id: str) -> str | None:
+        for configured_id, value in self.paths:
+            if configured_id == tool_id:
+                return value
+        return None
+
+
+@dataclass(frozen=True)
 class ProjectConfig:
     version: int
     policy_profile: str
@@ -94,6 +120,7 @@ class ProjectConfig:
     lsp_servers: tuple[LspServerConfig, ...] = ()
     resource_models: ResourceModelConfig = field(default_factory=ResourceModelConfig.disabled)
     model_runtimes: ModelRuntimeConfig = field(default_factory=ModelRuntimeConfig.empty)
+    external_tools: ExternalToolConfig = field(default_factory=ExternalToolConfig)
 
     def command(self, category: Literal["build", "test"], name: str) -> CommandSpec:
         commands = (
@@ -261,6 +288,28 @@ def _lsp_servers(raw: object) -> tuple[LspServerConfig, ...]:
     return tuple(result)
 
 
+def _external_tools(raw: object) -> ExternalToolConfig:
+    if raw is None:
+        return ExternalToolConfig()
+    if not isinstance(raw, dict):
+        raise ValueError("tools must be a TOML table")
+    unknown = set(raw) - set(EXTERNAL_TOOL_IDS)
+    if unknown:
+        raise ValueError(f"tools has unknown fields: {sorted(unknown)}")
+    paths: list[tuple[str, str]] = []
+    for tool_id in EXTERNAL_TOOL_IDS:
+        value = raw.get(tool_id)
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"tools.{tool_id} must be a non-empty absolute path")
+        path = Path(value.strip())
+        if not path.is_absolute():
+            raise ValueError(f"tools.{tool_id} must be an absolute path")
+        paths.append((tool_id, str(path)))
+    return ExternalToolConfig(tuple(paths))
+
+
 def load_config(project_root: str | Path) -> ProjectConfig:
     path = ensure_config(project_root)
     with path.open("rb") as handle:
@@ -331,6 +380,7 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         if version >= 6
         else ModelRuntimeConfig.empty()
     )
+    external_tools = _external_tools(raw.get("tools"))
 
     parser = _legacy_commands if version == 1 else _structured_commands
     return ProjectConfig(
@@ -349,4 +399,5 @@ def load_config(project_root: str | Path) -> ProjectConfig:
         lsp_servers=_lsp_servers(code_intelligence.get("lsp_servers")),
         resource_models=resource_models,
         model_runtimes=model_runtimes,
+        external_tools=external_tools,
     )

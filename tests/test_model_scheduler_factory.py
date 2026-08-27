@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from origin_forge.model_scheduler import ModelRole, ModelSelectionPolicy
+from origin_forge.model_scheduler import ModelRole
 from origin_forge.model_scheduler_factory import (
     ModelSchedulingDisabled,
     create_model_scheduling,

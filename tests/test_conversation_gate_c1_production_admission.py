@@ -329,8 +329,8 @@ class ConversationGateC1ProductionAdmissionTests(unittest.TestCase):
         self.assertEqual(self.runtime.count_goals(), 1)
         self.assertEqual(self.runtime.list_goals()[0]["id"], admitted.goal_id)
 
-    def test_gate_c1_schema_is_v19_and_contains_handoff_constraints(self) -> None:
-        self.assertEqual(SCHEMA_VERSION, 21)
+    def test_gate_c1_handoff_constraints_are_preserved_in_current_schema(self) -> None:
+        self.assertGreaterEqual(SCHEMA_VERSION, 27)
         with self.runtime.store.session() as conn:
             tables = {
                 row["name"]

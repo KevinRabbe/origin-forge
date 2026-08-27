@@ -19,7 +19,6 @@ from origin_forge.production_dispatch_resolvers import (
     WorkOrderInputResolverRegistry,
     build_core_input_resolver_registry,
 )
-from origin_forge.production_evidence_read import ProductionEvidenceReadService
 from origin_forge.production_work_order_models import (
     WorkOrderInputRef,
     WorkOrderRefType,

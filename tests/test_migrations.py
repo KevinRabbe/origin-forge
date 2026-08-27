@@ -5,12 +5,96 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from origin_forge.db import SCHEMA_VERSION
+from origin_forge.db import SCHEMA_VERSION, migrate, verify_database_backup
 from origin_forge.migrations import MIGRATION_001, MIGRATIONS
 from origin_forge.service import OriginForgeStore
 
 
 class MigrationTests(unittest.TestCase):
+    def test_latest_schema_records_and_validates_migration_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "project.db"
+            conn = sqlite3.connect(path)
+            try:
+                migrate(conn, "2026-01-01T00:00:00Z")
+                columns = {
+                    row[1]
+                    for row in conn.execute("PRAGMA table_info(schema_migrations)")
+                }
+                self.assertIn("migration_hash", columns)
+                binding_sql = conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'audio_dispatch_output_bindings'"
+                ).fetchone()[0]
+                self.assertIn("originforge.execution.audio.piper-tts@1", binding_sql)
+                self.assertIn("originforge.execution.audio.ffmpeg-process@1", binding_sql)
+                source_binding_sql = conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'pixelorama_source_dispatch_output_bindings'"
+                ).fetchone()[0]
+                self.assertIn("originforge.execution.pixelorama.source-create@1", source_binding_sql)
+                self.assertIn("output_type IN ('PIXELORAMA_PROJECT', 'PNG', 'SPRITESHEET')", source_binding_sql)
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM schema_migrations WHERE migration_hash IS NOT NULL"
+                ).fetchone()[0]
+                self.assertEqual(count, SCHEMA_VERSION)
+                conn.execute(
+                    "UPDATE schema_migrations SET migration_hash = 'sha256:tampered' WHERE version = 1"
+                )
+                conn.commit()
+                with self.assertRaisesRegex(RuntimeError, "hash drifted"):
+                    migrate(conn, "2026-01-02T00:00:00Z")
+            finally:
+                conn.close()
+
+    def test_upgrade_creates_non_overwriting_backup_before_migration(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "project.db"
+            conn = sqlite3.connect(path)
+            try:
+                conn.executescript(MIGRATION_001)
+                conn.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (1, '2026-01-01T00:00:00Z')"
+                )
+                conn.commit()
+                backup = Path(temp) / "backups" / "project.db.before-latest.bak"
+                migrate(conn, "2026-01-02T00:00:00Z", backup_path=backup)
+            finally:
+                conn.close()
+            self.assertTrue(backup.is_file())
+            saved = sqlite3.connect(backup)
+            try:
+                self.assertEqual(
+                    saved.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],
+                    1,
+                )
+            finally:
+                saved.close()
+            backup.write_bytes(b"operator-preserved")
+            unchanged = sqlite3.connect(path)
+            try:
+                migrate(unchanged, "2026-01-03T00:00:00Z", backup_path=backup)
+            finally:
+                unchanged.close()
+            self.assertEqual(backup.read_bytes(), b"operator-preserved")
+
+    def test_backup_verification_is_read_only_and_detects_tampering(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "project.db"
+            conn = sqlite3.connect(path)
+            try:
+                conn.executescript(MIGRATION_001)
+                conn.execute(
+                    "INSERT INTO schema_migrations(version, applied_at) VALUES (1, '2026-01-01T00:00:00Z')"
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            report = verify_database_backup(path)
+            self.assertTrue(report["valid"])
+            self.assertEqual(report["schema_version"], 1)
+            path.write_bytes(b"tampered")
+            tampered = verify_database_backup(path)
+            self.assertFalse(tampered["valid"])
+
     def test_version_one_database_upgrades_to_latest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "project.db"
@@ -34,7 +118,6 @@ class MigrationTests(unittest.TestCase):
                 }
 
             self.assertEqual(version, SCHEMA_VERSION)
-            self.assertEqual(SCHEMA_VERSION, 21)
             self.assertIn("revision", goal_columns)
             with store.session() as upgraded:
                 workspace_columns = {
@@ -130,6 +213,9 @@ class MigrationTests(unittest.TestCase):
                 "design_specifications",
                 "design_specification_audits",
                 "design_specification_acceptances",
+                "model3d_request_inputs",
+                "model3d_request_proposals",
+                "model3d_request_audits",
             ):
                 self.assertIn(table, tables)
             self.assertIn("idx_entity_relations_active_unique", relation_indexes)
@@ -394,7 +480,7 @@ class MigrationTests(unittest.TestCase):
                     (claim_id,),
                 ).fetchone()
 
-            self.assertEqual(version, 21)
+            self.assertEqual(version, SCHEMA_VERSION)
             self.assertEqual(after, before)
             self.assertEqual(consumed["status"], "CONSUMED")
             self.assertEqual(consumed["revision"], 1)

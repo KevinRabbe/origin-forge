@@ -5,8 +5,16 @@ import threading
 import time
 import unittest
 
-from origin_forge.lsp_protocol import LspProtocolError, encode_lsp_message, read_lsp_message
-from origin_forge.lsp_session import LspJsonRpcSession, LspRemoteError, LspRequestTimeout
+from origin_forge.lsp_protocol import (
+    LspProtocolError,
+    encode_lsp_message,
+    read_lsp_message,
+)
+from origin_forge.lsp_session import (
+    LspJsonRpcSession,
+    LspRemoteError,
+    LspRequestTimeout,
+)
 
 
 class _PipePair:
@@ -20,10 +28,10 @@ class _PipePair:
 
     def close(self) -> None:
         for stream in (
-            self.client_reader,
             self.client_writer,
-            self.server_reader,
             self.server_writer,
+            self.client_reader,
+            self.server_reader,
         ):
             try:
                 stream.close()

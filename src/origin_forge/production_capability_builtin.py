@@ -57,6 +57,12 @@ def builtin_production_capabilities() -> tuple[ProductionCapability, ...]:
 
     return (
         _capability(
+            "build.integration",
+            "Build integration",
+            "Run project-approved build commands in the governed sandbox.",
+            CapabilityDomain.GENERAL,
+        ),
+        _capability(
             "design.specify",
             "Design specification",
             "Produce bounded design/specification evidence without implementation authority.",
@@ -72,6 +78,12 @@ def builtin_production_capabilities() -> tuple[ProductionCapability, ...]:
             "media.2d.export",
             "2D media export",
             "Run the governed Pixelorama export boundary over isolated media state.",
+            CapabilityDomain.MEDIA_2D,
+        ),
+        _capability(
+            "media.2d.source",
+            "2D source production",
+            "Create governed Pixelorama source and animation state from accepted design evidence.",
             CapabilityDomain.MEDIA_2D,
         ),
         _capability(
@@ -135,6 +147,14 @@ def builtin_trusted_production_adapters() -> tuple[TrustedProductionAdapter, ...
 
     return (
         _adapter(
+            "originforge.build.integration",
+            "originforge.build",
+            ("build.integration",),
+            AdapterExecutionEffect.WORKSPACE_MUTATION,
+            AdapterReplayClass.REVISION_BOUND,
+            "build integration sandbox boundary",
+        ),
+        _adapter(
             "originforge.code.bounded-retry",
             "originforge.code",
             ("code.change",),
@@ -149,6 +169,14 @@ def builtin_trusted_production_adapters() -> tuple[TrustedProductionAdapter, ...
             AdapterExecutionEffect.MEDIA_WORKSPACE_MUTATION,
             AdapterReplayClass.RUNTIME_BOUND,
             "pixelorama governed export boundary",
+        ),
+        _adapter(
+            "originforge.pixelorama.source",
+            "originforge.pixelorama",
+            ("media.2d.source",),
+            AdapterExecutionEffect.MEDIA_WORKSPACE_MUTATION,
+            AdapterReplayClass.RUNTIME_BOUND,
+            "pixelorama governed source creation boundary",
         ),
         _adapter(
             "originforge.blender.model3d",

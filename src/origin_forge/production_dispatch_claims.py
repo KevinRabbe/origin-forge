@@ -4,10 +4,16 @@ import sqlite3
 
 from .ids import IdKind, new_id, validate_id
 from .production_capability_routing import task_routing_hash
-from .production_dispatch_binding import build_builtin_dispatch_binder_registry
+from .production_dispatch_binding import (
+    build_builtin_dispatch_binder_registry,
+    build_pixelorama_source_dispatch_binder_registry,
+)
 from .production_dispatch_binding_models import DispatchBindingCurrentnessStatus
 from .production_dispatch_claim_models import DispatchClaim, DispatchClaimStatus
-from .production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
+from .production_dispatch_phase_resolvers import (
+    build_dispatch_input_resolver_registry,
+    build_source_dispatch_input_resolver_registry,
+)
 from .production_dispatch_read import (
     ProductionDispatchReadError,
     inspect_dispatch_binding_currentness_readonly,
@@ -69,8 +75,6 @@ def acquire_dispatch_claim(
         expected_task_revision,
     )
 
-    resolver_registry = build_dispatch_input_resolver_registry()
-    binder_registry = build_builtin_dispatch_binder_registry()
     try:
         binding = read_dispatch_binding(runtime, dispatch_binding_id)
         audit = read_dispatch_binding_audit(runtime, binding_audit_id)
@@ -79,6 +83,16 @@ def acquire_dispatch_claim(
         raise DispatchClaimError(
             "dispatch claim requires exact revalidated Phase-34 evidence"
         ) from exc
+
+    if (
+        binding.selected_adapter_id == "originforge.pixelorama.source"
+        and binding.dispatch_contract_id == "pixelorama.source-create@1"
+    ):
+        resolver_registry = build_source_dispatch_input_resolver_registry()
+        binder_registry = build_pixelorama_source_dispatch_binder_registry()
+    else:
+        resolver_registry = build_dispatch_input_resolver_registry()
+        binder_registry = build_builtin_dispatch_binder_registry()
 
     if (
         audit.dispatch_binding_id != binding.dispatch_binding_id

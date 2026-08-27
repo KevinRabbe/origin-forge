@@ -8,6 +8,13 @@ from .pixelorama_adoption import (
     GovernedPixeloramaOutputAdopter,
     PixeloramaAdoptionError,
 )
+from .pixelorama_source import (
+    PixeloramaSourceImportError,
+    import_pixelorama_source,
+    inspect_pixelorama_source,
+    inspect_pixelorama_source_history,
+    replace_pixelorama_source,
+)
 from .production_pixelorama_adoption import (
     GovernedPixeloramaProductionOutputAdopter,
     PixeloramaProductionAdoptionError,
@@ -80,6 +87,31 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         dest="operational_private_key",
     )
+
+    source_import = commands.add_parser(
+        "source-import",
+        help="register an existing project-contained .pxo source as governed evidence",
+    )
+    source_import.add_argument("source_path")
+
+    source_inspect = commands.add_parser(
+        "source-inspect",
+        help="inspect one governed Pixelorama source without mutation",
+    )
+    source_inspect.add_argument("artifact_id")
+
+    source_history = commands.add_parser(
+        "source-history",
+        help="inspect the immutable Pixelorama source revision chain",
+    )
+    source_history.add_argument("artifact_id")
+
+    source_replace = commands.add_parser(
+        "source-replace",
+        help="register a new immutable .pxo source revision linked to a prior source",
+    )
+    source_replace.add_argument("previous_artifact_id")
+    source_replace.add_argument("source_path")
     return parser
 
 
@@ -117,9 +149,21 @@ def main(argv: list[str] | None = None) -> int:
                 args.certificate_id,
                 operational_private_key_handle=args.operational_private_key,
             )
+        elif args.command == "source-import":
+            result = import_pixelorama_source(runtime, args.source_path)
+        elif args.command == "source-inspect":
+            result = inspect_pixelorama_source(runtime, args.artifact_id)
+        elif args.command == "source-history":
+            result = inspect_pixelorama_source_history(runtime, args.artifact_id)
+        elif args.command == "source-replace":
+            result = replace_pixelorama_source(
+                runtime,
+                args.previous_artifact_id,
+                args.source_path,
+            )
         else:  # pragma: no cover - argparse owns the closed command set.
             raise ValueError("unsupported Pixelorama admin command")
-        _print(result.to_dict())
+        _print(result if isinstance(result, dict) else result.to_dict())
         return 0
     except PixeloramaProductionProvenanceSigningError as exc:
         _print({"error": exc.code.value, "detail": str(exc)})
@@ -132,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         PixeloramaProductionAdoptionError,
         PixeloramaDispatchOutputBindingReadError,
         PixeloramaProductionTaskAcceptorError,
+        PixeloramaSourceImportError,
         OSError,
         ValueError,
     ) as exc:

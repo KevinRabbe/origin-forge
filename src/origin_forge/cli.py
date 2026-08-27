@@ -8,8 +8,28 @@ from enum import StrEnum
 from pathlib import Path
 
 from .adapters.llamacpp import LlamaCppAdapter, LlamaCppError
+from .code_adoption import VerifiedCodeAdopter
 from .config import load_config
+from .context_preview import build_context_preview
+from .doctor import inspect_project
+from .orchestration_cli import main as bounded_attempt_main
 from .patches import PatchValidationError
+from .pixelorama_source import (
+    import_pixelorama_source,
+    inspect_pixelorama_source,
+    inspect_pixelorama_source_history,
+    replace_pixelorama_source,
+)
+from .plan import inspect_goal_plan
+from .production_actions import (
+    accept_production_execution,
+    adopt_production_execution,
+    inspect_production_execution,
+    refine_production_execution,
+    reject_production_execution,
+    replace_production_execution,
+)
+from .production_dispatch_recovery import recover_dispatch_execution_once
 from .production_goal_bootstrap_operator import (
     GoalBootstrapOperatorBlocked,
     GoalBootstrapOperatorError,
@@ -19,11 +39,18 @@ from .production_goal_bootstrap_operator import (
 )
 from .production_manager_advance_bounded import advance_production_manager_bounded
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
+from .production_trace import inspect_task_production_trace
 from .repository import RepositoryAccessError
+from .review import (
+    inspect_task_review,
+    record_task_review_decision,
+    refine_task,
+    replace_task,
+)
+from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .sandbox import SandboxPolicyError, SandboxUnavailable
 from .sandbox_factory import create_sandbox_backend
 from .sandbox_verification import SandboxedWorkspaceVerifier
-from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .service import StaleRevision, VerificationRequired
 from .state import FlowStatus, GoalStatus, InvalidTransition, RunStatus, TaskStatus
 from .worker import LocalPatchWorker
@@ -76,6 +103,14 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser = sub.add_parser("init", help="initialize Origin Forge state")
     init_parser.add_argument("--name", help="project name (default: directory name)")
     sub.add_parser("status", help="show durable runtime status")
+    doctor = sub.add_parser(
+        "doctor", help="inspect project readiness without changing state"
+    )
+    doctor.add_argument(
+        "--strict",
+        action="store_true",
+        help="return failure when any readiness check fails",
+    )
 
     recover_parser = sub.add_parser(
         "recover", help="inspect or reconcile interrupted RUNNING records"
@@ -89,6 +124,115 @@ def build_parser() -> argparse.ArgumentParser:
     manager.add_parser(
         "advance", help="perform exactly one fixed bounded Manager invocation"
     )
+    sub.add_parser(
+        "advance", help="perform exactly one fixed bounded Manager invocation"
+    )
+    context = sub.add_parser("context", help="inspect bounded Task context")
+    context_sub = context.add_subparsers(dest="context_command", required=True)
+    context_preview = context_sub.add_parser(
+        "preview", help="preview selected context without starting an attempt"
+    )
+    context_preview.add_argument("task_id")
+    context_mode = context_preview.add_mutually_exclusive_group(required=True)
+    context_mode.add_argument("--file", action="append", dest="files")
+    context_mode.add_argument("--auto-context", action="store_true")
+    context_preview.add_argument(
+        "--seed-file", action="append", default=[], dest="seed_files"
+    )
+    context_preview.add_argument("--structural-context", action="store_true")
+    context_preview.add_argument("--semantic-context", action="store_true")
+
+    attempt = sub.add_parser("attempt", help="run exactly one bounded coding attempt")
+    attempt.add_argument("task_id")
+    attempt_mode = attempt.add_mutually_exclusive_group(required=True)
+    attempt_mode.add_argument("--file", action="append", dest="files")
+    attempt_mode.add_argument("--auto-context", action="store_true")
+    attempt.add_argument("--seed-file", action="append", default=[], dest="seed_files")
+    attempt.add_argument("--structural-context", action="store_true")
+    attempt.add_argument("--semantic-context", action="store_true")
+    attempt.add_argument("--base-url", default="http://127.0.0.1:8080")
+    attempt.add_argument("--model", default="local-model")
+    attempt.add_argument("--api-key", default="no-key")
+    attempt.add_argument("--timeout", type=float, default=300.0)
+    attempt.add_argument("--max-tokens", type=int, default=4096)
+    attempt.add_argument("--temperature", type=float, default=0.2)
+    attempt.add_argument("--allow-remote", action="store_true")
+    review = sub.add_parser("review", help="inspect reviewable Task evidence")
+    review_sub = review.add_subparsers(dest="review_command", required=True)
+    review_inspect = review_sub.add_parser(
+        "inspect", help="inspect one Task review projection"
+    )
+    review_inspect.add_argument("task_id")
+    for action in ("accept", "reject", "refine", "replace"):
+        review_action = review_sub.add_parser(
+            action, help=f"record a human {action} decision"
+        )
+        review_action.add_argument("task_id")
+        review_action.add_argument("--rationale", required=True)
+        review_action.add_argument("--revision", type=int)
+
+    plan = sub.add_parser("plan", help="inspect governed production plans")
+    plan_sub = plan.add_subparsers(dest="plan_command", required=True)
+    plan_inspect = plan_sub.add_parser(
+        "inspect", help="inspect one Goal plan read-only"
+    )
+    plan_inspect.add_argument("goal_id")
+
+    adopt = sub.add_parser(
+        "adopt", help="explicitly adopt one verified accepted code result"
+    )
+    adopt.add_argument("task_id")
+    adopt.add_argument("--revision", required=True, type=int)
+
+    production = sub.add_parser("production", help="inspect governed production state")
+    production_sub = production.add_subparsers(dest="production_command", required=True)
+    trace = production_sub.add_parser(
+        "trace", help="inspect one correlated Task lifecycle"
+    )
+    trace.add_argument("task_id")
+    production_accept = production_sub.add_parser(
+        "accept", help="accept one supported production execution"
+    )
+    production_accept.add_argument("execution_id")
+    production_accept.add_argument("--actor-id")
+    production_adopt = production_sub.add_parser(
+        "adopt", help="adopt one supported production execution"
+    )
+    production_adopt.add_argument("execution_id")
+    production_adopt.add_argument("destination")
+    for action in ("reject", "refine", "replace"):
+        production_review = production_sub.add_parser(
+            action,
+            help=f"record a human {action} decision for one production execution",
+        )
+        production_review.add_argument("execution_id")
+        production_review.add_argument("--rationale", required=True)
+        production_review.add_argument("--revision", type=int)
+    production_inspect = production_sub.add_parser(
+        "inspect", help="inspect one production execution"
+    )
+    production_inspect.add_argument("execution_id")
+    source = production_sub.add_parser(
+        "source", help="manage governed Pixelorama sources"
+    )
+    source_sub = source.add_subparsers(dest="source_command", required=True)
+    source_import = source_sub.add_parser(
+        "import", help="register one explicit project source"
+    )
+    source_import.add_argument("path")
+    source_inspect = source_sub.add_parser(
+        "inspect", help="inspect one governed source read-only"
+    )
+    source_inspect.add_argument("artifact_id")
+    source_replace = source_sub.add_parser(
+        "replace", help="replace one source explicitly"
+    )
+    source_replace.add_argument("artifact_id")
+    source_replace.add_argument("path")
+    source_history = source_sub.add_parser(
+        "history", help="inspect source revision history"
+    )
+    source_history.add_argument("artifact_id")
 
     goal = sub.add_parser("goal", help="manage goals").add_subparsers(
         dest="goal_command", required=True
@@ -101,6 +245,10 @@ def build_parser() -> argparse.ArgumentParser:
     goal.add_parser("list")
     goal_show = goal.add_parser("show")
     goal_show.add_argument("goal_id")
+    goal_inspect = goal.add_parser(
+        "inspect", help="inspect one goal (read-only alias for show)"
+    )
+    goal_inspect.add_argument("goal_id")
     goal_transition = goal.add_parser("transition")
     goal_transition.add_argument("goal_id")
     goal_transition.add_argument("status", type=_goal_status)
@@ -131,6 +279,10 @@ def build_parser() -> argparse.ArgumentParser:
     flow_list.add_argument("--goal")
     flow_show = flow.add_parser("show")
     flow_show.add_argument("flow_id")
+    flow_inspect = flow.add_parser(
+        "inspect", help="inspect one flow (read-only alias for show)"
+    )
+    flow_inspect.add_argument("flow_id")
     flow_transition = flow.add_parser("transition")
     flow_transition.add_argument("flow_id")
     flow_transition.add_argument("status", type=_flow_status)
@@ -151,6 +303,10 @@ def build_parser() -> argparse.ArgumentParser:
     task_list.add_argument("--flow")
     task_show = task.add_parser("show")
     task_show.add_argument("task_id")
+    task_inspect = task.add_parser(
+        "inspect", help="inspect one task (read-only alias for show)"
+    )
+    task_inspect.add_argument("task_id")
     task_transition = task.add_parser("transition")
     task_transition.add_argument("task_id")
     task_transition.add_argument("status", type=_task_status)
@@ -171,14 +327,24 @@ def build_parser() -> argparse.ArgumentParser:
     run_finish.add_argument("--failure-reason")
     run_show = run.add_parser("show")
     run_show.add_argument("run_id")
-
-    verify = sub.add_parser("verify", help="record and inspect verification").add_subparsers(
-        dest="verify_command", required=True
+    run_inspect = run.add_parser(
+        "inspect", help="inspect one run (read-only alias for show)"
     )
+    run_inspect.add_argument("run_id")
+    run_recover = run.add_parser(
+        "recover", help="recover one dispatch execution without replay"
+    )
+    run_recover.add_argument("execution_id")
+
+    verify = sub.add_parser(
+        "verify", help="record and inspect verification"
+    ).add_subparsers(dest="verify_command", required=True)
     verify_record = verify.add_parser("record")
     verify_record.add_argument("target_type", choices=["GOAL", "FLOW", "TASK", "RUN"])
     verify_record.add_argument("target_id")
-    verify_record.add_argument("status", choices=["PASS", "FAIL", "INCONCLUSIVE", "SKIPPED", "BLOCKED"])
+    verify_record.add_argument(
+        "status", choices=["PASS", "FAIL", "INCONCLUSIVE", "SKIPPED", "BLOCKED"]
+    )
     verify_record.add_argument("--type", dest="verification_type", required=True)
     verify_record.add_argument("--verifier", required=True)
     verify_record.add_argument("--run-id")
@@ -186,9 +352,9 @@ def build_parser() -> argparse.ArgumentParser:
     verify_list.add_argument("target_type", choices=["GOAL", "FLOW", "TASK", "RUN"])
     verify_list.add_argument("target_id")
 
-    worker = sub.add_parser("worker", help="run bounded local model workers").add_subparsers(
-        dest="worker_command", required=True
-    )
+    worker = sub.add_parser(
+        "worker", help="run bounded local model workers"
+    ).add_subparsers(dest="worker_command", required=True)
     worker_propose = worker.add_parser(
         "propose", help="ask a local llama.cpp model for a non-applied patch proposal"
     )
@@ -202,14 +368,19 @@ def build_parser() -> argparse.ArgumentParser:
     worker_propose.add_argument("--temperature", type=float, default=0.2)
     worker_propose.add_argument("--allow-remote", action="store_true")
 
-    sandbox = sub.add_parser("sandbox", help="inspect and run configured sandbox verification").add_subparsers(
-        dest="sandbox_command", required=True
-    )
+    sandbox = sub.add_parser(
+        "sandbox", help="inspect and run configured sandbox verification"
+    ).add_subparsers(dest="sandbox_command", required=True)
     sandbox.add_parser("status", help="show configured sandbox backend status")
     sandbox_verify = sandbox.add_parser(
-        "verify", help="run required approved verification commands for an AUDITED workspace"
+        "verify",
+        help="run required approved verification commands for an AUDITED workspace",
     )
     sandbox_verify.add_argument("workspace_id")
+    sandbox_build = sandbox.add_parser(
+        "build", help="run required approved build commands for an AUDITED workspace"
+    )
+    sandbox_build.add_argument("workspace_id")
 
     return parser
 
@@ -224,9 +395,15 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "status":
         _print(runtime.status())
         return 0
+    if args.command == "doctor":
+        result = inspect_project(args.project_root)
+        _print(result)
+        return 0 if result["ready"] or not args.strict else 1
     if args.command == "recover":
         raw = runtime.recover() if args.apply else runtime.recovery_findings()
-        _print({"applied": bool(args.apply), "findings": [item.__dict__ for item in raw]})
+        _print(
+            {"applied": bool(args.apply), "findings": [item.__dict__ for item in raw]}
+        )
         return 0 if args.apply or not raw else 1
     if args.command == "manager":
         if args.manager_command == "status":
@@ -234,6 +411,154 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.manager_command == "advance":
             _print(advance_production_manager_bounded(runtime).to_dict())
+            return 0
+    if args.command == "advance":
+        _print(advance_production_manager_bounded(runtime).to_dict())
+        return 0
+    if args.command == "context" and args.context_command == "preview":
+        if args.seed_files and not args.auto_context:
+            raise ValueError("--seed-file requires --auto-context")
+        _print(
+            build_context_preview(
+                runtime,
+                args.task_id,
+                selected_paths=args.files,
+                auto_context=args.auto_context,
+                seed_paths=args.seed_files,
+                structural_context=args.structural_context,
+                semantic_context=args.semantic_context,
+            )
+        )
+        return 0
+    if args.command == "attempt":
+        forwarded = ["--project-root", str(args.project_root), args.task_id]
+        if args.auto_context:
+            forwarded.append("--auto-context")
+        else:
+            for path in args.files or []:
+                forwarded.extend(["--file", path])
+        for path in args.seed_files:
+            forwarded.extend(["--seed-file", path])
+        for flag in ("--structural-context", "--semantic-context", "--allow-remote"):
+            if getattr(args, flag.removeprefix("--").replace("-", "_")):
+                forwarded.append(flag)
+        forwarded.extend(
+            [
+                "--base-url",
+                args.base_url,
+                "--model",
+                args.model,
+                "--api-key",
+                args.api_key,
+                "--timeout",
+                str(args.timeout),
+                "--max-tokens",
+                str(args.max_tokens),
+                "--temperature",
+                str(args.temperature),
+            ]
+        )
+        return bounded_attempt_main(forwarded)
+    if args.command == "review":
+        if args.review_command == "inspect":
+            _print(inspect_task_review(runtime, args.task_id))
+            return 0
+        if args.review_command == "refine":
+            _print(
+                refine_task(
+                    runtime,
+                    args.task_id,
+                    rationale=args.rationale,
+                    expected_revision=args.revision,
+                ).to_dict()
+            )
+            return 0
+        if args.review_command == "replace":
+            _print(
+                replace_task(
+                    runtime,
+                    args.task_id,
+                    rationale=args.rationale,
+                    expected_revision=args.revision,
+                ).to_dict()
+            )
+        else:
+            decision_id = record_task_review_decision(
+                runtime,
+                args.task_id,
+                args.review_command,
+                rationale=args.rationale,
+                expected_revision=args.revision,
+            )
+            _print({"decision_id": decision_id, "action": args.review_command})
+        return 0
+    if args.command == "plan" and args.plan_command == "inspect":
+        _print(inspect_goal_plan(runtime, args.goal_id))
+        return 0
+    if args.command == "adopt":
+        _print(
+            VerifiedCodeAdopter(runtime)
+            .adopt_new(args.task_id, expected_revision=args.revision)
+            .to_dict()
+        )
+        return 0
+    if args.command == "production" and args.production_command == "trace":
+        _print(inspect_task_production_trace(runtime, args.task_id))
+        return 0
+    if args.command == "production" and args.production_command == "inspect":
+        _print(inspect_production_execution(runtime, args.execution_id))
+        return 0
+    if args.command == "production" and args.production_command == "accept":
+        result = accept_production_execution(
+            runtime, args.execution_id, actor_id=args.actor_id
+        )
+        _print(result.to_dict())
+        return 0
+    if args.command == "production" and args.production_command == "adopt":
+        result = adopt_production_execution(
+            runtime, args.execution_id, args.destination
+        )
+        _print(result.to_dict())
+        return 0
+    if args.command == "production" and args.production_command in {
+        "reject",
+        "refine",
+        "replace",
+    }:
+        action = args.production_command
+        service = {
+            "reject": reject_production_execution,
+            "refine": refine_production_execution,
+            "replace": replace_production_execution,
+        }[action]
+        result = service(
+            runtime,
+            args.execution_id,
+            rationale=args.rationale,
+            expected_revision=args.revision,
+        )
+        _print(
+            result.to_dict()
+            if hasattr(result, "to_dict")
+            else {"decision_id": result, "action": action}
+        )
+        return 0
+    if args.command == "production" and args.production_command == "source":
+        if args.source_command == "import":
+            _print(import_pixelorama_source(runtime, args.path).to_dict())
+            return 0
+        if args.source_command == "inspect":
+            _print(inspect_pixelorama_source(runtime, args.artifact_id).to_dict())
+            return 0
+        if args.source_command == "replace":
+            _print(
+                replace_pixelorama_source(
+                    runtime, args.artifact_id, args.path
+                ).to_dict()
+            )
+            return 0
+        if args.source_command == "history":
+            _print(inspect_pixelorama_source_history(runtime, args.artifact_id))
             return 0
 
     if args.command == "goal":
@@ -259,11 +584,13 @@ def _main(argv: list[str] | None = None) -> int:
         if args.goal_command == "list":
             _print(runtime.list_goals())
             return 0
-        if args.goal_command == "show":
+        if args.goal_command in {"show", "inspect"}:
             _print(runtime.get_goal(args.goal_id))
             return 0
         if args.goal_command == "transition":
-            runtime.transition_goal(args.goal_id, args.status, expected_revision=args.revision)
+            runtime.transition_goal(
+                args.goal_id, args.status, expected_revision=args.revision
+            )
             _print(runtime.get_goal(args.goal_id))
             return 0
 
@@ -275,11 +602,13 @@ def _main(argv: list[str] | None = None) -> int:
         if args.flow_command == "list":
             _print(runtime.list_flows(args.goal))
             return 0
-        if args.flow_command == "show":
+        if args.flow_command in {"show", "inspect"}:
             _print(runtime.get_flow(args.flow_id))
             return 0
         if args.flow_command == "transition":
-            runtime.transition_flow(args.flow_id, args.status, expected_revision=args.revision)
+            runtime.transition_flow(
+                args.flow_id, args.status, expected_revision=args.revision
+            )
             _print(runtime.get_flow(args.flow_id))
             return 0
 
@@ -299,11 +628,13 @@ def _main(argv: list[str] | None = None) -> int:
         if args.task_command == "list":
             _print(runtime.list_tasks(args.flow))
             return 0
-        if args.task_command == "show":
+        if args.task_command in {"show", "inspect"}:
             _print(runtime.get_task(args.task_id))
             return 0
         if args.task_command == "transition":
-            runtime.transition_task(args.task_id, args.status, expected_revision=args.revision)
+            runtime.transition_task(
+                args.task_id, args.status, expected_revision=args.revision
+            )
             _print(runtime.get_task(args.task_id))
             return 0
 
@@ -320,11 +651,20 @@ def _main(argv: list[str] | None = None) -> int:
             _print(runtime.list_runs(args.task))
             return 0
         if args.run_command == "finish":
-            runtime.finish_run(args.run_id, args.status, failure_reason=args.failure_reason)
+            runtime.finish_run(
+                args.run_id, args.status, failure_reason=args.failure_reason
+            )
             _print(runtime.get_run(args.run_id))
             return 0
-        if args.run_command == "show":
+        if args.run_command in {"show", "inspect"}:
             _print(runtime.get_run(args.run_id))
+            return 0
+        if args.run_command == "recover":
+            _print(
+                recover_dispatch_execution_once(
+                    runtime, args.execution_id
+                ).execution.to_dict()
+            )
             return 0
 
     if args.command == "verify":
@@ -365,11 +705,13 @@ def _main(argv: list[str] | None = None) -> int:
             )
             return 0 if available else 1
         if args.sandbox_command == "verify":
-            result = SandboxedWorkspaceVerifier(runtime, backend).verify(args.workspace_id)
+            verification_result = SandboxedWorkspaceVerifier(runtime, backend).verify(
+                args.workspace_id
+            )
             _print(
                 {
-                    "workspace_id": result.workspace_id,
-                    "passed": result.passed,
+                    "workspace_id": verification_result.workspace_id,
+                    "passed": verification_result.passed,
                     "results": [
                         {
                             "category": item.category,
@@ -380,11 +722,34 @@ def _main(argv: list[str] | None = None) -> int:
                             if item.sandbox_result is not None
                             else None,
                         }
-                        for item in result.results
+                        for item in verification_result.results
                     ],
                 }
             )
-            return 0 if result.passed else 1
+            return 0 if verification_result.passed else 1
+        if args.sandbox_command == "build":
+            verification_result = SandboxedWorkspaceVerifier(
+                runtime, backend
+            ).verify_build(args.workspace_id)
+            _print(
+                {
+                    "workspace_id": verification_result.workspace_id,
+                    "passed": verification_result.passed,
+                    "results": [
+                        {
+                            "category": item.category,
+                            "command_name": item.command_name,
+                            "verification_id": item.verification_id,
+                            "passed": item.passed,
+                            "sandbox_result": asdict(item.sandbox_result)
+                            if item.sandbox_result is not None
+                            else None,
+                        }
+                        for item in verification_result.results
+                    ],
+                }
+            )
+            return 0 if verification_result.passed else 1
 
     if args.command == "worker" and args.worker_command == "propose":
         adapter = LlamaCppAdapter(
@@ -396,16 +761,16 @@ def _main(argv: list[str] | None = None) -> int:
             temperature=args.temperature,
             allow_remote=args.allow_remote,
         )
-        result = LocalPatchWorker(runtime, adapter).execute(
+        worker_result = LocalPatchWorker(runtime, adapter).execute(
             args.task_id, selected_paths=args.files, model_profile=args.model
         )
         _print(
             {
-                "run_id": result.run_id,
-                "context_artifact_id": result.context_artifact_id,
-                "response_artifact_id": result.response_artifact_id,
-                "proposal_artifact_id": result.proposal_artifact_id,
-                "proposal": result.proposal.to_dict(),
+                "run_id": worker_result.run_id,
+                "context_artifact_id": worker_result.context_artifact_id,
+                "response_artifact_id": worker_result.response_artifact_id,
+                "proposal_artifact_id": worker_result.proposal_artifact_id,
+                "proposal": worker_result.proposal.to_dict(),
                 "applied": False,
             }
         )
@@ -434,13 +799,17 @@ def main(argv: list[str] | None = None) -> int:
         _print({"error": "INVALID_STATE", "message": str(exc)}, stream=sys.stderr)
         return 4
     except GoalBootstrapOperatorError as exc:
-        _print({"error": "GOAL_BOOTSTRAP_ERROR", "message": str(exc)}, stream=sys.stderr)
+        _print(
+            {"error": "GOAL_BOOTSTRAP_ERROR", "message": str(exc)}, stream=sys.stderr
+        )
         return 5
     except RuntimeInvariantError as exc:
         _print({"error": "INVARIANT_VIOLATION", "message": str(exc)}, stream=sys.stderr)
         return 5
     except VerificationRequired as exc:
-        _print({"error": "VERIFICATION_REQUIRED", "message": str(exc)}, stream=sys.stderr)
+        _print(
+            {"error": "VERIFICATION_REQUIRED", "message": str(exc)}, stream=sys.stderr
+        )
         return 6
     except (PatchValidationError, RepositoryAccessError) as exc:
         _print({"error": "PROPOSAL_REJECTED", "message": str(exc)}, stream=sys.stderr)

@@ -69,6 +69,16 @@ class RepositoryReader:
     def _hash_bytes(data: bytes) -> str:
         return f"sha256:{hashlib.sha256(data).hexdigest()}"
 
+    @staticmethod
+    def _canonical_hash_bytes(data: bytes) -> bytes:
+        """Normalize UTF-8 text before hashing, while preserving binary bytes."""
+        try:
+            text = data.decode("utf-8")
+            normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+            return normalized.encode("utf-8")
+        except UnicodeDecodeError:
+            return data
+
     def exists(self, path: str | Path) -> bool:
         resolved = self._resolve(path, must_exist=False)
         return resolved.exists()
@@ -76,7 +86,7 @@ class RepositoryReader:
     def hash_file(self, path: str | Path) -> str:
         resolved = self._resolve(path)
         data = resolved.read_bytes()
-        return self._hash_bytes(data)
+        return self._hash_bytes(self._canonical_hash_bytes(data))
 
     def read_text(self, path: str | Path) -> SourceFile:
         resolved = self._resolve(path)
@@ -92,13 +102,21 @@ class RepositoryReader:
                 f"file exceeds context file limit ({len(data)} > {self.max_file_bytes} bytes): {display_path}"
             )
         try:
-            content = data.decode("utf-8")
+            # Canonical text content and its precondition hash use LF across
+            # platforms. Binary files are rejected by this text reader and
+            # retain raw-byte hashing through hash_file's fallback.
+            content = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         except UnicodeDecodeError as exc:
             raise RepositoryAccessError(
                 f"repository file is not UTF-8 text: {display_path}"
             ) from exc
         relative = resolved.relative_to(self.project_root).as_posix()
-        return SourceFile(relative, self._hash_bytes(data), content, len(data))
+        return SourceFile(
+            relative,
+            self._hash_bytes(self._canonical_hash_bytes(data)),
+            content,
+            len(data),
+        )
 
     def snapshot(
         self,

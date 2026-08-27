@@ -6,6 +6,15 @@ from dataclasses import dataclass
 from typing import Any, Sequence
 
 from .model import ModelAdapter, ModelRequest, ModelResponse
+from .pixelorama_protocol import (
+    PixeloramaProtocolError,
+    parse_bridge_budget,
+    parse_export_spec,
+    parse_sprite_spec,
+)
+from .pixelorama_source import (
+    build_pixelorama_source_work_order_payload_from_accepted_design,
+)
 from .production_capability_routing import CapabilityRouteOutcome
 from .production_capability_store import (
     CapabilityRouteDecision,
@@ -21,6 +30,7 @@ from .production_work_order_models import (
     canonical_bytes,
     content_hash,
 )
+from .production_work_order_pixelorama import PIXELORAMA_SOURCE_ADAPTER_ID
 from .production_work_order_validators import (
     DispatchContractValidatorRegistry,
     DispatchValidatorError,
@@ -243,6 +253,43 @@ class WorkOrderProposal:
     @property
     def content_hash(self) -> str:
         return content_hash(self.to_dict())
+
+
+def _bind_accepted_design_animation(
+    runtime: OriginForgeRuntime,
+    contract: DispatchContract,
+    proposal: WorkOrderProposal,
+) -> WorkOrderProposal:
+    """Make accepted design animation intent authoritative for source planning."""
+    if contract.adapter_id != PIXELORAMA_SOURCE_ADAPTER_ID:
+        return proposal
+    if len(proposal.input_refs) != 1:
+        raise ProductionWorkOrderPlannerError(
+            "Pixelorama source planning requires one accepted-design input"
+        )
+    reference = proposal.input_refs[0]
+    if reference.ref_type is not WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE:
+        raise ProductionWorkOrderPlannerError(
+            "Pixelorama source planning requires an accepted-design input"
+        )
+    payload = proposal.payload
+    try:
+        normalized_payload = build_pixelorama_source_work_order_payload_from_accepted_design(
+            runtime,
+            reference.ref_id,
+            parse_sprite_spec(payload["sprite_spec"]),
+            export_specs=tuple(parse_export_spec(value) for value in payload["export_specs"]),
+            budget=parse_bridge_budget(payload["budget"]),
+        )
+        return WorkOrderProposal(
+            contract_id=proposal.contract_id,
+            input_refs=proposal.input_refs,
+            payload_json=canonical_bytes(normalized_payload).decode("utf-8"),
+        )
+    except (KeyError, PixeloramaProtocolError, ProductionWorkOrderModelError) as exc:
+        raise ProductionWorkOrderPlannerError(
+            "accepted-design Pixelorama source payload could not be canonicalized"
+        ) from exc
 
 
 def parse_work_order_proposal(
@@ -684,6 +731,11 @@ class BoundedProductionWorkOrderPlanner:
                 response.text,
                 contract=contract,
                 allowed_input_refs=allowed_refs,
+            )
+            proposal = _bind_accepted_design_animation(
+                self.runtime,
+                contract,
+                proposal,
             )
             try:
                 work_order = create_current_work_order(

@@ -11,7 +11,6 @@ from .provenance_crypto import (
     OperationalManifestSigner,
     RootAuthority,
     SignatureBackend,
-    SignatureBackendError,
     certificate_message,
     revocation_message,
 )
@@ -81,9 +80,16 @@ class ProvenanceService:
         self.store = store or ProvenanceStore(runtime)
         if self.store.runtime.project_root != runtime.project_root:
             raise ValueError("provenance store and runtime must belong to the same project")
-        self.backend = backend or OpenSslEd25519Backend(runtime.project_root)
-        if not isinstance(self.backend, SignatureBackend):
+        if backend is not None and not isinstance(backend, SignatureBackend):
             raise TypeError("backend must satisfy SignatureBackend")
+        self._backend = backend
+
+    @property
+    def backend(self) -> SignatureBackend:
+        """Resolve the configured crypto backend only at an operation boundary."""
+        if self._backend is None:
+            self._backend = OpenSslEd25519Backend(self.runtime.project_root)
+        return self._backend
 
     def _root(self) -> CompanyRootIdentity:
         roots = self.store.list_root_ids()

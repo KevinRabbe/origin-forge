@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .config import ensure_config, load_config
 from .goals import transition_goal
 from .runs import create_run, finish_run, get_run, reconcile_interrupted
 from .service import OriginForgeStore
 from .state import FlowStatus, GoalStatus, RunStatus, TaskStatus
-
+from .task_readiness import (
+    DependencyReadinessStatus,
+    resolve_task_dependency_readiness_connection,
+)
 
 _MAX_READ_LIMIT = 100_000
 
@@ -406,8 +410,16 @@ class OriginForgeRuntime:
             self.get_task(target_id)
         elif kind == "RUN":
             self.get_run(target_id)
+        elif kind == "WORKSPACE":
+            with self.store.session() as conn:
+                row = conn.execute(
+                    "SELECT id FROM workspaces WHERE id = ? AND project_id = ?",
+                    (target_id, self.project_id()),
+                ).fetchone()
+            if row is None:
+                raise KeyError(target_id)
         else:
-            raise ValueError(f"unsupported Phase 1 verification target: {target_type}")
+            raise ValueError(f"unsupported verification target: {target_type}")
         if run_id is not None:
             self.get_run(run_id)
         return self.store.record_verification(
@@ -433,6 +445,14 @@ class OriginForgeRuntime:
             self.get_task(target_id)
         elif kind == "RUN":
             self.get_run(target_id)
+        elif kind == "WORKSPACE":
+            with self.store.session() as conn:
+                row = conn.execute(
+                    "SELECT id FROM workspaces WHERE id = ? AND project_id = ?",
+                    (target_id, self.project_id()),
+                ).fetchone()
+            if row is None:
+                raise KeyError(target_id)
         else:
             raise ValueError(f"unsupported Phase 1 verification target: {target_type}")
         sql, params = _with_limit(
@@ -488,6 +508,26 @@ class OriginForgeRuntime:
                     (project_id,),
                 )
             }
+            readiness_counts: dict[str, int] = {}
+            for row in conn.execute(
+                """SELECT t.id FROM tasks t
+                   JOIN flows f ON f.id = t.flow_id
+                   JOIN goals g ON g.id = f.goal_id
+                   WHERE g.project_id = ?""",
+                (project_id,),
+            ):
+                readiness = resolve_task_dependency_readiness_connection(conn, row["id"])
+                key = readiness.status.value
+                readiness_counts[key] = readiness_counts.get(key, 0) + 1
+            result["task_readiness"] = readiness_counts
+            result["operator_actions"] = {
+                "attempt": readiness_counts.get(DependencyReadinessStatus.READY.value, 0),
+                "inspect_or_recover": readiness_counts.get(
+                    DependencyReadinessStatus.ACTIVE.value, 0
+                ),
+                "review_or_accept": result["tasks"].get(TaskStatus.SUCCEEDED.value, 0),
+                "recover": result["recovery_findings"],
+            }
         result["config"] = {
             "version": config.version,
             "policy_profile": config.policy_profile,
@@ -495,5 +535,6 @@ class OriginForgeRuntime:
             "max_verification_failures": config.max_verification_failures,
             "approved_build_commands": list(config.approved_build_commands),
             "approved_test_commands": list(config.approved_test_commands),
+            "external_tools": dict(config.external_tools.paths),
         }
         return result

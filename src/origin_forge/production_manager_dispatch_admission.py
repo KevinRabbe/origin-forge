@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
 
 from .ids import IdKind, validate_id
 from .production_capability_routing import task_routing_hash

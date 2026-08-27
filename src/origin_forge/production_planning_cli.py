@@ -63,20 +63,27 @@ def main(argv: list[str] | None = None) -> int:
             _print(inspect_production_planning_status(runtime).to_dict())
             return 0
         if args.command == "input-show":
-            value = inspect_planning_input(runtime, args.planning_input_id)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            input_value = inspect_planning_input(runtime, args.planning_input_id)
+            _print({**input_value.to_dict(), "content_hash": input_value.content_hash})
             return 0
         if args.command == "proposal-show":
-            value = inspect_plan_proposal(runtime, args.proposal_id)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            proposal_value = inspect_plan_proposal(runtime, args.proposal_id)
+            _print({**proposal_value.to_dict(), "content_hash": proposal_value.content_hash})
             return 0
         if args.command == "audit-show":
-            value = inspect_plan_audit(runtime, args.audit_id)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            audit_value = inspect_plan_audit(runtime, args.audit_id)
+            _print({**audit_value.to_dict(), "content_hash": audit_value.content_hash})
             return 0
         if args.command == "materialization-show":
-            value = inspect_plan_materialization(runtime, args.materialization_id)
-            _print({**value.to_dict(), "content_hash": value.content_hash})
+            materialization_value = inspect_plan_materialization(
+                runtime, args.materialization_id
+            )
+            _print(
+                {
+                    **materialization_value.to_dict(),
+                    "content_hash": materialization_value.content_hash,
+                }
+            )
             return 0
         if args.command == "graph":
             _print(inspect_flow_dependency_graph(runtime, args.flow_id).to_dict())

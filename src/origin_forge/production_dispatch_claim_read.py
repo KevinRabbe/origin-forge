@@ -5,14 +5,20 @@ from enum import StrEnum
 
 from .ids import IdKind, validate_id
 from .production_capability_routing import task_routing_hash
-from .production_dispatch_binding import build_builtin_dispatch_binder_registry
+from .production_dispatch_binding import (
+    build_builtin_dispatch_binder_registry,
+    build_pixelorama_source_dispatch_binder_registry,
+)
 from .production_dispatch_binding_models import DispatchBindingCurrentnessStatus
 from .production_dispatch_claim_models import (
     DispatchClaim,
     DispatchClaimModelError,
     DispatchClaimStatus,
 )
-from .production_dispatch_phase_resolvers import build_dispatch_input_resolver_registry
+from .production_dispatch_phase_resolvers import (
+    build_dispatch_input_resolver_registry,
+    build_source_dispatch_input_resolver_registry,
+)
 from .production_dispatch_read import (
     ProductionDispatchReadError,
     inspect_dispatch_binding_currentness_readonly,
@@ -417,8 +423,23 @@ def inspect_dispatch_claim_currentness_readonly(
             str(exc),
         )
 
-    resolver_registry = build_dispatch_input_resolver_registry()
-    binder_registry = build_builtin_dispatch_binder_registry()
+    try:
+        binding = read_dispatch_binding(runtime, claim.dispatch_binding_id)
+    except ProductionDispatchReadError as exc:
+        return result(
+            claim.task_id,
+            DispatchClaimCurrentnessStatus.INVALID,
+            f"Phase-34 binding could not be read: {exc}",
+        )
+    if (
+        binding.selected_adapter_id == "originforge.pixelorama.source"
+        and binding.dispatch_contract_id == "pixelorama.source-create@1"
+    ):
+        resolver_registry = build_source_dispatch_input_resolver_registry()
+        binder_registry = build_pixelorama_source_dispatch_binder_registry()
+    else:
+        resolver_registry = build_dispatch_input_resolver_registry()
+        binder_registry = build_builtin_dispatch_binder_registry()
     try:
         binding_currentness = inspect_dispatch_binding_currentness_readonly(
             runtime,

@@ -6,11 +6,20 @@ import unittest
 
 import origin_forge.production_execution_owner as owner_module
 from origin_forge.model_scheduler import ModelRole
-from origin_forge.production_capability_builtin import builtin_trusted_production_adapters
+from origin_forge.production_capability_builtin import (
+    builtin_trusted_production_adapters,
+)
 from origin_forge.production_dispatch_binding import CodeBoundedRetryInputBinder
 from origin_forge.production_dispatch_binding_blender import BlenderExportGLBInputBinder
-from origin_forge.production_dispatch_binding_simulation import DeterministicSimulationInputBinder
-from origin_forge.production_dispatch_binding_pixelorama import PixeloramaSpritesheetExportInputBinder
+from origin_forge.production_dispatch_binding_pixelorama import (
+    PixeloramaSpritesheetExportInputBinder,
+)
+from origin_forge.production_dispatch_binding_pixelorama_source import (
+    PixeloramaSourceCreationInputBinder,
+)
+from origin_forge.production_dispatch_binding_simulation import (
+    DeterministicSimulationInputBinder,
+)
 from origin_forge.production_execution_owner import (
     ProductionExecutionOwnerDescriptor,
     ProductionExecutionOwnerError,
@@ -45,8 +54,14 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_builtin_owners_exactly_match_reviewed_adapters_and_binders(self) -> None:
         owners = builtin_execution_owner_descriptors()
-        self.assertEqual(len(owners), 4)
-        code_owner, simulation_owner, pixelorama_owner, blender_owner = owners
+        self.assertEqual(len(owners), 11)
+        build_owner, code_owner, simulation_owner, pixelorama_owner, pixelorama_source_owner, blender_owner, image_owner, ffmpeg_owner, piper_owner, runtime_owner, playtest_owner = owners
+        self.assertEqual(build_owner.owner_id, "originforge.execution.build.integration@1")
+        self.assertEqual(image_owner.owner_id, "originforge.execution.image.generate@1")
+        self.assertEqual(ffmpeg_owner.owner_id, "originforge.execution.audio.ffmpeg-process@1")
+        self.assertEqual(piper_owner.owner_id, "originforge.execution.audio.piper-tts@1")
+        self.assertEqual(runtime_owner.owner_id, "originforge.execution.runtime.observe@1")
+        self.assertEqual(playtest_owner.owner_id, "originforge.execution.playtest.cooperative@1")
         adapters = {
             value.adapter_id: value for value in builtin_trusted_production_adapters()
         }
@@ -118,6 +133,35 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
         self.assertFalse(pixelorama_owner.requires_sandbox)
         self.assertFalse(pixelorama_owner.requires_workspace_manager)
 
+        source_adapter = adapters["originforge.pixelorama.source"]
+        source_binder = PixeloramaSourceCreationInputBinder().descriptor
+        self.assertEqual(
+            pixelorama_source_owner.owner_id,
+            "originforge.execution.pixelorama.source-create@1",
+        )
+        self.assertEqual(pixelorama_source_owner.adapter_id, source_adapter.adapter_id)
+        self.assertEqual(
+            pixelorama_source_owner.adapter_fingerprint,
+            source_adapter.implementation_fingerprint,
+        )
+        self.assertEqual(
+            pixelorama_source_owner.dispatch_contract_id,
+            source_binder.dispatch_contract_id,
+        )
+        self.assertEqual(pixelorama_source_owner.binder_id, source_binder.binder_id)
+        self.assertEqual(
+            pixelorama_source_owner.binder_fingerprint,
+            source_binder.binder_fingerprint,
+        )
+        self.assertEqual(pixelorama_source_owner.request_type_id, source_binder.request_type_id)
+        self.assertEqual(
+            pixelorama_source_owner.request_schema_hash,
+            source_binder.request_schema_hash,
+        )
+        self.assertEqual(pixelorama_source_owner.model_strategy_roles, ())
+        self.assertFalse(pixelorama_source_owner.requires_sandbox)
+        self.assertFalse(pixelorama_source_owner.requires_workspace_manager)
+
         blender_adapter = adapters["originforge.blender.model3d"]
         blender_binder = BlenderExportGLBInputBinder().descriptor
         self.assertEqual(
@@ -159,7 +203,7 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_exact_relation_selects_owner_and_any_drift_fails_closed(self) -> None:
         registry = build_builtin_execution_owner_registry()
-        owner = registry.descriptors[0]
+        owner = next(value for value in registry.descriptors if value.owner_id == "originforge.execution.bounded-retry@1")
         selected = registry.owner_for(
             adapter_id=owner.adapter_id,
             adapter_fingerprint=owner.adapter_fingerprint,
@@ -190,9 +234,8 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
             ("request_schema_hash", "0" * 64),
         )
         for field, value in drift:
-            with self.subTest(field=field):
-                with self.assertRaises(ProductionExecutionOwnerError):
-                    registry.owner_for(**{**base, field: value})
+            with self.subTest(field=field), self.assertRaises(ProductionExecutionOwnerError):
+                registry.owner_for(**{**base, field: value})
 
     def test_registry_rejects_duplicate_ids_and_ambiguous_relations(self) -> None:
         first = self._descriptor(owner_id="owner.one@1")
