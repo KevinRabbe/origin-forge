@@ -34,7 +34,7 @@ PIXELORAMA_SOURCE_ADAPTER_ID = "originforge.pixelorama.source"
 PIXELORAMA_SOURCE_CONTRACT_ID = "pixelorama.source-create@1"
 PIXELORAMA_SOURCE_VALIDATOR_ID = "validator.pixelorama.source-create@1"
 PIXELORAMA_SOURCE_SCHEMA_ID = "schema.pixelorama.source-create@1"
-PIXELORAMA_SOURCE_ROLE = "accepted_design"
+PIXELORAMA_SOURCE_INPUT_ROLE = "accepted_design"
 PIXELORAMA_SOURCE_REQUEST_TYPE_ID = "PixeloramaSourceService.create@production-v1"
 
 
@@ -165,7 +165,7 @@ class PixeloramaSourceCreationDispatchValidator:
                 "input_ref_contract": {
                     "count": 1,
                     "ref_type": WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE.value,
-                    "role": PIXELORAMA_SOURCE_ROLE,
+                    "role": PIXELORAMA_SOURCE_INPUT_ROLE,
                     "id_prefix": "DESIGNACC-",
                     "revision": None,
                 },
@@ -222,7 +222,7 @@ class PixeloramaSourceCreationDispatchValidator:
         ref = input_refs[0]
         if (
             ref.ref_type is not WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE
-            or ref.role != PIXELORAMA_SOURCE_ROLE
+            or ref.role != PIXELORAMA_SOURCE_INPUT_ROLE
             or not ref.ref_id.startswith("DESIGNACC-")
             or ref.revision is not None
         ):

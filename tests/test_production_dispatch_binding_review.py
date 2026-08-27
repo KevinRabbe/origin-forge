@@ -49,13 +49,6 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             (phase32.adapter("originforge.pixelorama.export"),),
         )
         pixelorama_dispatch = build_builtin_dispatch_catalog(pixelorama_phase32)
-        pixelorama_source_phase32 = CapabilityCatalog.create(
-            (phase32.capability("media.2d.source"),),
-            (phase32.adapter("originforge.pixelorama.source"),),
-        )
-        pixelorama_source_dispatch = build_builtin_dispatch_catalog(
-            pixelorama_source_phase32
-        )
         blender_phase32 = CapabilityCatalog.create(
             (phase32.capability("media.3d.blender"),),
             (phase32.adapter("originforge.blender.model3d"),),
@@ -101,7 +94,6 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
                 "originforge.blender.model3d",
                 "originforge.code.bounded-retry",
                 "originforge.pixelorama.export",
-                "originforge.pixelorama.source",
                 "originforge.simulation.deterministic",
                 "originforge.image.generate",
                 "originforge.audio.ffmpeg",
@@ -115,7 +107,6 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             *build_dispatch.contracts,
             *simulation_dispatch.contracts,
             *pixelorama_dispatch.contracts,
-            *pixelorama_source_dispatch.contracts,
             *blender_dispatch.contracts,
             *image_dispatch.contracts,
             *ffmpeg_dispatch.contracts,
@@ -193,7 +184,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             for value in rows
             if value.status is BuiltinBindingReviewStatus.DEFERRED
         ]
-        self.assertEqual(len(deferred), 1)
+        self.assertEqual(len(deferred), 2)
         self.assertTrue(all(value.blocker for value in deferred))
         self.assertEqual(
             len({value.blocker for value in deferred}),

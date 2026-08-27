@@ -39,7 +39,6 @@ def builtin_dispatch_binders() -> tuple[DispatchInputBinder, ...]:
         CodeBoundedRetryInputBinder(),
         DeterministicSimulationInputBinder(),
         PixeloramaSpritesheetExportInputBinder(),
-        PixeloramaSourceCreationInputBinder(),
         BlenderExportGLBInputBinder(),
         ImageGenerationInputBinder(),
         FfmpegAudioInputBinder(),
@@ -51,3 +50,8 @@ def builtin_dispatch_binders() -> tuple[DispatchInputBinder, ...]:
 
 def build_builtin_dispatch_binder_registry() -> DispatchInputBinderRegistry:
     return DispatchInputBinderRegistry(builtin_dispatch_binders())
+
+
+def build_pixelorama_source_dispatch_binder_registry() -> DispatchInputBinderRegistry:
+    """Build the isolated source binder registry without changing legacy fingerprints."""
+    return DispatchInputBinderRegistry((PixeloramaSourceCreationInputBinder(),))

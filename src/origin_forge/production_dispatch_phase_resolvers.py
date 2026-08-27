@@ -468,13 +468,21 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
 
 def phase_specific_input_resolvers() -> tuple[WorkOrderInputResolver, ...]:
     return (
-        AcceptedDesignInputResolver(),
         AudioProfileInputResolver(),
         AudioSourceInputResolver(),
         Model3DRequestInputResolver(),
         RuntimeObservationRequestInputResolver(),
         PlaytestScenarioInputResolver(),
     )
+
+
+def build_source_dispatch_input_resolver_registry() -> WorkOrderInputResolverRegistry:
+    """Build the isolated resolver registry for source/animation WorkOrders.
+
+    It is intentionally separate so adding this new claim cannot invalidate
+    resolver-registry fingerprints of historical dispatch evidence.
+    """
+    return WorkOrderInputResolverRegistry((AcceptedDesignInputResolver(),))
 
 
 def build_dispatch_input_resolver_registry() -> WorkOrderInputResolverRegistry:

@@ -16,7 +16,7 @@ from .production_work_order_pixelorama import (
     PIXELORAMA_SOURCE_ADAPTER_ID,
     PIXELORAMA_SOURCE_CONTRACT_ID,
     PIXELORAMA_SOURCE_REQUEST_TYPE_ID,
-    PIXELORAMA_SOURCE_ROLE,
+    PIXELORAMA_SOURCE_INPUT_ROLE,
 )
 from .production_work_orders import ProductionWorkOrder
 
@@ -57,7 +57,7 @@ _DESCRIPTOR = DispatchBinderDescriptor(
     dispatch_contract_id=PIXELORAMA_SOURCE_CONTRACT_ID,
     request_type_id=PIXELORAMA_SOURCE_REQUEST_TYPE_ID,
     request_schema_hash=_REQUEST_SCHEMA_HASH,
-    accepted_input_roles=(PIXELORAMA_SOURCE_ROLE,),
+    accepted_input_roles=(PIXELORAMA_SOURCE_INPUT_ROLE,),
 )
 
 
@@ -103,7 +103,7 @@ class PixeloramaSourceCreationInputBinder:
             )
         if (
             ref.ref_type is not WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE
-            or ref.role != PIXELORAMA_SOURCE_ROLE
+            or ref.role != PIXELORAMA_SOURCE_INPUT_ROLE
             or ref.revision is not None
             or not ref.ref_id.startswith("DESIGNACC-")
         ):

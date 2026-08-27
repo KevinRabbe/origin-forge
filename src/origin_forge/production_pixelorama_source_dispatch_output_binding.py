@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 
 from .ids import IdKind, validate_id
+from .lineage import OriginForgeLineage
+from .pixelorama_bridge import PixeloramaOperationResult
 from .pixelorama_media import PixeloramaMediaResult
 from .pixelorama_models import BridgeOutputType
 from .production_dispatch_execution_models import DispatchExecution
@@ -15,6 +18,7 @@ from .production_pixelorama_source_dispatch_output_binding_models import (
 )
 from .production_read_guard import ProductionReadGuardError, production_read_connection
 from .runtime import OriginForgeRuntime
+from .pixelorama_protocol import PixeloramaProtocolError, parse_bridge_request, parse_bridge_result
 
 
 class PixeloramaSourceOutputBindingError(RuntimeError):
@@ -259,4 +263,79 @@ def binding_from_pixelorama_source_result(
         backend_result_hash=result.operation.bridge_result.content_hash.removeprefix("sha256:"),
         schema_version=PIXELORAMA_SOURCE_DISPATCH_OUTPUT_BINDING_SCHEMA_VERSION,
         created_at=created_at,
+    )
+
+
+def materialize_pixelorama_source_result(
+    runtime: OriginForgeRuntime,
+    binding: PixeloramaSourceDispatchOutputBinding,
+) -> PixeloramaMediaResult:
+    """Reconstruct a successful source result from durable evidence only."""
+    if not isinstance(runtime, OriginForgeRuntime):
+        raise TypeError("runtime must be an OriginForgeRuntime")
+    if not isinstance(binding, PixeloramaSourceDispatchOutputBinding):
+        raise TypeError("binding must be a PixeloramaSourceDispatchOutputBinding")
+    lineage = OriginForgeLineage(runtime)
+    try:
+        request_path = lineage.local_artifact_path(binding.request_artifact_id)
+        result_path = lineage.local_artifact_path(binding.result_artifact_id)
+        request_raw = json.loads(request_path.read_text(encoding="utf-8"))
+        result_raw = json.loads(result_path.read_text(encoding="utf-8"))
+        request = parse_bridge_request(request_raw)
+        bridge_result = parse_bridge_result(result_raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, ValueError, PixeloramaProtocolError) as exc:
+        raise PixeloramaSourceOutputBindingError(
+            "durable Pixelorama source request/result evidence is invalid"
+        ) from exc
+    if request.content_hash != bridge_result.request_hash:
+        raise PixeloramaSourceOutputBindingError(
+            "durable Pixelorama source result is bound to a different request"
+        )
+    if bridge_result.content_hash.removeprefix("sha256:") != binding.backend_result_hash:
+        raise PixeloramaSourceOutputBindingError(
+            "durable Pixelorama source backend result hash drifted"
+        )
+    expected_outputs = tuple(
+        (value.output_type.value, value.relative_path, value.content_hash, value.byte_count)
+        for value in binding.outputs
+    )
+    actual_outputs = tuple(
+        (value.output_type.value, value.relative_path, value.content_hash.removeprefix("sha256:"), value.byte_count)
+        for value in bridge_result.outputs
+    )
+    if actual_outputs != expected_outputs:
+        raise PixeloramaSourceOutputBindingError(
+            "durable Pixelorama source outputs drifted from the binding"
+        )
+    operation = PixeloramaOperationResult(
+        request=request,
+        bridge_result=bridge_result,
+        workspace_path=runtime.state_dir / "media-workspaces" / request.workspace_id,
+        process_exit_code=0,
+        stdout=b"",
+        stderr=b"",
+        stdout_truncated=False,
+        stderr_truncated=False,
+    )
+    outputs = tuple(
+        value
+        for value in binding.outputs
+    )
+    from .pixelorama_media import PixeloramaOutputEvidence
+
+    return PixeloramaMediaResult(
+        run_id=binding.run_id,
+        request_artifact_id=binding.request_artifact_id,
+        result_artifact_id=binding.result_artifact_id,
+        output_evidence=tuple(
+            PixeloramaOutputEvidence(
+                relative_path=value.relative_path,
+                artifact_id=value.artifact_id,
+                verification_id=value.verification_id,
+                content_hash="sha256:" + value.content_hash,
+                output_type=value.output_type,
+            )
+            for value in outputs
+        ),
+        operation=operation,
     )

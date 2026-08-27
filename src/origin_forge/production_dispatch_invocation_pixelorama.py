@@ -186,6 +186,9 @@ def _dispatch_claim_once_three_owner(
     from .production_dispatch_invocation_build import (
         dispatch_build_claim_once_if_applicable,
     )
+    from .production_dispatch_invocation_pixelorama_source import (
+        dispatch_pixelorama_source_claim_once_if_applicable,
+    )
     from .production_dispatch_invocation_ffmpeg_owner import (
         dispatch_ffmpeg_claim_once_if_applicable,
     )
@@ -209,6 +212,12 @@ def _dispatch_claim_once_three_owner(
     )
     if build is not None:
         return build
+
+    pixelorama_source = dispatch_pixelorama_source_claim_once_if_applicable(
+        runtime, claim_id, expected_claim_revision
+    )
+    if pixelorama_source is not None:
+        return pixelorama_source
 
     piper = dispatch_piper_claim_once_if_applicable(
         runtime,

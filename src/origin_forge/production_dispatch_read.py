@@ -385,6 +385,16 @@ def inspect_dispatch_binding_currentness_readonly(
             and resolved[0].source_object_type == "ARTIFACT"
             and resolved[0].resolution_class == "CANONICAL_ARTIFACT"
         )
+        pixelorama_source_input = (
+            binding.selected_adapter_id == "originforge.pixelorama.source"
+            and binding.dispatch_contract_id == "pixelorama.source-create@1"
+            and binding.binder_id == "binder.pixelorama.source-create@1"
+            and len(resolved) == 1
+            and resolved[0].original_ref.ref_type.value == "DESIGN_SPECIFICATION_ACCEPTANCE"
+            and resolved[0].original_ref.role == "accepted_design"
+            and resolved[0].source_object_type == "ACCEPTED_DESIGN"
+            and resolved[0].resolution_class == "CURRENT_ACCEPTED_DESIGN"
+        )
         blender_input = (
             binding.selected_adapter_id == "originforge.blender.model3d"
             and binding.dispatch_contract_id == "blender.export-glb@1"
@@ -445,7 +455,7 @@ def inspect_dispatch_binding_currentness_readonly(
             and resolved[0].source_object_type == "WORKSPACE"
             and resolved[0].resolution_class == "AUDITED_WORKSPACE"
         )
-        if not (pixelorama_input or blender_input or piper_input or ffmpeg_input or runtime_input or playtest_input or build_input):
+        if not (pixelorama_input or pixelorama_source_input or blender_input or piper_input or ffmpeg_input or runtime_input or playtest_input or build_input):
             return result(
                 DispatchBindingCurrentnessStatus.STALE_INPUT,
                 "current read-only nonzero-ref eligibility is limited to exact reviewed production contracts",

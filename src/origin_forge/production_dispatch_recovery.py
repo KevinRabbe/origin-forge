@@ -12,6 +12,10 @@ _RECOVERERS = {
         ".production_dispatch_invocation_pixelorama",
         "recover_pixelorama_dispatch_execution_once",
     ),
+    "originforge.execution.pixelorama.source-create@1": (
+        ".production_dispatch_invocation_pixelorama_source",
+        "recover_pixelorama_source_dispatch_execution_once",
+    ),
     "originforge.execution.blender.export-glb@1": (
         ".production_dispatch_invocation_blender_recovery",
         "recover_blender_dispatch_execution_once",
