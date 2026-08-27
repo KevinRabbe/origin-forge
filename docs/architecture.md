@@ -550,3 +550,29 @@ never invokes ComfyUI again. An interrupted STARTED execution without complete
 durable output evidence fails closed and requires explicit operator recovery.
 Image generation and visual inspection remain evidence production only: neither
 can accept a Task, adopt an Artifact, sign provenance, merge, or release.
+
+## 21. Governed Pixelorama source and animation vertical
+
+Accepted design evidence can also feed a bounded Pixelorama source-creation
+WorkOrder without requiring hidden pre-existing `.pxo` state:
+
+```text
+accepted DESIGNACC → PlanningInput lineage → WorkOrder → resolution → binding
+→ claim → dependency assembly → DISPATCH_EXECUTION_STARTED
+→ trusted Pixelorama bridge → project/PNG Artifacts and Verifications
+→ source output binding → RETURNED
+```
+
+The source request freezes the exact accepted-design projection, sprite and
+animation specification, export declarations, budget, and request hash. A
+trusted, explicitly configured bridge profile supplies the executable and
+package identity; it cannot be selected by the caller or model. Schema v30
+stores one immutable output-binding row per generated project or export and
+preserves exact Artifact and Verification parentage.
+
+Recovery independently validates the request/result JSON, bridge result,
+output paths, byte hashes, dimensions, and PASS Verifications. A durable
+binding can finish terminalization without invoking the bridge again; an
+interrupted STARTED execution without complete evidence fails closed. Source
+creation and animation production produce evidence only: they do not accept
+Tasks, adopt canonical assets, sign provenance, merge, or release.

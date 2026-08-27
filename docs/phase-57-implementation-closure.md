@@ -2,6 +2,10 @@
 
 Status: **Phase 57A–57C implemented; Phase 57D evidence synchronization in progress**
 
+Latest candidate evidence head: `ca4e5dc6d6c440f54cc38a9e950e0c63dd6c19f0`.
+Remote CI is not yet present for this head; the branch remains a draft PR and
+the final Phase 57D release gate is therefore still open.
+
 Phase 57 now closes the semantic-request boundary from accepted design evidence
 to the existing protected Blender request registry. The implementation keeps
 the Phase-20A `BlockbenchProjectSpec`, Phase-51 WorkOrder and execution, and
