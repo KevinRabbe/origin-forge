@@ -12,13 +12,13 @@ from .production_pixelorama_source_request import (
     decode_pixelorama_source_request,
 )
 from .production_work_order_models import WorkOrderRefType, content_hash
-from .production_work_orders import ProductionWorkOrder
 from .production_work_order_pixelorama import (
     PIXELORAMA_SOURCE_ADAPTER_ID,
     PIXELORAMA_SOURCE_CONTRACT_ID,
     PIXELORAMA_SOURCE_REQUEST_TYPE_ID,
     PIXELORAMA_SOURCE_ROLE,
 )
+from .production_work_orders import ProductionWorkOrder
 
 
 PIXELORAMA_SOURCE_BINDER_ID = "binder.pixelorama.source-create@1"
