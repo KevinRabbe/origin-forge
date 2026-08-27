@@ -3,12 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Iterable
 
 from .specialist_models import (
     SpecialistContract,
     SpecialistEvidenceRef,
-    SpecialistModelError,
 )
 
 

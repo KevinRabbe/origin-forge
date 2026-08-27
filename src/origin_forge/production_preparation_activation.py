@@ -7,7 +7,6 @@ from .production_preparation_models import (
     TaskPreparationReceipt,
 )
 from .production_preparation_receipts import (
-    PreparationReceiptError,
     _load_receipt_connection,
     _require_active_checkpoint,
 )

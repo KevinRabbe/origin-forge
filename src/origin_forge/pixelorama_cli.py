@@ -10,7 +10,6 @@ from .pixelorama_bridge import (
     PixeloramaBridgeUnavailable,
 )
 from .pixelorama_models import BridgeOperation
-from .runtime import OriginForgeRuntime
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,7 +46,6 @@ def _print(value: object) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    runtime = OriginForgeRuntime(args.project_root)
     try:
         profile = PixeloramaBridgeProfile(
             bridge_id=args.bridge_id,

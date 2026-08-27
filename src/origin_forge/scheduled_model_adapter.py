@@ -7,7 +7,6 @@ from .model import ModelAdapter, ModelRequest, ModelResponse
 from .model_scheduler import (
     ManagedModelLoader,
     ModelProfileError,
-    ModelProfileRegistry,
     ModelScheduler,
     ModelSelectionPolicy,
     ScheduledModel,

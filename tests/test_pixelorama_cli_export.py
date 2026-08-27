@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import binascii
 import hashlib
 import json
 import os
-import struct
 import tempfile
 import textwrap
 import unittest
-import zlib
 from pathlib import Path
 
 from origin_forge.pixelorama_cli_export import (

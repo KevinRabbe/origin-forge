@@ -18,7 +18,6 @@ from origin_forge.production_dispatch_resolution_models import (
     DispatchResolutionModelError,
     InputResolutionBundle,
     InputResolverDescriptor,
-    ResolvedInputCurrentness,
     ResolvedWorkOrderInput,
     ResolverClaim,
 )

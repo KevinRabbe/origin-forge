@@ -6,7 +6,6 @@ from typing import Iterable, Mapping
 from .ids import IdKind, new_id
 from .runtime_observation_models import content_hash, validate_sha256
 from .training_research_models import (
-    ResearchDisclosureClass,
     TrainingEligibilityAudit,
     TrainingEvidenceRef,
     TrainingResearchModelError,

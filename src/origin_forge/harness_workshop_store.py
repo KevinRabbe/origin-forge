@@ -9,7 +9,6 @@ from .harness_workshop_audit import WorkshopDecision, WorkshopEvaluationAudit
 from .harness_workshop_evaluation import WorkshopEvaluationReport
 from .harness_workshop_models import (
     HarnessImprovementCandidate,
-    HarnessWorkshopModelError,
     WorkshopEvaluationPlan,
 )
 from .harness_workshop_skill_adapter import SkillWorkshopEvaluation

@@ -14,7 +14,6 @@ from .provenance_models import (
     OperationalKeyCertificate,
     OperationalKeyRevocation,
     ProvenanceManifest,
-    SignatureAlgorithm,
     SignedOperationalKeyCertificate,
     SignedOperationalKeyRevocation,
     SignedProvenanceManifest,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import patch
 
 from origin_forge.conversation_blender_task_acceptance_service import (
     LOCAL_GUI_BLENDER_ACCEPTANCE_ACTOR_ID,
@@ -24,13 +23,7 @@ from origin_forge.conversation_service import (
 from origin_forge.ids import IdKind, new_id
 from origin_forge.production_blender_task_acceptance import (
     BLENDER_PRODUCTION_TASK_ACCEPTANCE_VERIFICATION_TYPE,
-    read_blender_production_task_acceptance,
 )
-from origin_forge.production_blender_task_acceptance_currentness import (
-    BlenderProductionTaskAcceptanceCurrentnessStatus,
-    inspect_blender_production_task_acceptance_currentness_readonly,
-)
-from origin_forge.production_blender_task_acceptor import GovernedBlenderProductionTaskAcceptor
 from test_phase53a_blender_production_task_acceptance import (
     Phase53ABlenderProductionTaskAcceptanceTests,
 )

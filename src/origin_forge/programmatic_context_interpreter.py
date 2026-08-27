@@ -17,7 +17,7 @@ from .programmatic_context_models import (
     ProgrammaticContextModelError,
     canonical_json,
 )
-from .runtime_observation_models import canonical_bytes, content_hash
+from .runtime_observation_models import content_hash
 
 
 _MAX_ADAPTER_INPUT_BYTES = 64 * 1024

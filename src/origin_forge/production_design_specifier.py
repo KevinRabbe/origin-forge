@@ -8,7 +8,6 @@ from typing import Any
 from .model import ModelAdapter, ModelRequest, ModelResponse
 from .production_capability_store import ProductionCapabilityStore
 from .production_design_specification_evidence import (
-    DesignSpecificationEvidenceError,
     DesignSpecificationEvidenceStore,
     build_design_input,
 )

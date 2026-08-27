@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from dataclasses import dataclass
 
-from .reviewer import IsolatedReviewer, ReviewerError, ReviewerResult
+from .reviewer import IsolatedReviewer, ReviewerResult
 from .reviewer_audit import ReviewerAuditReport, ReviewerAuditStatus, ReviewerReportAuditor
 from .runtime import OriginForgeRuntime
 from .specialist_evidence import SpecialistEvidencePackage

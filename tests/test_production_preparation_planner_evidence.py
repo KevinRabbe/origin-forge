@@ -14,7 +14,6 @@ from origin_forge.production_capability_store import ProductionCapabilityStore
 from origin_forge.production_planning_capabilities import freeze_governed_planning_input
 from origin_forge.production_planning_evidence import ProductionPlanningEvidenceStore
 from origin_forge.production_planning_models import PlanProposal, PlanStep, audit_plan
-from origin_forge.production_preparation_assembly import assemble_preparation_planner_dependencies
 from origin_forge.production_preparation_models import PreparationStage, PreparationStatus
 from origin_forge.production_preparation_planner_evidence import (
     PlannerEvidenceRecoveryStatus,

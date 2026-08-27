@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from origin_forge.ids import IdKind, new_id
 from origin_forge.image_vision_models import (
     ImageOperation,
     ImageOperationRequest,

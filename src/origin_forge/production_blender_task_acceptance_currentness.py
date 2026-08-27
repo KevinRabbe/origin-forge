@@ -14,7 +14,6 @@ from .production_blender_adoption_receipt import (
     BLENDER_PRODUCTION_ADOPTION_VERIFICATION_TYPE,
     BLENDER_PRODUCTION_ADOPTION_VERIFIER,
     BlenderProductionAdoptionReceipt,
-    BlenderProductionAdoptionReceiptError,
     BlenderProductionAdoptionStatus,
     expected_blender_production_adoption_evidence,
     read_blender_production_adoption_receipt,

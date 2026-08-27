@@ -47,7 +47,6 @@ from origin_forge.production_work_order_builtin import (
 from origin_forge.production_work_order_store import ProductionWorkOrderStore
 from origin_forge.production_work_orders import create_current_work_order
 from origin_forge.runtime import OriginForgeRuntime
-from origin_forge.state import TaskStatus
 
 
 class ProductionDispatchInvocationCoordinatorTests(unittest.TestCase):

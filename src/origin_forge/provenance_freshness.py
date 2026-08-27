@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
 
 from .path_policy import portable_relative_path
 from .provenance_models import ProvenanceRecordRef, SignedProvenanceManifest

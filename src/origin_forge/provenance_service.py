@@ -11,7 +11,6 @@ from .provenance_crypto import (
     OperationalManifestSigner,
     RootAuthority,
     SignatureBackend,
-    SignatureBackendError,
     certificate_message,
     revocation_message,
 )
