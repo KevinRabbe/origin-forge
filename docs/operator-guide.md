@@ -77,6 +77,17 @@ This creates a `PIXELORAMA_PROJECT` source Artifact and integrity Verification
 for a project-contained, non-symlink `.pxo` file. It does not perform semantic
 acceptance, export, adoption, or signing.
 
+Source creation from an accepted design requires an explicit bridge profile in
+addition to the configured Pixelorama executable. Set
+`ORIGIN_FORGE_PIXELORAMA_BRIDGE_ID`,
+`ORIGIN_FORGE_PIXELORAMA_BRIDGE_VERSION`,
+`ORIGIN_FORGE_PIXELORAMA_BRIDGE_SHA256`, and
+`ORIGIN_FORGE_PIXELORAMA_BRIDGE_PACKAGE` to the exact bridge identity and
+absolute package path. Optional launcher arguments are supplied only as a JSON
+string array through `ORIGIN_FORGE_PIXELORAMA_BRIDGE_ARGS_JSON`. The bridge
+profile permits `CREATE_SPRITE_PROJECT` only; missing fields, relative paths,
+hash drift, or an unavailable package fail closed before execution.
+
 The compatibility admin module also exposes explicit source revision
 inspection and replacement:
 
