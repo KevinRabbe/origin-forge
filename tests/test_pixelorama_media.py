@@ -34,6 +34,11 @@ from origin_forge.pixelorama_source import (
 )
 from origin_forge.production_design_specification_models import DesignAnimationIntent
 from origin_forge.production_design_specification_currentness import AcceptedDesignError
+from origin_forge.production_work_order_models import WorkOrderInputRef, WorkOrderRefType
+from origin_forge.production_work_order_pixelorama import (
+    PIXELORAMA_SOURCE_INPUT_ROLE,
+    PixeloramaSourceCreationDispatchValidator,
+)
 from origin_forge.review import record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import FlowStatus, RunStatus, TaskStatus
@@ -439,6 +444,19 @@ class PixeloramaMediaTests(unittest.TestCase):
             payload["sprite_spec"]["animations"],
             [{"name": "run", "first_frame": 1, "last_frame": 2, "loop_mode": "LOOP"}],
         )
+        validated = PixeloramaSourceCreationDispatchValidator().validate(
+            payload,
+            (
+                WorkOrderInputRef(
+                    ref_type=WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,
+                    ref_id="DESIGNACC-work-order",
+                    content_hash="a" * 64,
+                    role=PIXELORAMA_SOURCE_INPUT_ROLE,
+                    revision=None,
+                ),
+            ),
+        )
+        self.assertEqual(validated, payload)
 
     def test_source_creation_from_stale_accepted_design_fails_closed(self) -> None:
         request = self._request()
