@@ -180,7 +180,13 @@ class PixeloramaMediaService:
         if not isinstance(request, PixeloramaBridgeRequest):
             raise TypeError("request must be a PixeloramaBridgeRequest")
         if accepted_design_lineage is not None:
-            required_lineage = {"acceptance_id", "acceptance_hash", "design_input_id"}
+            required_lineage = {
+                "acceptance_id",
+                "acceptance_hash",
+                "design_input_id",
+                "planning_input_id",
+                "planning_input_hash",
+            }
             if set(accepted_design_lineage) != required_lineage or any(
                 not isinstance(value, str) or not value
                 for value in accepted_design_lineage.values()

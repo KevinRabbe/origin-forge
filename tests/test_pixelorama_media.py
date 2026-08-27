@@ -260,6 +260,13 @@ class PixeloramaMediaTests(unittest.TestCase):
         result = SimpleNamespace(run_id="RUN-pixelorama")
         with (
             patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                return_value=SimpleNamespace(
+                    planning_input_id="PLAN-input",
+                    content_hash="sha256:" + "c" * 64,
+                ),
+            ),
+            patch(
                 "origin_forge.pixelorama_source.inspect_accepted_design",
                 return_value=expected,
             ),
@@ -285,6 +292,8 @@ class PixeloramaMediaTests(unittest.TestCase):
                 "acceptance_id": "DESIGNACC-accepted",
                 "acceptance_hash": "sha256:" + "a" * 64,
                 "design_input_id": "DESIGNIN-input",
+                "planning_input_id": "PLAN-input",
+                "planning_input_hash": "sha256:" + "c" * 64,
             },
         )
 
@@ -300,10 +309,17 @@ class PixeloramaMediaTests(unittest.TestCase):
             current=False,
             stale_reason="goal revision drifted",
         )
-        with patch(
-            "origin_forge.pixelorama_source.inspect_accepted_design",
-            return_value=expected,
-        ), self.assertRaisesRegex(RuntimeError, "accepted design is stale"):
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                side_effect=RuntimeError("accepted design is stale: goal revision drifted"),
+            ),
+            patch(
+                "origin_forge.pixelorama_source.inspect_accepted_design",
+                return_value=expected,
+            ),
+            self.assertRaisesRegex(RuntimeError, "accepted design is stale"),
+        ):
             create_pixelorama_source_from_accepted_design(
                 self.runtime,
                 self.task,

@@ -17,6 +17,7 @@ from .pixelorama_models import (
 )
 from .production_design_specification_currentness import (
     AcceptedDesignError,
+    bridge_accepted_design_to_planning_input,
     inspect_accepted_design,
 )
 from .production_evidence_read import ProductionEvidenceReadService
@@ -69,6 +70,7 @@ def create_pixelorama_source_from_accepted_design(
     evidence is a currentness and provenance precondition, not a source of
     implicit dimensions, exports, or semantic acceptance.
     """
+    planning_input = bridge_accepted_design_to_planning_input(runtime, acceptance_id)
     inspection = inspect_accepted_design(runtime, acceptance_id)
     if not inspection.current:
         raise AcceptedDesignError(
@@ -91,6 +93,8 @@ def create_pixelorama_source_from_accepted_design(
             "acceptance_id": inspection.acceptance.acceptance_id,
             "acceptance_hash": inspection.acceptance.content_hash,
             "design_input_id": inspection.design_input.design_input_id,
+            "planning_input_id": planning_input.planning_input_id,
+            "planning_input_hash": planning_input.content_hash,
         },
     )
 
