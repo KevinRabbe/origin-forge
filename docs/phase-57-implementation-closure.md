@@ -1,24 +1,31 @@
 # Phase 57 Implementation Closure
 
-Status: **Phase 57A–57C implemented in separately reviewable slices**
+Status: **Phase 57A–57C implemented; Phase 57D evidence synchronization in progress**
 
 Phase 57 now closes the semantic-request boundary from accepted design evidence
 to the existing protected Blender request registry. The implementation keeps
 the Phase-20A `BlockbenchProjectSpec`, Phase-51 WorkOrder and execution, and
 Phase-53 result acceptance contracts unchanged.
 
-## Exact implementation heads
+## Historical implementation heads
 
 - Phase 57A base: `8cb0f50170edbb0fc1118ecfcf98241a53cdc992`
 - Phase 57B publication: `2590160ccf4d4d919189c1b1bc644c6905d25ba8`
 - Phase 57C admission: `6d1d883413e7ceac6a72b870e62793e27ecfa757`
 
-The Phase 57B/57C implementation adds schema v23 and the immutable
+The Phase 57B/57C implementation adds the immutable
 `M3DREQAPP-*` / `M3DREQPUB-*` evidence families. Approval freezes an
 infrastructure-owned `MODEL3DREQ-*` identity, canonical request bytes, and
 request hash. Publication is create-only and revalidated through the existing
 Phase-51 protected reader. Phase-51 admission requires the exact current
 Task/publication/request relation and rejects stale upstream lineage.
+
+Subsequent foundation work has advanced the composed schema to v28. Migration
+v28 records a `sha256:` hash for each migration after validating its version;
+historical rows with no hash are backfilled only when their versions and SQL
+identity are known. A stored hash mismatch fails closed before further upgrade
+work. This changes migration-integrity evidence only and does not rewrite
+domain IDs, receipts, or production evidence.
 
 The module-only operator surface is:
 
@@ -37,5 +44,11 @@ release authority was added.
 The focused Phase 57A/57B/57C and migration suite covers exact approval retry,
 create-only publication, protected-request tampering, competing proposals,
 immutable evidence, exact Phase-51 admission matching, and stale-lineage
-rejection. Full canonical CI remains the release gate and must run against the
-final candidate commit in the repository hosting workflow.
+rejection. The current remote verification baseline also includes 23 Phase-51
+and Phase-57 tests with one explicit symlink capability skip, five migration
+tests, and the 15-test Blender invocation/currentness regression suite. The
+canonical workflow runs the Windows/Linux Python matrix, strict doctor
+preflight, resource-warning checks, and the configured type-check baseline;
+mypy writes its cache to the runner temporary directory. Full canonical CI
+remains the release gate and must run against the final candidate commit in the
+repository hosting workflow.
