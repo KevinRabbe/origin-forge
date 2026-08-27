@@ -9,6 +9,8 @@ from .path_policy import portable_relative_path
 from .pixelorama_bridge import PixeloramaBridgeProfile
 from .pixelorama_media import PixeloramaMediaResult, PixeloramaMediaService
 from .pixelorama_models import (
+    AnimationLoopMode,
+    AnimationSpec,
     BridgeBudget,
     BridgeOperation,
     ExportSpec,
@@ -16,6 +18,7 @@ from .pixelorama_models import (
     SpriteProjectSpec,
 )
 from .production_design_specification_currentness import (
+    AcceptedDesignInspection,
     AcceptedDesignError,
     bridge_accepted_design_to_planning_input,
     inspect_accepted_design,
@@ -27,6 +30,46 @@ from .runtime import OriginForgeRuntime, RuntimeInvariantError
 
 class PixeloramaSourceImportError(RuntimeError):
     pass
+
+
+def _bind_design_animation_intents(
+    sprite_spec: SpriteProjectSpec,
+    inspection: AcceptedDesignInspection,
+) -> SpriteProjectSpec:
+    """Bind accepted design animation semantics to explicit raster source state."""
+    intents = tuple(
+        intent
+        for deliverable in inspection.specification.deliverables
+        for intent in deliverable.animation_intents
+    )
+    if not intents:
+        return sprite_spec
+    if sprite_spec.animations:
+        raise AcceptedDesignError(
+            "animation intents must be the sole animation authority for accepted-design source creation"
+        )
+    animations = tuple(
+        AnimationSpec(
+            name=intent.name,
+            first_frame=0,
+            last_frame=intent.frame_count - 1,
+            loop_mode=AnimationLoopMode(intent.loop_mode),
+        )
+        for intent in intents
+    )
+    if any(animation.last_frame >= len(sprite_spec.frames) for animation in animations):
+        raise AcceptedDesignError("accepted design animation exceeds supplied raster frames")
+    return SpriteProjectSpec(
+        width=sprite_spec.width,
+        height=sprite_spec.height,
+        layers=sprite_spec.layers,
+        frames=sprite_spec.frames,
+        animations=animations,
+        palette=sprite_spec.palette,
+        transparency_required=sprite_spec.transparency_required,
+        output_basename=sprite_spec.output_basename,
+        schema_version=sprite_spec.schema_version,
+    )
 
 
 def create_pixelorama_source(
@@ -80,6 +123,7 @@ def create_pixelorama_source_from_accepted_design(
         raise AcceptedDesignError("accepted design belongs to another project")
     if not isinstance(sprite_spec, SpriteProjectSpec):
         raise TypeError("sprite_spec must be a SpriteProjectSpec")
+    sprite_spec = _bind_design_animation_intents(sprite_spec, inspection)
     request = PixeloramaBridgeRequest.create(
         operation=BridgeOperation.CREATE_SPRITE_PROJECT,
         sprite_spec=sprite_spec,
