@@ -74,6 +74,40 @@ def _bind_design_animation_intents(
     )
 
 
+def build_pixelorama_source_work_order_payload_from_accepted_design(
+    runtime: OriginForgeRuntime,
+    acceptance_id: str,
+    sprite_spec: SpriteProjectSpec,
+    *,
+    export_specs: tuple[ExportSpec, ...] = (),
+    budget: BridgeBudget | None = None,
+) -> dict[str, object]:
+    """Build a canonical source WorkOrder payload from current design evidence."""
+    bridge_accepted_design_to_planning_input(runtime, acceptance_id)
+    inspection = inspect_accepted_design(runtime, acceptance_id)
+    if not inspection.current:
+        raise AcceptedDesignError(
+            f"accepted design is stale: {inspection.stale_reason or 'unknown reason'}"
+        )
+    if inspection.acceptance.project_id != runtime.project_id():
+        raise AcceptedDesignError("accepted design belongs to another project")
+    if not isinstance(sprite_spec, SpriteProjectSpec):
+        raise TypeError("sprite_spec must be a SpriteProjectSpec")
+    bound_spec = _bind_design_animation_intents(sprite_spec, inspection)
+    request = PixeloramaBridgeRequest.create(
+        operation=BridgeOperation.CREATE_SPRITE_PROJECT,
+        sprite_spec=bound_spec,
+        export_specs=export_specs,
+        budget=budget,
+    )
+    return {
+        "operation": request.operation.value,
+        "sprite_spec": request.sprite_spec.to_dict(),
+        "export_specs": [value.to_dict() for value in request.export_specs],
+        "budget": request.budget.to_dict(),
+    }
+
+
 def create_pixelorama_source(
     runtime: OriginForgeRuntime,
     task_id: str,
