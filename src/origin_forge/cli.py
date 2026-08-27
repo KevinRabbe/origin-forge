@@ -21,6 +21,11 @@ from .pixelorama_source import (
     replace_pixelorama_source,
 )
 from .plan import inspect_goal_plan
+from .production_actions import (
+    accept_production_execution,
+    adopt_production_execution,
+    inspect_production_execution,
+)
 from .production_dispatch_recovery import recover_dispatch_execution_once
 from .production_goal_bootstrap_operator import (
     GoalBootstrapOperatorBlocked,
@@ -164,6 +169,14 @@ def build_parser() -> argparse.ArgumentParser:
     production_sub = production.add_subparsers(dest="production_command", required=True)
     trace = production_sub.add_parser("trace", help="inspect one correlated Task lifecycle")
     trace.add_argument("task_id")
+    production_accept = production_sub.add_parser("accept", help="accept one supported production execution")
+    production_accept.add_argument("execution_id")
+    production_accept.add_argument("--actor-id")
+    production_adopt = production_sub.add_parser("adopt", help="adopt one supported production execution")
+    production_adopt.add_argument("execution_id")
+    production_adopt.add_argument("destination")
+    production_inspect = production_sub.add_parser("inspect", help="inspect one production execution")
+    production_inspect.add_argument("execution_id")
     source = production_sub.add_parser("source", help="manage governed Pixelorama sources")
     source_sub = source.add_subparsers(dest="source_command", required=True)
     source_import = source_sub.add_parser("import", help="register one explicit project source")
@@ -421,6 +434,17 @@ def _main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "production" and args.production_command == "trace":
         _print(inspect_task_production_trace(runtime, args.task_id))
+        return 0
+    if args.command == "production" and args.production_command == "inspect":
+        _print(inspect_production_execution(runtime, args.execution_id))
+        return 0
+    if args.command == "production" and args.production_command == "accept":
+        result = accept_production_execution(runtime, args.execution_id, actor_id=args.actor_id)
+        _print(result.to_dict())
+        return 0
+    if args.command == "production" and args.production_command == "adopt":
+        result = adopt_production_execution(runtime, args.execution_id, args.destination)
+        _print(result.to_dict())
         return 0
     if args.command == "production" and args.production_command == "source":
         if args.source_command == "import":
