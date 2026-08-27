@@ -249,6 +249,7 @@ class DoctorTests(unittest.TestCase):
                 set(result["dispatch"]["output_bindings"]),
                 {
                     "pixelorama_dispatch_output_bindings",
+                    "pixelorama_source_dispatch_output_bindings",
                     "blender_dispatch_output_bindings",
                     "image_dispatch_output_bindings",
                     "audio_dispatch_output_bindings",

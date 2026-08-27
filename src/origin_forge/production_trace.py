@@ -51,6 +51,7 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
             )
             for table in (
                 "pixelorama_dispatch_output_bindings",
+                "pixelorama_source_dispatch_output_bindings",
                 "blender_dispatch_output_bindings",
                 "image_dispatch_output_bindings",
                 "audio_dispatch_output_bindings",
