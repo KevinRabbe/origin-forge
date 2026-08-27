@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import hashlib
+
 from .adapters.audio_piper import PiperAudioAdapter
 from .audio_service import (
     AudioOperationService,
     AudioOperationServiceResult,
     AudioOutputArtifactEvidence,
 )
+from .audio_wav import inspect_pcm16_wav
+from .lineage import OriginForgeLineage
 from .production_audio_dispatch_output_binding import (
     binding_from_audio_result,
     publish_audio_dispatch_output_binding,
@@ -25,6 +29,7 @@ from .production_dispatch_invocation import (
 from .production_dispatch_invocation_piper import PiperInvocationRequest
 from .production_execution_assembly import PiperExecutionPayload
 from .production_execution_owner_audio import PIPER_EXECUTION_OWNER_ID
+from .runtime import OriginForgeRuntime
 from .service import utc_now
 from .state import TaskStatus
 
@@ -109,12 +114,56 @@ def _materialize(binding):
     )
 
 
+def _require_audio_binding_evidence(runtime: OriginForgeRuntime, binding) -> None:
+    """Revalidate the canonical WAV and its durable Artifact lineage before recovery."""
+    lineage = OriginForgeLineage(runtime)
+    request_artifact = lineage.get_artifact(binding.request_artifact_id)
+    result_artifact = lineage.get_artifact(binding.result_artifact_id)
+    if (
+        request_artifact.get("parent_artifact_id") is not None
+        or request_artifact.get("created_by_run_id") != binding.run_id
+        or request_artifact.get("status") != "CAPTURED"
+        or result_artifact.get("parent_artifact_id") != binding.request_artifact_id
+        or result_artifact.get("created_by_run_id") != binding.run_id
+        or result_artifact.get("status") != "CAPTURED"
+    ):
+        raise ProductionDispatchInvocationError("audio request/result Artifact lineage drifted")
+    artifact = lineage.get_artifact(binding.output_artifact_id)
+    path = lineage.local_artifact_path(binding.output_artifact_id)
+    data = path.read_bytes()
+    inspection = inspect_pcm16_wav(data)
+    verification_ids = {
+        value["id"]
+        for value in lineage.list_artifact_verifications(binding.output_artifact_id)
+    }
+    if (
+        artifact.get("parent_artifact_id") != binding.result_artifact_id
+        or artifact.get("created_by_run_id") != binding.run_id
+        or artifact.get("status") != "PRODUCED"
+        or artifact.get("content_hash") != "sha256:" + hashlib.sha256(data).hexdigest()
+        or artifact.get("content_hash") != "sha256:" + binding.output_content_hash
+        or inspection.pcm_hash != "sha256:" + binding.output_pcm_hash
+        or inspection.byte_count != binding.output_byte_count
+        or inspection.frame_count != binding.output_frame_count
+        or inspection.sample_rate != binding.output_sample_rate
+        or inspection.channels != binding.output_channels
+        or inspection.peak_abs_sample != binding.output_peak_abs_sample
+        or inspection.clipped_sample_count != binding.output_clipped_sample_count
+        or inspection.nonzero_sample_count != binding.output_nonzero_sample_count
+        or binding.output_verification_id not in verification_ids
+    ):
+        raise ProductionDispatchInvocationError("audio output evidence drifted")
+
+
 def recover_piper_dispatch_execution_once(runtime, execution_id: str) -> CompletedDispatchInvocation:
     execution = read_dispatch_execution(runtime, execution_id)
     if execution.execution_owner_id != PIPER_EXECUTION_OWNER_ID:
         raise ProductionDispatchInvocationError("execution is not owned by Piper")
     try:
-        result = _materialize(read_audio_dispatch_output_binding(runtime, execution_id))
+        binding = read_audio_dispatch_output_binding(runtime, execution_id)
+        if isinstance(runtime, OriginForgeRuntime):
+            _require_audio_binding_evidence(runtime, binding)
+        result = _materialize(binding)
     except Exception as exc:
         raise ProductionDispatchInvocationRecoveryRequired(execution_id, "OWNER_RETURN_CONTRACT_MISMATCH") from exc
     if execution.status is DispatchExecutionStatus.RETURNED:

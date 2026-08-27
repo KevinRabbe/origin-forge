@@ -19,6 +19,7 @@ from origin_forge.audio_profiles import (
     GovernedAudioProfile,
 )
 from origin_forge.audio_wav import encode_pcm16_wav, inspect_pcm16_wav
+from origin_forge.lineage import OriginForgeLineage
 from origin_forge.production_audio_dispatch_output_binding import (
     read_audio_dispatch_output_binding,
 )
@@ -35,7 +36,10 @@ from origin_forge.production_dispatch_binding import (
     create_input_resolution_bundle,
 )
 from origin_forge.production_dispatch_claims import acquire_dispatch_claim
-from origin_forge.production_dispatch_invocation import dispatch_claim_once
+from origin_forge.production_dispatch_invocation import (
+    ProductionDispatchInvocationRecoveryRequired,
+    dispatch_claim_once,
+)
 from origin_forge.production_dispatch_invocation_piper_owner import (
     recover_piper_dispatch_execution_once,
 )
@@ -187,6 +191,32 @@ class PiperDispatchVerticalTests(unittest.TestCase):
         self.assertEqual(binding.output_relative_path, "exports/voice.wav")
         recovered = recover_piper_dispatch_execution_once(self.runtime, completed.execution.execution_id)
         self.assertEqual(recovered.audio_result, completed.audio_result)
+        self.assertEqual(_FakePiperAdapter.calls, 1)
+
+    def test_recovery_rejects_tampered_wav_without_reinvoking_piper(self) -> None:
+        paths = {
+            "ORIGIN_FORGE_PIPER_RUNTIME_ROOT": self.root / "piper-runtime",
+            "ORIGIN_FORGE_PIPER_EXECUTABLE": self.root / "piper-runtime" / "piper",
+            "ORIGIN_FORGE_PIPER_ESPEAK_DATA": self.root / "piper-runtime" / "espeak",
+            "ORIGIN_FORGE_PIPER_MODEL": self.root / "voice.onnx",
+            "ORIGIN_FORGE_PIPER_MODEL_CONFIG": self.root / "voice.json",
+            "ORIGIN_FORGE_PIPER_LICENSE": self.root / "voice.license",
+        }
+        with patch.dict("os.environ", {key: str(value) for key, value in paths.items()}), patch(
+            "origin_forge.production_dispatch_invocation_piper_owner.PiperAudioAdapter", _FakePiperAdapter
+        ):
+            completed = dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+        binding = read_audio_dispatch_output_binding(
+            self.runtime, completed.execution.execution_id
+        )
+        output_path = OriginForgeLineage(self.runtime).local_artifact_path(
+            binding.output_artifact_id
+        )
+        output_path.write_bytes(b"tampered-wav")
+        with self.assertRaises(ProductionDispatchInvocationRecoveryRequired):
+            recover_piper_dispatch_execution_once(
+                self.runtime, completed.execution.execution_id
+            )
         self.assertEqual(_FakePiperAdapter.calls, 1)
 
 
