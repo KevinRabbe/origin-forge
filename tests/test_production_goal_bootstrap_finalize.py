@@ -321,7 +321,11 @@ class GoalBootstrapFinalizeTests(unittest.TestCase):
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(len(outcomes), 2)
         durable = read_goal_bootstrap_receipt(self.runtime, self.bootstrap_id)
-        self.assertEqual(durable.status, GoalBootstrapStatus.READY)
+        self.assertEqual(
+            durable.status,
+            GoalBootstrapStatus.READY,
+            msg=f"concurrent finalization outcomes: {outcomes!r}; stage={durable.stage.value}",
+        )
         self.assertEqual(self._count("plan_audits"), 1)
         self.assertEqual(self._count("plan_materializations"), 1)
         self.assertEqual(len(self._policy_files()), 1)
