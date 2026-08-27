@@ -57,6 +57,16 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
                 "playtest_dispatch_output_bindings",
             )
         }
+        model3d_approvals = _rows(
+            conn,
+            "SELECT * FROM model3d_request_approvals WHERE project_id = ? AND task_id = ? ORDER BY approved_at, approval_id",
+            (runtime.project_id(), task_id),
+        )
+        model3d_publications = _rows(
+            conn,
+            "SELECT * FROM model3d_request_publications WHERE project_id = ? AND task_id = ? ORDER BY published_at, publication_id",
+            (runtime.project_id(), task_id),
+        )
     validator_registry = build_builtin_dispatch_validator_registry()
     work_order_ids = tuple(
         dict.fromkeys(str(row["work_order_id"]) for row in executions)
@@ -85,6 +95,8 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
             "claims": claims,
             "executions": executions,
             "output_bindings": output_bindings,
+            "model3d_approvals": model3d_approvals,
+            "model3d_publications": model3d_publications,
         },
         "artifacts": artifacts,
         "verifications": runtime.list_verifications("TASK", task_id),
