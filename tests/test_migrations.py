@@ -27,6 +27,11 @@ class MigrationTests(unittest.TestCase):
                 ).fetchone()[0]
                 self.assertIn("originforge.execution.audio.piper-tts@1", binding_sql)
                 self.assertIn("originforge.execution.audio.ffmpeg-process@1", binding_sql)
+                source_binding_sql = conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'pixelorama_source_dispatch_output_bindings'"
+                ).fetchone()[0]
+                self.assertIn("originforge.execution.pixelorama.source-create@1", source_binding_sql)
+                self.assertIn("output_type IN ('PIXELORAMA_PROJECT', 'PNG', 'SPRITESHEET')", source_binding_sql)
                 count = conn.execute(
                     "SELECT COUNT(*) FROM schema_migrations WHERE migration_hash IS NOT NULL"
                 ).fetchone()[0]
