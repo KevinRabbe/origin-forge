@@ -89,7 +89,10 @@ jobs:
   unittest:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # The complete non-real-tool suite is intentionally run on every
+    # platform.  It takes about 20 minutes on the slowest hosted runner;
+    # leave bounded headroom for Python setup and Windows filesystem variance.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -144,4 +147,5 @@ jobs:
       - name: Run unit tests
         env:
           PYTHONPATH: src
+          PYTHONUNBUFFERED: "1"
         run: python -W error::ResourceWarning .github/ci_unit_suite.py
