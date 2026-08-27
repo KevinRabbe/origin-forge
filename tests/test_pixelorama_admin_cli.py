@@ -69,6 +69,7 @@ class PixeloramaAdminCliTests(unittest.TestCase):
                 "source-import",
                 "source-inspect",
                 "source-history",
+                "source-replace",
             },
         )
         production = subparsers[0].choices["adopt-production-new"]
@@ -171,6 +172,22 @@ class PixeloramaAdminCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertTrue(history["read_only"])
         self.assertEqual(len(history["revisions"]), 1)
+
+        replacement = self.root / "assets" / "player-v2.pxo"
+        replacement.write_bytes(b"pixelorama source v2")
+        code, replaced = self._call(
+            "source-replace",
+            imported["artifact_id"],
+            "assets/player-v2.pxo",
+        )
+        self.assertEqual(code, 0)
+        self.assertNotEqual(replaced["artifact_id"], imported["artifact_id"])
+        code, history = self._call("source-history", replaced["artifact_id"])
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            [item["artifact"]["id"] for item in history["revisions"]],
+            [replaced["artifact_id"], imported["artifact_id"]],
+        )
 
 
 if __name__ == "__main__":

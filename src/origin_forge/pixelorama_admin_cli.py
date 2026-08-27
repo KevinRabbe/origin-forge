@@ -13,6 +13,7 @@ from .pixelorama_source import (
     import_pixelorama_source,
     inspect_pixelorama_source,
     inspect_pixelorama_source_history,
+    replace_pixelorama_source,
 )
 from .production_pixelorama_adoption import (
     GovernedPixeloramaProductionOutputAdopter,
@@ -104,6 +105,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="inspect the immutable Pixelorama source revision chain",
     )
     source_history.add_argument("artifact_id")
+
+    source_replace = commands.add_parser(
+        "source-replace",
+        help="register a new immutable .pxo source revision linked to a prior source",
+    )
+    source_replace.add_argument("previous_artifact_id")
+    source_replace.add_argument("source_path")
     return parser
 
 
@@ -147,6 +155,12 @@ def main(argv: list[str] | None = None) -> int:
             result = inspect_pixelorama_source(runtime, args.artifact_id)
         elif args.command == "source-history":
             result = inspect_pixelorama_source_history(runtime, args.artifact_id)
+        elif args.command == "source-replace":
+            result = replace_pixelorama_source(
+                runtime,
+                args.previous_artifact_id,
+                args.source_path,
+            )
         else:  # pragma: no cover - argparse owns the closed command set.
             raise ValueError("unsupported Pixelorama admin command")
         _print(result if isinstance(result, dict) else result.to_dict())
