@@ -31,6 +31,7 @@ from origin_forge.pixelorama_source import (
     create_pixelorama_source,
     create_pixelorama_source_from_accepted_design,
 )
+from origin_forge.production_design_specification_models import DesignAnimationIntent
 from origin_forge.review import record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import FlowStatus, RunStatus, TaskStatus
@@ -296,6 +297,54 @@ class PixeloramaMediaTests(unittest.TestCase):
                 "planning_input_hash": "sha256:" + "c" * 64,
             },
         )
+
+    def test_accepted_design_animation_intent_binds_to_source_request(self) -> None:
+        request = self._request()
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-animation",
+                content_hash="sha256:" + "a" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            design_input=SimpleNamespace(design_input_id="DESIGNIN-input"),
+            specification=SimpleNamespace(
+                deliverables=(
+                    SimpleNamespace(
+                        animation_intents=(
+                            DesignAnimationIntent("idle", 1, 120, "LOOP"),
+                        ),
+                    ),
+                ),
+            ),
+            current=True,
+            stale_reason=None,
+        )
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                return_value=SimpleNamespace(
+                    planning_input_id="PLAN-input",
+                    content_hash="sha256:" + "c" * 64,
+                ),
+            ),
+            patch("origin_forge.pixelorama_source.inspect_accepted_design", return_value=expected),
+            patch(
+                "origin_forge.pixelorama_source.PixeloramaMediaService.execute",
+                return_value=SimpleNamespace(run_id="RUN-animation"),
+            ) as execute,
+        ):
+            create_pixelorama_source_from_accepted_design(
+                self.runtime,
+                self.task,
+                "DESIGNACC-animation",
+                self._profile(self._script("animation-bridge.py")),
+                request.sprite_spec,
+                export_specs=request.export_specs,
+                budget=request.budget,
+            )
+        bound_request = execute.call_args.args[1]
+        self.assertEqual(bound_request.sprite_spec.animations[0].name, "idle")
+        self.assertEqual(bound_request.sprite_spec.animations[0].last_frame, 0)
 
     def test_source_creation_from_stale_accepted_design_fails_closed(self) -> None:
         request = self._request()
