@@ -2,7 +2,7 @@
 
 Status: **Phase 57A–57C implemented; Phase 57D evidence synchronization in progress**
 
-Latest candidate evidence head: `8bc5be0`.
+Latest candidate evidence head: `bf482cd`.
 Remote CI is in progress for this head; the branch remains a draft PR and the
 final Phase 57D release gate is therefore still open. The candidate also
 contains the later governed Pixelorama source/animation vertical and its
@@ -10,6 +10,9 @@ read-only trace evidence; those additions do not alter Phase-57 authority.
 The source WorkOrder planner now binds accepted-design animation intents before
 WorkOrder freeze, and the fake-bridge vertical verifies dispatch, adoption,
 actor-bound acceptance, and no-replay recovery with that derived animation.
+The candidate also retries bounded checkpoint contention during Goal bootstrap
+finalization instead of mistaking a concurrent writer race for semantic goal
+staleness; the regression is covered by the focused finalization suite.
 
 Phase 57 now closes the semantic-request boundary from accepted design evidence
 to the existing protected Blender request registry. The implementation keeps
@@ -69,4 +72,5 @@ canonical workflow runs the Windows/Linux Python matrix, strict doctor
 preflight, resource-warning checks, and the configured type-check baseline;
 mypy writes its cache to the runner temporary directory. Full canonical CI
 remains the release gate and must run against the final candidate commit in the
-repository hosting workflow.
+repository hosting workflow. The current candidate matrix is workflow
+`33053950400` for candidate `bf482cd`.
