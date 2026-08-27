@@ -79,7 +79,7 @@ jobs:
       - name: Run incremental mypy baseline
         env:
           PYTHONPATH: src
-        run: python -m mypy
+        run: python -m mypy --cache-dir "${{ runner.temp }}/origin-forge-mypy"
 
   unittest:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
