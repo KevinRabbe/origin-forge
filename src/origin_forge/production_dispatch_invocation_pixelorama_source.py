@@ -16,6 +16,7 @@ from .production_dispatch_invocation import (
 from .production_dispatch_binding import (
     build_pixelorama_source_dispatch_binder_registry,
 )
+from .production_capability_store import ProductionCapabilityStore
 from .production_dispatch_execution_read import read_dispatch_execution
 from .production_execution_assembly import PixeloramaSourceCreationExecutionPayload
 from .production_pixelorama_source_dispatch_output_binding import (
@@ -27,6 +28,7 @@ from .production_pixelorama_source_dispatch_output_binding import (
 )
 from .production_pixelorama_source_request import PixeloramaSourceInvocationRequest
 from .production_work_order_store import ProductionWorkOrderStore
+from .production_work_order_builtin import build_builtin_dispatch_validator_registry
 from .runtime import OriginForgeRuntime
 from .service import utc_now
 from .state import TaskStatus
@@ -48,7 +50,11 @@ def _read_source_request(runtime, claim_id, expected_claim_revision):
     if binding.request_type_id != PIXELORAMA_SOURCE_REQUEST_TYPE_ID:
         return None
     bundle = read_input_resolution(runtime, claim.input_resolution_id)
-    work_order = ProductionWorkOrderStore(runtime).load_work_order(claim.work_order_id)
+    work_order = ProductionWorkOrderStore(
+        runtime,
+        ProductionCapabilityStore(runtime),
+        build_builtin_dispatch_validator_registry(),
+    ).load_work_order(claim.work_order_id)
     binder = build_pixelorama_source_dispatch_binder_registry().binder_for(bundle)
     request = binder.bind(work_order, bundle)
     if not isinstance(request, PixeloramaSourceInvocationRequest):
