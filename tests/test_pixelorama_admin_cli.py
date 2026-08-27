@@ -66,6 +66,9 @@ class PixeloramaAdminCliTests(unittest.TestCase):
                 "adopt-production-new",
                 "accept-production-task",
                 "sign-production-provenance",
+                "source-import",
+                "source-inspect",
+                "source-history",
             },
         )
         production = subparsers[0].choices["adopt-production-new"]
@@ -149,6 +152,25 @@ class PixeloramaAdminCliTests(unittest.TestCase):
         )
         self.assertEqual(code, 3)
         self.assertEqual(payload["error"], "NOT_FOUND")
+
+    def test_source_import_and_read_only_inspection_are_explicit(self) -> None:
+        source = self.root / "assets" / "player.pxo"
+        source.parent.mkdir()
+        source.write_bytes(b"pixelorama source")
+
+        code, imported = self._call("source-import", "assets/player.pxo")
+        self.assertEqual(code, 0)
+        self.assertTrue(imported["artifact_id"].startswith("ART-"))
+
+        code, inspected = self._call("source-inspect", imported["artifact_id"])
+        self.assertEqual(code, 0)
+        self.assertTrue(inspected["read_only"])
+        self.assertEqual(inspected["artifact"]["id"], imported["artifact_id"])
+
+        code, history = self._call("source-history", imported["artifact_id"])
+        self.assertEqual(code, 0)
+        self.assertTrue(history["read_only"])
+        self.assertEqual(len(history["revisions"]), 1)
 
 
 if __name__ == "__main__":
