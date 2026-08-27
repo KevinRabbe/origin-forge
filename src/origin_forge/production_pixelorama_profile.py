@@ -106,6 +106,8 @@ def load_infrastructure_pixelorama_bridge_profile(
         bridge_version = cast(str, values["bridge_version"])
         bridge_fingerprint = cast(str, values["bridge_fingerprint"])
         bridge_package = cast(str, values["bridge_package"])
+        if not Path(cast(str, executable)).is_absolute() or not Path(bridge_package).is_absolute():
+            raise ValueError("Pixelorama executable and bridge package paths must be absolute")
         launcher_args_raw = os.environ.get(_BRIDGE_ARGS_ENV, "[]")
         launcher_args = json.loads(launcher_args_raw)
         if not isinstance(launcher_args, list) or any(
