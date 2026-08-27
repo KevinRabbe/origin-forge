@@ -564,11 +564,7 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "goal":
         if args.goal_command == "bootstrap":
             if args.goal_bootstrap_command == "status":
-                _print(
-                    inspect_goal_bootstrap_status_readonly(
-                        runtime, args.goal_id
-                    ).to_dict()
-                )
+                _print(inspect_goal_bootstrap_status_readonly(runtime, args.goal_id).to_dict())
                 return 0
             if args.goal_bootstrap_command == "start":
                 _print(bootstrap_goal_once(runtime, args.goal_id).to_dict())

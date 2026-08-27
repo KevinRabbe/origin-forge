@@ -242,7 +242,7 @@ class Phase51BBlenderWorkOrderBindingTests(unittest.TestCase):
             review_rows[BLENDER_ADAPTER_ID].status,
             BuiltinDispatchReviewStatus.SUPPORTED,
         )
-        self.assertEqual(len(build_builtin_dispatch_binder_registry().descriptors), 8)
+        self.assertEqual(len(build_builtin_dispatch_binder_registry().descriptors), 10)
         validator = build_builtin_dispatch_validator_registry().validator(
             "validator.blender.export-glb@1"
         )

@@ -8,8 +8,6 @@ from .production_manager_advance_once import (
     ManagerAdvanceOnceStatus,
     advance_production_manager_once,
 )
-from .runtime import OriginForgeRuntime
-
 MAX_MANAGER_ADVANCE_STEPS = 6
 
 MANAGER_ADVANCE_CONTINUATION_STATUSES = frozenset(
@@ -92,7 +90,7 @@ def _validate_once_result(result: object) -> None:
 
 
 def advance_production_manager_bounded(
-    runtime: OriginForgeRuntime,
+    runtime: object,
 ) -> BoundedManagerAdvanceResult:
     """Perform fresh one-shot Manager admissions until a frozen stop boundary is reached."""
 

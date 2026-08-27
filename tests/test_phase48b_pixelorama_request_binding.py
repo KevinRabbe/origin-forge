@@ -211,8 +211,10 @@ class Phase48BPixeloramaRequestBindingTests(unittest.TestCase):
         self.assertEqual(
             tuple(value.binder_id for value in first.descriptors),
             (
+                "binder.audio.ffmpeg-process@1",
                 "binder.audio.piper-tts@1",
                 "binder.blender.export-glb@1",
+                "binder.build.integration@1",
                 "binder.code.bounded-retry@1",
                 "binder.image.generate@1",
                 PIXELORAMA_BINDER_ID,
