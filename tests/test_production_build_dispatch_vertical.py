@@ -25,6 +25,7 @@ from origin_forge.production_dispatch_binding import (
 from origin_forge.production_dispatch_claims import acquire_dispatch_claim
 from origin_forge.production_dispatch_invocation import (
     ProductionDispatchInvocationError,
+    ProductionDispatchInvocationRecoveryRequired,
     dispatch_claim_once,
 )
 from origin_forge.production_dispatch_invocation_build import (
@@ -53,7 +54,7 @@ from origin_forge.production_work_orders import create_current_work_order
 from origin_forge.repository import RepositoryReader
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.sandbox import SandboxGuarantees, SandboxResult
-from origin_forge.state import TaskStatus
+from origin_forge.state import TaskStatus, WorkspaceStatus
 from origin_forge.workspaces import GitWorkspaceManager
 
 
@@ -241,6 +242,42 @@ test = []
     def test_build_requires_configured_sandbox_before_start(self) -> None:
         with self.assertRaises(ProductionDispatchInvocationError):
             dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+
+    def test_stale_audited_workspace_rejects_dispatch_before_backend(self) -> None:
+        workspaces = GitWorkspaceManager(self.runtime)
+        row = workspaces.list()[0]
+        workspaces.transition(
+            row["id"],
+            WorkspaceStatus.FAILED,
+            expected_revision=int(row["revision"]),
+            event_type="TEST_WORKSPACE_STALE",
+        )
+        with self.assertRaises(ProductionDispatchInvocationError):
+            dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+
+    def test_tampered_durable_build_evidence_is_not_recovered(self) -> None:
+        backend = _FakeBuildBackend()
+        with (
+            patch("origin_forge.production_execution_assembly.create_sandbox_backend", return_value=backend),
+            patch(
+                "origin_forge.production_dispatch_invocation._record_returned_or_recovery",
+                side_effect=RuntimeError("interrupted"),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+        with self.runtime.store.session() as conn:
+            execution_id = conn.execute(
+                "SELECT execution_id FROM dispatch_executions WHERE claim_id = ?",
+                (self.claim.claim_id,),
+            ).fetchone()["execution_id"]
+            conn.execute(
+                "UPDATE verifications SET evidence_json = ? WHERE evidence_json LIKE ?",
+                ("{}", f"%{execution_id}%"),
+            )
+        with self.assertRaises(ProductionDispatchInvocationRecoveryRequired):
+            recover_build_dispatch_execution_once(self.runtime, execution_id)
+        self.assertEqual(backend.calls, 1)
 
 
 if __name__ == "__main__":
