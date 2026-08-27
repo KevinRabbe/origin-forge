@@ -46,6 +46,10 @@ from origin_forge.production_execution_owner_image import IMAGE_EXECUTION_OWNER_
 from origin_forge.production_image_dispatch_output_binding import (
     read_image_dispatch_output_binding,
 )
+from origin_forge.production_actions import (
+    inspect_production_execution,
+    reject_production_execution,
+)
 from origin_forge.production_task_activation import activate_dependency_ready_task
 from origin_forge.production_work_order_audit import audit_work_order_frozen
 from origin_forge.production_work_order_builtin import (
@@ -209,6 +213,31 @@ class ImageDispatchVerticalTests(unittest.TestCase):
                 self.runtime, completed.execution.execution_id
             )
         self.assertEqual(_FakeComfyUiAdapter.calls, 1)
+
+    def test_returned_image_execution_exposes_human_review_without_acceptance_authority(
+        self,
+    ) -> None:
+        with patch(
+            "origin_forge.production_dispatch_invocation_image_owner.ComfyUiAdapter",
+            _FakeComfyUiAdapter,
+        ):
+            completed = dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+        inspected = inspect_production_execution(
+            self.runtime, completed.execution.execution_id
+        )
+        self.assertEqual(
+            inspected["supported_actions"],
+            {"accept": False, "adopt": False, "reject": True, "refine": True, "replace": True},
+        )
+        decision_id = reject_production_execution(
+            self.runtime,
+            completed.execution.execution_id,
+            rationale="review the generated image before any downstream use",
+        )
+        decision = OriginForgeLineage(self.runtime).get_decision(decision_id)
+        self.assertIn(
+            f"execution_id={completed.execution.execution_id}", decision["context"]
+        )
 
 
 if __name__ == "__main__":
