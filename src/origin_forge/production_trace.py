@@ -68,12 +68,18 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
     decisions = [
         item for item in OriginForgeLineage(runtime).list_decisions() if item.get("task_id") == task_id
     ]
+    workspaces = GitWorkspaceManager(runtime).list(task_id)
+    workspace_verifications = {
+        str(workspace["id"]): runtime.list_verifications("WORKSPACE", str(workspace["id"]))
+        for workspace in workspaces
+    }
     return {
         "goal": goal,
         "flow": flow,
         "task": task,
         "runs": runs,
-        "workspaces": GitWorkspaceManager(runtime).list(task_id),
+        "workspaces": workspaces,
+        "workspace_verifications": workspace_verifications,
         "dispatch": {
             "work_orders": work_orders,
             "claims": claims,

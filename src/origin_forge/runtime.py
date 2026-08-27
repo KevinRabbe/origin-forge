@@ -410,8 +410,16 @@ class OriginForgeRuntime:
             self.get_task(target_id)
         elif kind == "RUN":
             self.get_run(target_id)
+        elif kind == "WORKSPACE":
+            with self.store.session() as conn:
+                row = conn.execute(
+                    "SELECT id FROM workspaces WHERE id = ? AND project_id = ?",
+                    (target_id, self.project_id()),
+                ).fetchone()
+            if row is None:
+                raise KeyError(target_id)
         else:
-            raise ValueError(f"unsupported Phase 1 verification target: {target_type}")
+            raise ValueError(f"unsupported verification target: {target_type}")
         if run_id is not None:
             self.get_run(run_id)
         return self.store.record_verification(
@@ -437,6 +445,14 @@ class OriginForgeRuntime:
             self.get_task(target_id)
         elif kind == "RUN":
             self.get_run(target_id)
+        elif kind == "WORKSPACE":
+            with self.store.session() as conn:
+                row = conn.execute(
+                    "SELECT id FROM workspaces WHERE id = ? AND project_id = ?",
+                    (target_id, self.project_id()),
+                ).fetchone()
+            if row is None:
+                raise KeyError(target_id)
         else:
             raise ValueError(f"unsupported Phase 1 verification target: {target_type}")
         sql, params = _with_limit(
