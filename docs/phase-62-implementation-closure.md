@@ -84,6 +84,12 @@ The full Windows/Linux release matrix, migration upgrade matrix, and merge
 status remain release gates. They must be rerun against the exact candidate
 head after the remaining Phase 57 work is complete.
 
+The source-create vertical intentionally remains acceptance-ineligible until a
+dedicated receipt binds a validated human actor identity, the published
+source-adoption receipt, the exact current Task revision, and an immutable Task
+Verification before terminalization. The generic production action layer fails
+closed for source acceptance until that contract exists.
+
 ## Explicit remaining work
 
 This closure does not claim completion of:

@@ -19,6 +19,7 @@ from origin_forge.pixelorama_models import (
     SpriteProjectSpec,
 )
 from origin_forge.production_actions import (
+    accept_production_execution,
     adopt_production_execution,
     inspect_production_execution,
 )
@@ -266,6 +267,11 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
             self.assertEqual(completed.execution.status.value, "RETURNED")
             inspected = inspect_production_execution(self.runtime, completed.execution.execution_id)
             self.assertTrue(inspected["supported_actions"]["adopt"])
+            self.assertFalse(inspected["supported_actions"]["accept"])
+            with self.assertRaises(RuntimeError):
+                accept_production_execution(
+                    self.runtime, completed.execution.execution_id, actor_id="operator-test"
+                )
             adopted = adopt_production_execution(
                 self.runtime, completed.execution.execution_id, "assets/player.pxo"
             )
