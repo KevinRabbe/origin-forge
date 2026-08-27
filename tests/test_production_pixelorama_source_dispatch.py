@@ -257,8 +257,9 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
 
     def _dispatch_completed(self):
         bridge_hash = "sha256:" + hashlib.sha256(self.bridge.read_bytes()).hexdigest()
+        executable = Path(sys.executable).resolve(strict=True)
         env = {
-            "ORIGIN_FORGE_PIXELORAMA_EXECUTABLE": sys.executable,
+            "ORIGIN_FORGE_PIXELORAMA_EXECUTABLE": str(executable),
             "ORIGIN_FORGE_PIXELORAMA_BRIDGE_ID": "source-test-bridge",
             "ORIGIN_FORGE_PIXELORAMA_BRIDGE_VERSION": "1",
             "ORIGIN_FORGE_PIXELORAMA_BRIDGE_SHA256": bridge_hash,
