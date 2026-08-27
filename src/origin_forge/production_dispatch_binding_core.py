@@ -185,7 +185,7 @@ class BuildIntegrationInputBinder:
 
     _SCHEMA = {
         "request_type": BUILD_REQUEST_TYPE_ID,
-        "fields": {"task_id": "TASK ID", "operation": "BUILD"},
+        "fields": {"task_id": "TASK ID", "operation": "BUILD", "workspace_id": "WSPACE ID", "workspace_revision": "revision"},
         "injected_later": ["approved build commands", "sandbox backend", "workspace manager"],
         "adapter_invocation": False,
     }
@@ -205,7 +205,7 @@ class BuildIntegrationInputBinder:
         dispatch_contract_id=BUILD_CONTRACT_ID,
         request_type_id=BUILD_REQUEST_TYPE_ID,
         request_schema_hash=_SCHEMA_HASH,
-        accepted_input_roles=(),
+        accepted_input_roles=("build_workspace",),
     )
 
     @property
@@ -226,12 +226,25 @@ class BuildIntegrationInputBinder:
             or work_order.content_hash != bundle.work_order_hash
             or work_order.selected_adapter_id != BUILD_ADAPTER_ID
             or work_order.dispatch_contract_id != BUILD_CONTRACT_ID
-            or work_order.input_refs
+            or len(bundle.resolved_inputs) != 1
+            or len(work_order.input_refs) != 1
         ):
             raise DispatchBindingError("build binder relation is not exact")
+        resolved = bundle.resolved_inputs[0]
+        if (
+            resolved.original_ref.role != "build_workspace"
+            or resolved.source_object_type != "WORKSPACE"
+            or resolved.resolution_class != "AUDITED_WORKSPACE"
+        ):
+            raise DispatchBindingError("build binder requires one audited Workspace ref")
         if work_order.payload != {"operation": "BUILD"}:
             raise DispatchBindingError("build WorkOrder payload is not the exact BUILD selector")
-        return {"task_id": work_order.task_id, "operation": "BUILD"}
+        return {
+            "task_id": work_order.task_id,
+            "operation": "BUILD",
+            "workspace_id": resolved.original_ref.ref_id,
+            "workspace_revision": resolved.original_ref.revision,
+        }
 
 
 class DispatchInputBinderRegistry:

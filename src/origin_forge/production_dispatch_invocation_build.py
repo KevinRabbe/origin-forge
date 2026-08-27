@@ -37,6 +37,8 @@ BUILD_RETURNED_DETAIL = "trusted build integration execution owner returned norm
 class BuildIntegrationInvocationRequest:
     task_id: str
     operation: str
+    workspace_id: str
+    workspace_revision: int
     request_content_hash: str
 
     def __post_init__(self) -> None:
@@ -44,7 +46,9 @@ class BuildIntegrationInvocationRequest:
             raise ProductionDispatchInvocationError("build request Task ID is invalid")
         if self.operation != "BUILD":
             raise ProductionDispatchInvocationError("build request operation is invalid")
-        if content_hash({"task_id": self.task_id, "operation": self.operation}) != self.request_content_hash:
+        if not validate_id(self.workspace_id, IdKind.WORKSPACE) or type(self.workspace_revision) is not int or self.workspace_revision < 0:
+            raise ProductionDispatchInvocationError("build request Workspace identity is invalid")
+        if content_hash({"task_id": self.task_id, "operation": self.operation, "workspace_id": self.workspace_id, "workspace_revision": self.workspace_revision}) != self.request_content_hash:
             raise ProductionDispatchInvocationError("build request hash does not recompute")
 
 
@@ -52,7 +56,7 @@ def _decode_request(binding) -> BuildIntegrationInvocationRequest:
     projection = binding.request_projection
     if (
         not isinstance(projection, dict)
-        or set(projection) != {"task_id", "operation"}
+        or set(projection) != {"task_id", "operation", "workspace_id", "workspace_revision"}
         or not isinstance(projection["task_id"], str)
         or projection["operation"] != "BUILD"
         or binding.request_type_id != BUILD_REQUEST_TYPE_ID
@@ -63,7 +67,11 @@ def _decode_request(binding) -> BuildIntegrationInvocationRequest:
             "build request projection violates the trusted build contract"
         )
     return BuildIntegrationInvocationRequest(
-        projection["task_id"], projection["operation"], binding.request_content_hash
+        projection["task_id"],
+        projection["operation"],
+        projection["workspace_id"],
+        projection["workspace_revision"],
+        binding.request_content_hash,
     )
 
 
@@ -101,22 +109,37 @@ def dispatch_build_claim_once_if_applicable(runtime, claim_id, expected_claim_re
     _require_started_relation(runtime, started, claim, request)
     payload = started.dependencies.payload
     assert isinstance(payload, BuildIntegrationExecutionPayload)
-    workspaces = payload.workspaces.list(request.task_id)
-    if len(workspaces) != 1:
+    try:
+        workspace = payload.workspaces.get(request.workspace_id)
+    except Exception as exc:
         legacy._record_raised_or_recovery(
             runtime,
             started,
             claim,
-            detail="trusted build integration requires exactly one Task workspace",
+            detail="trusted build integration Workspace reference is unavailable",
         )
         raise ProductionDispatchInvocationError(
-            "build integration requires exactly one Task workspace"
+            "build integration Workspace reference is unavailable"
+        ) from exc
+    if (
+        workspace["status"] != "AUDITED"
+        or int(workspace["revision"]) != request.workspace_revision
+        or workspace["project_id"] != started.execution.project_id
+    ):
+        legacy._record_raised_or_recovery(
+            runtime,
+            started,
+            claim,
+            detail="trusted build integration Workspace reference is stale or not audited",
+        )
+        raise ProductionDispatchInvocationError(
+            "build integration Workspace reference is stale or not audited"
         )
     try:
         result = SandboxedWorkspaceVerifier(
             runtime, payload.sandbox_backend, payload.workspaces
         ).verify_build(
-            workspaces[0]["workspace_id"], execution_id=started.execution.execution_id
+            request.workspace_id, execution_id=started.execution.execution_id
         )
     except Exception as exc:
         legacy._record_raised_or_recovery(
@@ -152,11 +175,19 @@ def recover_build_dispatch_execution_once(runtime, execution_id: str):
         execution = read_dispatch_execution(runtime, execution_id)
         if execution.execution_owner_id != BUILD_OWNER_ID:
             raise ValueError("execution owner is not build integration")
-        workspaces = GitWorkspaceManager(runtime).list(execution.task_id)
-        if len(workspaces) != 1:
-            raise ValueError("build execution does not have one Task workspace")
-        workspace_id = workspaces[0]["id"]
-        rows = runtime.list_verifications("WORKSPACE", workspace_id)
+        workspace_candidates = []
+        for workspace in GitWorkspaceManager(runtime).list():
+            rows = runtime.list_verifications("WORKSPACE", workspace["id"])
+            if any(
+                str(row["verification_type"]).startswith("sandbox-build:")
+                and row["status"] == "PASS"
+                and json.loads(row["evidence_json"]).get("dispatch_execution_id") == execution_id
+                for row in rows
+            ):
+                workspace_candidates.append((workspace["id"], rows))
+        if len(workspace_candidates) != 1:
+            raise ValueError("build execution does not have one evidence-bound Workspace")
+        workspace_id, rows = workspace_candidates[0]
         required_commands = {
             command.name
             for command in load_config(runtime.project_root).approved_build_commands

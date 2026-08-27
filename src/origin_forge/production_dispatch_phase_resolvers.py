@@ -21,6 +21,7 @@ from .production_dispatch_resolvers import (
     VerificationInputResolver,
     WorkOrderInputResolver,
     WorkOrderInputResolverRegistry,
+    WorkspaceInputResolver,
 )
 from .production_playtest_scenario_store import (
     PlaytestScenarioStore,
@@ -481,6 +482,7 @@ def build_dispatch_input_resolver_registry() -> WorkOrderInputResolverRegistry:
         (
             ArtifactInputResolver(),
             VerificationInputResolver(),
+            WorkspaceInputResolver(),
             ProjectEntityInputResolver(),
             DesignRuleInputResolver(),
             *phase_specific_input_resolvers(),

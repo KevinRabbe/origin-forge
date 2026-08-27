@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .production_work_order_models import WorkOrderInputRef
+from .production_work_order_models import WorkOrderInputRef, WorkOrderRefType
 from .production_work_order_validators import (
     DispatchValidatorError,
     PayloadFieldKind,
@@ -58,8 +58,12 @@ class BuildIntegrationDispatchValidator:
         payload: dict[str, Any],
         input_refs: tuple[WorkOrderInputRef, ...],
     ) -> dict[str, Any]:
-        if input_refs:
+        if (
+            len(input_refs) != 1
+            or input_refs[0].ref_type is not WorkOrderRefType.WORKSPACE
+            or input_refs[0].role != "build_workspace"
+        ):
             raise DispatchValidatorError(
-                "build integration WorkOrder accepts no caller-selected input refs"
+                "build integration WorkOrder requires one audited Workspace ref"
             )
         return self._base.validate(payload, input_refs)

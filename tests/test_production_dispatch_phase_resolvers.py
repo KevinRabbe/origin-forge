@@ -237,6 +237,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
                 "resolver.core.design-rule@1",
                 "resolver.core.project-entity@1",
                 "resolver.core.verification@1",
+                "resolver.core.workspace@1",
                 "resolver.phase.audio-profile@1",
                 "resolver.phase.audio-source@1",
                 "resolver.phase.model3d-request@1",

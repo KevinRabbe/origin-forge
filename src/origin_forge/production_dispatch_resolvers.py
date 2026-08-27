@@ -20,6 +20,8 @@ from .production_work_order_models import (
 )
 from .project_intelligence_read import ProjectIntelligenceReadService
 from .runtime import OriginForgeRuntime
+from .state import WorkspaceStatus
+from .workspaces import GitWorkspaceManager
 
 
 class DispatchInputResolutionError(RuntimeError):
@@ -128,6 +130,55 @@ class ArtifactInputResolver:
             source_object_type="ARTIFACT",
             resolution_class="CANONICAL_ARTIFACT",
             projection=safe_projection,
+        )
+
+
+class WorkspaceInputResolver:
+    """Resolve one exact audited Workspace for governed build execution."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.WORKSPACE, "WSPACE-", "WORKSPACE", "build_workspace"
+    )
+    _FIELDS = ("id", "task_id", "path", "base_commit", "status", "revision")
+    _PROJECTION = {"fields": _FIELDS, "required_status": WorkspaceStatus.AUDITED.value}
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.core.workspace@1",
+        _resolver_fingerprint(
+            "origin-forge-dispatch-workspace-resolver@1", _CLAIM, _PROJECTION
+        ),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(
+        self, runtime: OriginForgeRuntime, ref: WorkOrderInputRef
+    ) -> ResolvedWorkOrderInput:
+        _require_ref(ref, WorkOrderRefType.WORKSPACE, "WSPACE-")
+        if ref.revision is None:
+            raise DispatchInputResolutionError("Workspace refs must be revision-numbered")
+        try:
+            workspace = GitWorkspaceManager(runtime).get(ref.ref_id)
+        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
+            raise DispatchInputResolutionError(
+                "Workspace ref is not available in the current project"
+            ) from exc
+        projection = {key: workspace[key] for key in self._FIELDS}
+        if workspace["status"] != WorkspaceStatus.AUDITED.value:
+            raise DispatchInputResolutionError("build Workspace ref must be AUDITED")
+        if int(workspace["revision"]) != ref.revision:
+            raise DispatchInputResolutionError("Workspace revision drifted")
+        if content_hash(projection) != ref.content_hash:
+            raise DispatchInputResolutionError("Workspace content hash drifted")
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="WORKSPACE",
+            resolution_class="AUDITED_WORKSPACE",
+            projection=projection,
         )
 
 

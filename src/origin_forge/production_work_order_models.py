@@ -10,7 +10,6 @@ from typing import Iterable
 from .ids import IdKind, new_id, validate_id
 from .production_capability_models import CapabilityCatalog
 
-
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@+-]{0,127}$")
 _ROLE_RE = re.compile(r"^[a-z][a-z0-9_.-]{0,95}$")
 _REF_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,255}$")
@@ -39,6 +38,7 @@ class WorkOrderRefType(StrEnum):
     MODEL3D_REQUEST = "MODEL3D_REQUEST"
     RUNTIME_OBSERVATION_REQUEST = "RUNTIME_OBSERVATION_REQUEST"
     PHASE_SPECIFIC_EVIDENCE = "PHASE_SPECIFIC_EVIDENCE"
+    WORKSPACE = "WORKSPACE"
 
 
 def canonical_bytes(value: object) -> bytes:

@@ -965,7 +965,7 @@ def _assemble_build_dependencies(
             "build integration requires at least one approved build command"
         )
     try:
-        backend = create_sandbox_backend(runtime)
+        backend = create_sandbox_backend(runtime, config)
     except Exception as exc:
         raise ProductionExecutionAssemblyError(
             "configured build sandbox backend is unavailable"
