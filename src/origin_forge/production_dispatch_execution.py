@@ -31,6 +31,7 @@ from .task_readiness import (
 _MAX_DETAIL_CHARS = 4096
 _SIMULATION_EXECUTION_OWNER_ID = "originforge.execution.simulation.deterministic@1"
 _PIXELORAMA_EXECUTION_OWNER_ID = "originforge.execution.pixelorama.spritesheet-export@1"
+_PIXELORAMA_SOURCE_EXECUTION_OWNER_ID = "originforge.execution.pixelorama.source-create@1"
 _BLENDER_EXECUTION_OWNER_ID = "originforge.execution.blender.export-glb@1"
 _IMAGE_EXECUTION_OWNER_ID = "originforge.execution.image.generate@1"
 _PIPER_EXECUTION_OWNER_ID = "originforge.execution.audio.piper-tts@1"
@@ -589,7 +590,10 @@ def begin_dispatch_execution(
                 now,
             )
             task_transition_reason = "SIMULATION_DISPATCH_EXECUTION_STARTED"
-        elif dependencies.plan.owner_id == _PIXELORAMA_EXECUTION_OWNER_ID:
+        elif dependencies.plan.owner_id in {
+            _PIXELORAMA_EXECUTION_OWNER_ID,
+            _PIXELORAMA_SOURCE_EXECUTION_OWNER_ID,
+        }:
             task_transition = _transition_pixelorama_task_running_connection(
                 runtime,
                 conn,

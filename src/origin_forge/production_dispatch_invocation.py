@@ -9,6 +9,7 @@ from .ids import IdKind, validate_id
 from .image_vision_service import ImageGenerationServiceResult
 from .lineage import OriginForgeLineage
 from .orchestration_policy import PolicyResult
+from .pixelorama_media import PixeloramaMediaResult
 from .playtest_service import PlaytestServiceResult
 from .production_dispatch_binding import CodeBoundedRetryInputBinder
 from .production_dispatch_binding_models import BindingAuditStatus, DispatchBinding
@@ -290,6 +291,7 @@ class CompletedDispatchInvocation:
     policy_result: PolicyResult | None = None
     simulation_result: SimulationServiceResult | None = None
     pixelorama_result: PixeloramaCliExportServiceResult | None = None
+    pixelorama_source_result: PixeloramaMediaResult | None = None
     image_result: ImageGenerationServiceResult | None = None
     audio_result: AudioOperationServiceResult | None = None
     runtime_result: RuntimeObservationServiceResult | None = None
@@ -306,12 +308,13 @@ class CompletedDispatchInvocation:
         has_policy = self.policy_result is not None
         has_simulation = self.simulation_result is not None
         has_pixelorama = self.pixelorama_result is not None
+        has_pixelorama_source = self.pixelorama_source_result is not None
         has_image = self.image_result is not None
         has_audio = self.audio_result is not None
         has_runtime = self.runtime_result is not None
         has_playtest = self.playtest_result is not None
         has_build = self.build_result is not None
-        if sum((has_policy, has_simulation, has_pixelorama, has_image, has_audio, has_runtime, has_playtest, has_build)) != 1:
+        if sum((has_policy, has_simulation, has_pixelorama, has_pixelorama_source, has_image, has_audio, has_runtime, has_playtest, has_build)) != 1:
             raise ProductionDispatchInvocationError(
                 "completed invocation requires exactly one reviewed owner result"
             )
@@ -346,6 +349,17 @@ class CompletedDispatchInvocation:
             ):
                 raise ProductionDispatchInvocationError(
                     "Pixelorama execution requires exactly one PixeloramaCliExportServiceResult"
+                )
+        elif self.execution.execution_owner_id == "originforge.execution.pixelorama.source-create@1":
+            if (
+                not isinstance(self.pixelorama_source_result, PixeloramaMediaResult)
+                or has_policy
+                or has_simulation
+                or has_pixelorama
+                or has_image
+            ):
+                raise ProductionDispatchInvocationError(
+                    "Pixelorama source execution requires exactly one PixeloramaMediaResult"
                 )
         elif self.execution.execution_owner_id == "originforge.execution.image.generate@1":
             if (
