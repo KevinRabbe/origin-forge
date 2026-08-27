@@ -8,6 +8,8 @@ from .production_read_guard import (
     ensure_production_runtime_readable,
     production_read_connection,
 )
+from .production_work_order_builtin import build_builtin_dispatch_validator_registry
+from .production_work_order_read import read_work_order
 from .runtime import OriginForgeRuntime
 from .workspaces import GitWorkspaceManager
 
@@ -55,6 +57,14 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
                 "playtest_dispatch_output_bindings",
             )
         }
+    validator_registry = build_builtin_dispatch_validator_registry()
+    work_order_ids = tuple(
+        dict.fromkeys(str(row["work_order_id"]) for row in executions)
+    )
+    work_orders = [
+        read_work_order(runtime, work_order_id, validator_registry).to_dict()
+        for work_order_id in work_order_ids
+    ]
     decisions = [
         item for item in OriginForgeLineage(runtime).list_decisions() if item.get("task_id") == task_id
     ]
@@ -65,6 +75,7 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
         "runs": runs,
         "workspaces": GitWorkspaceManager(runtime).list(task_id),
         "dispatch": {
+            "work_orders": work_orders,
             "claims": claims,
             "executions": executions,
             "output_bindings": output_bindings,

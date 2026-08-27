@@ -241,6 +241,7 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(result["task"]["id"], task_id)
             self.assertEqual(result["dispatch"]["claims"], [])
             self.assertEqual(result["dispatch"]["executions"], [])
+            self.assertEqual(result["dispatch"]["work_orders"], [])
             self.assertEqual(
                 set(result["dispatch"]["output_bindings"]),
                 {
