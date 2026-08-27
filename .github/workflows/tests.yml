@@ -144,4 +144,4 @@ jobs:
       - name: Run unit tests
         env:
           PYTHONPATH: src
-        run: python -W error::ResourceWarning -m unittest discover -s tests -v
+        run: python -W error::ResourceWarning .github/ci_unit_suite.py
