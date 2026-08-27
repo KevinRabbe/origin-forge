@@ -125,6 +125,21 @@ class WorkspaceIntegrationTests(unittest.TestCase):
             WorkspaceStatus.AUDITED.value,
         )
 
+    def test_workspace_verifications_are_readable_from_runtime(self) -> None:
+        workspace_id = self.workspaces.create(self.task)
+        verification_id = self.workspaces.record_verification(
+            workspace_id,
+            verification_type="sandbox-build:compile",
+            verifier="OriginForge.Sandbox:test",
+            status="PASS",
+            evidence={"argv": ["python", "-m", "compileall", "."]},
+        )
+
+        records = self.runtime.list_verifications("WORKSPACE", workspace_id)
+
+        self.assertEqual([row["id"] for row in records], [verification_id])
+        self.assertEqual(records[0]["target_type"], "WORKSPACE")
+
     def test_stale_precondition_rejects_before_mutation(self) -> None:
         proposal = self._proposal("sha256:" + "0" * 64)
         workspace_id = self.workspaces.create(self.task)
