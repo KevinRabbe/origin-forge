@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .migrations import Migration
 
-
 PIXELORAMA_SOURCE_PRODUCTION_ADOPTION_MIGRATION = Migration(
     31,
     r"""
