@@ -53,6 +53,13 @@ class ProductionInterfaceSnapshotTests(unittest.TestCase):
         after = self.runtime.status()
         self.assertEqual(first.to_dict(), second.to_dict())
         self.assertEqual(len(first.production_trace), 1)
+        self.assertEqual(first.production_trace[0]["next_action"], "RECOVER")
+        self.assertEqual(
+            first.production_trace[0]["pixelorama_source_adoptions"], 0
+        )
+        self.assertEqual(
+            first.production_trace[0]["pixelorama_source_acceptances"], 0
+        )
         self.assertEqual(first.content_hash, second.content_hash)
         self.assertEqual(before, after)
         self.assertTrue(first.to_dict()["authority"]["read_only"])

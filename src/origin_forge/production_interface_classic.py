@@ -462,7 +462,14 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
         [
             "<h2>Production Trace</h2>",
             _linked_table(
-                ("Task", "Claims", "Executions", "Output bindings"),
+                (
+                    "Task",
+                    "Claims",
+                    "Executions",
+                    "Output bindings",
+                    "Next action",
+                    "Source decisions",
+                ),
                 (
                     (
                         "task",
@@ -471,6 +478,11 @@ def render_overview(snapshot: ProductionInterfaceSnapshot) -> str:
                             row["claims"],
                             row["executions"],
                             sum(cast(dict[str, int], row["output_bindings"]).values()),
+                            row["next_action"],
+                            (
+                                row["pixelorama_source_adoptions"]
+                                + row["pixelorama_source_acceptances"]
+                            ),
                         ),
                     )
                     for row in snapshot.production_trace

@@ -461,6 +461,13 @@ def build_production_interface_snapshot(
                 table: len(rows)
                 for table, rows in trace["dispatch"]["output_bindings"].items()
             },
+            "next_action": trace["next_action"],
+            "pixelorama_source_adoptions": len(
+                trace["dispatch"]["pixelorama_source_adoptions"]
+            ),
+            "pixelorama_source_acceptances": len(
+                trace["dispatch"]["pixelorama_source_acceptances"]
+            ),
             "read_only": True,
         }
         for task in tasks
