@@ -5,6 +5,7 @@ import inspect
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import origin_forge.production_work_order_planner as planner_module
 from origin_forge.model import ModelRequest, ModelResponse
@@ -26,7 +27,17 @@ from origin_forge.production_work_order_planner import (
     BoundedProductionWorkOrderPlanner,
     DeterministicWorkOrderPlannerAdapter,
     ProductionWorkOrderPlannerError,
+    WorkOrderProposal,
+    _bind_accepted_design_animation,
 )
+from origin_forge.production_work_order_models import (
+    DispatchContract,
+    WorkOrderInputRef,
+    WorkOrderRefType,
+    canonical_bytes,
+)
+from origin_forge.production_work_order_pixelorama import PIXELORAMA_SOURCE_ADAPTER_ID
+from origin_forge.pixelorama_models import FrameSpec, RasterLayerSpec, SpriteProjectSpec
 from origin_forge.resource_scheduler import ResourceCapacity, ResourceRequest, ResourceScheduler
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.scheduled_model_adapter import (
@@ -143,6 +154,62 @@ class ProductionWorkOrderPlannerTests(unittest.TestCase):
             self.registry,
             model,
         )
+
+    def test_source_planner_binds_accepted_design_before_work_order_freeze(self) -> None:
+        sprite_spec = SpriteProjectSpec(
+            1,
+            1,
+            (RasterLayerSpec("base", "Base"),),
+            (FrameSpec("frame-0"), FrameSpec("frame-1")),
+            output_basename="runner",
+        )
+        payload = {
+            "operation": "CREATE_SPRITE_PROJECT",
+            "sprite_spec": sprite_spec.to_dict(),
+            "export_specs": [],
+            "budget": {
+                "max_input_bytes": 1024,
+                "max_output_bytes": 2048,
+                "max_outputs": 2,
+                "timeout_seconds": 5,
+            },
+        }
+        reference = WorkOrderInputRef(
+            ref_type=WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,
+            ref_id="DESIGNACC-planner",
+            content_hash="a" * 64,
+            role="accepted_design",
+            revision=None,
+        )
+        proposal = WorkOrderProposal(
+            contract_id="pixelorama.source-create@1",
+            input_refs=(reference,),
+            payload_json=canonical_bytes(payload).decode("utf-8"),
+        )
+        contract = DispatchContract(
+            contract_id="pixelorama.source-create@1",
+            contract_version="1",
+            adapter_id=PIXELORAMA_SOURCE_ADAPTER_ID,
+            adapter_fingerprint="b" * 64,
+            validator_id="validator.pixelorama.source-create@1",
+            validator_fingerprint="c" * 64,
+            payload_schema_id="schema.pixelorama.source-create@1",
+            payload_schema_hash="d" * 64,
+            allowed_input_ref_types=(WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,),
+            max_payload_bytes=1024 * 1024,
+            max_input_refs=1,
+        )
+        bound_payload = {**payload, "sentinel": "not-valid-for-the-model"}
+        with patch(
+            "origin_forge.production_work_order_planner.build_pixelorama_source_work_order_payload_from_accepted_design",
+            return_value=bound_payload,
+        ) as bind:
+            result = _bind_accepted_design_animation(self.runtime, contract, proposal)
+
+        bind.assert_called_once()
+        self.assertEqual(bind.call_args.args[1], "DESIGNACC-planner")
+        self.assertEqual(result.payload["sentinel"], "not-valid-for-the-model")
+        self.assertNotEqual(result.content_hash, proposal.content_hash)
 
     def test_deterministic_worker_makes_one_taskless_call_and_constructs_only_work_order(self) -> None:
         before = self.runtime.get_task(self.task)
