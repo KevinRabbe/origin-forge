@@ -173,6 +173,23 @@ The governed Piper path is persisted in schema v25. Its output binding can be
 inspected through the correlated production trace and is recoverable without
 running Piper a second time. See `phase-59-governed-piper-production-dispatch.md`.
 
+FFmpeg processing uses the same governed production path. Configure an
+absolute executable in `.origin-forge/config.toml`:
+
+```toml
+[tools]
+ffmpeg = "C:/tools/ffmpeg/bin/ffmpeg.exe"
+```
+
+The selected `AUDIO_PROFILE` must pin the executable hash and FFmpeg version;
+the WorkOrder must also name an exact `audio_source` Artifact containing a
+validated PCM16 WAV. If the path is missing, inaccessible, symlinked, or does
+not match the profile hash, `origin-forge doctor --strict` and dispatch report
+the configuration drift without searching PATH or installing FFmpeg. FFmpeg
+output is persisted in the shared audio binding and can be recovered after an
+interruption without invoking the executable again. See
+`phase-62-governed-ffmpeg-production-dispatch.md`.
+
 ## Create durable work state
 
 The control-plane CLI exposes explicit Goal / Flow / Task lifecycle operations:

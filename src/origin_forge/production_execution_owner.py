@@ -208,7 +208,10 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
     adapters = {
         value.adapter_id: value for value in builtin_trusted_production_adapters()
     }
-    from .production_execution_owner_audio import piper_execution_owner_descriptor
+    from .production_execution_owner_audio import (
+        ffmpeg_execution_owner_descriptor,
+        piper_execution_owner_descriptor,
+    )
     from .production_execution_owner_image import (
         image_generation_execution_owner_descriptor,
     )
@@ -337,6 +340,7 @@ def builtin_execution_owner_descriptors() -> tuple[ProductionExecutionOwnerDescr
         pixelorama_owner,
         blender_owner,
         image_generation_execution_owner_descriptor(),
+        ffmpeg_execution_owner_descriptor(),
         piper_execution_owner_descriptor(),
         runtime_observation_execution_owner_descriptor(),
         cooperative_playtest_execution_owner_descriptor(),

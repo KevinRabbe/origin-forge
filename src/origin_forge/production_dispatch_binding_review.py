@@ -73,9 +73,9 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         ),
         BuiltinBindingReview(
             "originforge.audio.ffmpeg",
-            BuiltinBindingReviewStatus.DEFERRED,
-            "AUDIO_SOURCE_STRUCTURE_NOT_RESOLVED",
-            "Artifact plus AUDIO_PROFILE resolution is insufficient: AudioSourceRef also requires exact PCM hash, byte/frame counts, sample rate, and channels not present in the generic Artifact projection",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 62 resolves a role-specific protected PCM16 WAV source projection and promotes FFmpeg through the governed claim/execution/output-binding chain",
         ),
         BuiltinBindingReview(
             "originforge.audio.piper",
@@ -125,6 +125,11 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         (phase32.adapter("originforge.image.generate"),),
     )
     image_dispatch_catalog = build_builtin_dispatch_catalog(image_phase32)
+    ffmpeg_phase32 = CapabilityCatalog.create(
+        (phase32.capability("media.audio.process"),),
+        (phase32.adapter("originforge.audio.ffmpeg"),),
+    )
+    ffmpeg_dispatch_catalog = build_builtin_dispatch_catalog(ffmpeg_phase32)
     piper_phase32 = CapabilityCatalog.create(
         (phase32.capability("media.audio.tts"),),
         (phase32.adapter("originforge.audio.piper"),),
@@ -158,6 +163,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
         *pixelorama_dispatch_catalog.contracts,
         *blender_dispatch_catalog.contracts,
         *image_dispatch_catalog.contracts,
+        *ffmpeg_dispatch_catalog.contracts,
         *piper_dispatch_catalog.contracts,
         *runtime_dispatch_catalog.contracts,
         *playtest_dispatch_catalog.contracts,

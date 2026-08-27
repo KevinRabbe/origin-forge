@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from .production_dispatch_binding_audio import PiperAudioInputBinder
+from .production_dispatch_binding_audio import (
+    FfmpegAudioInputBinder,
+    PiperAudioInputBinder,
+)
 from .production_dispatch_binding_blender import BlenderExportGLBInputBinder
 from .production_dispatch_binding_core import (
     CodeBoundedRetryInputBinder,
@@ -33,6 +36,7 @@ def builtin_dispatch_binders() -> tuple[DispatchInputBinder, ...]:
         PixeloramaSpritesheetExportInputBinder(),
         BlenderExportGLBInputBinder(),
         ImageGenerationInputBinder(),
+        FfmpegAudioInputBinder(),
         PiperAudioInputBinder(),
         RuntimeObservationInputBinder(),
         CooperativePlaytestInputBinder(),

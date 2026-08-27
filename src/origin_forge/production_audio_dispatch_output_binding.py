@@ -4,7 +4,6 @@ import sqlite3
 
 from .ids import IdKind, validate_id
 from .production_audio_dispatch_output_binding_models import (
-    AUDIO_EXECUTION_OWNER_ID,
     AudioDispatchOutputBinding,
     AudioDispatchOutputBindingModelError,
 )
@@ -49,7 +48,7 @@ def _read_rows(runtime: OriginForgeRuntime, execution_id: str):
                 ("work_order_hash", row["work_order_hash"]),
                 ("dispatch_binding_id", row["dispatch_binding_id"]),
                 ("dispatch_binding_hash", row["dispatch_binding_hash"]),
-                ("execution_owner_id", AUDIO_EXECUTION_OWNER_ID),
+                ("execution_owner_id", execution["execution_owner_id"]),
             ):
                 if execution[field] != expected:
                     raise AudioDispatchOutputBindingError(
@@ -105,7 +104,7 @@ def publish_audio_dispatch_output_binding(runtime: OriginForgeRuntime, binding: 
             ("task_content_hash", binding.task_content_hash), ("work_order_id", binding.work_order_id),
             ("work_order_hash", binding.work_order_hash), ("dispatch_binding_id", binding.dispatch_binding_id),
             ("dispatch_binding_hash", binding.dispatch_binding_hash),
-            ("execution_owner_id", AUDIO_EXECUTION_OWNER_ID),
+            ("execution_owner_id", execution["execution_owner_id"]),
         ):
             if execution[field] != expected:
                 raise AudioDispatchOutputBindingError("audio binding does not match exact execution relation")

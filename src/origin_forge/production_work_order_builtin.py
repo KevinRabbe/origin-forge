@@ -7,8 +7,11 @@ from typing import Any
 
 from .production_capability_models import CapabilityCatalog
 from .production_work_order_audio import (
+    FFMPEG_ADAPTER_ID,
+    FFMPEG_CONTRACT_ID,
     PIPER_ADAPTER_ID,
     PIPER_CONTRACT_ID,
+    FfmpegAudioDispatchValidator,
     PiperSpeechDispatchValidator,
 )
 from .production_work_order_blender import (
@@ -90,7 +93,6 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
 
     deferred = (
         "originforge.vision.inspect",
-        "originforge.audio.ffmpeg",
         "originforge.audio.piper",
     )
     rows = [
@@ -118,6 +120,11 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
             IMAGE_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
             "ComfyUI generation accepts an exact local-only workflow projection while backend execution and output evidence remain infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            FFMPEG_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "FFmpeg processing accepts one exact typed PCM16 source and one governed audio profile while executable and output evidence remain infrastructure-owned",
         ),
         BuiltinDispatchReview(
             RUNTIME_ADAPTER_ID,
@@ -308,6 +315,7 @@ def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
         PixeloramaSpritesheetExportDispatchValidator(),
         BlenderExportGLBDispatchValidator(),
         ImageGenerationDispatchValidator(),
+        FfmpegAudioDispatchValidator(),
         PiperSpeechDispatchValidator(),
         RuntimeObservationDispatchValidator(),
         CooperativePlaytestDispatchValidator(),
@@ -420,6 +428,23 @@ def _piper_contract(adapter) -> DispatchContract:
     )
 
 
+def _ffmpeg_contract(adapter) -> DispatchContract:
+    validator = FfmpegAudioDispatchValidator()
+    return DispatchContract(
+        contract_id=FFMPEG_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.ARTIFACT, WorkOrderRefType.AUDIO_PROFILE),
+        max_payload_bytes=64 * 1024,
+        max_input_refs=2,
+    )
+
+
 def _runtime_contract(adapter) -> DispatchContract:
     validator = RuntimeObservationDispatchValidator()
     return DispatchContract(
@@ -478,11 +503,12 @@ def build_builtin_dispatch_catalog(
     pixelorama = adapters.get(PIXELORAMA_ADAPTER_ID)
     blender = adapters.get(BLENDER_ADAPTER_ID)
     image = adapters.get(IMAGE_ADAPTER_ID)
+    ffmpeg = adapters.get(FFMPEG_ADAPTER_ID)
     piper = adapters.get(PIPER_ADAPTER_ID)
     runtime_observer = adapters.get(RUNTIME_ADAPTER_ID)
     playtest = adapters.get(PLAYTEST_ADAPTER_ID)
     reviewed_non_code = tuple(
-        value for value in (simulation, pixelorama, blender, image, piper, runtime_observer, playtest) if value is not None
+        value for value in (simulation, pixelorama, blender, image, ffmpeg, piper, runtime_observer, playtest) if value is not None
     )
     if len(reviewed_non_code) > 1:
         raise ValueError(
@@ -508,6 +534,8 @@ def build_builtin_dispatch_catalog(
             phase32_catalog,
             (_image_contract(image),),
         )
+    if ffmpeg is not None:
+        return DispatchContractCatalog.create(phase32_catalog, (_ffmpeg_contract(ffmpeg),))
     if piper is not None:
         return DispatchContractCatalog.create(phase32_catalog, (_piper_contract(piper),))
     if runtime_observer is not None:

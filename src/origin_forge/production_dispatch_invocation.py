@@ -354,13 +354,16 @@ class CompletedDispatchInvocation:
                 raise ProductionDispatchInvocationError(
                     "image execution requires exactly one ImageGenerationServiceResult"
                 )
-        elif self.execution.execution_owner_id == "originforge.execution.audio.piper-tts@1":
+        elif self.execution.execution_owner_id in {
+            "originforge.execution.audio.piper-tts@1",
+            "originforge.execution.audio.ffmpeg-process@1",
+        }:
             if (
                 not isinstance(self.audio_result, AudioOperationServiceResult)
                 or has_policy or has_simulation or has_pixelorama or has_image
             ):
                 raise ProductionDispatchInvocationError(
-                    "Piper execution requires exactly one AudioOperationServiceResult"
+                    "audio execution requires exactly one AudioOperationServiceResult"
                 )
         elif self.execution.execution_owner_id == "originforge.execution.runtime.observe@1":
             if (

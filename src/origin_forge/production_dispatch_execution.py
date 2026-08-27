@@ -34,6 +34,7 @@ _PIXELORAMA_EXECUTION_OWNER_ID = "originforge.execution.pixelorama.spritesheet-e
 _BLENDER_EXECUTION_OWNER_ID = "originforge.execution.blender.export-glb@1"
 _IMAGE_EXECUTION_OWNER_ID = "originforge.execution.image.generate@1"
 _PIPER_EXECUTION_OWNER_ID = "originforge.execution.audio.piper-tts@1"
+_FFMPEG_EXECUTION_OWNER_ID = "originforge.execution.audio.ffmpeg-process@1"
 _RUNTIME_EXECUTION_OWNER_ID = "originforge.execution.runtime.observe@1"
 _PLAYTEST_EXECUTION_OWNER_ID = "originforge.execution.playtest.cooperative@1"
 
@@ -614,6 +615,11 @@ def begin_dispatch_execution(
                 runtime, conn, claim, execution_id, now
             )
             task_transition_reason = "PIPER_DISPATCH_EXECUTION_STARTED"
+        elif dependencies.plan.owner_id == _FFMPEG_EXECUTION_OWNER_ID:
+            task_transition = _transition_image_task_running_connection(
+                runtime, conn, claim, execution_id, now
+            )
+            task_transition_reason = "FFMPEG_DISPATCH_EXECUTION_STARTED"
         elif dependencies.plan.owner_id == _RUNTIME_EXECUTION_OWNER_ID:
             task_transition = _transition_image_task_running_connection(
                 runtime, conn, claim, execution_id, now

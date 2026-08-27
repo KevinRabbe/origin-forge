@@ -6,6 +6,8 @@ from .ids import IdKind, validate_id
 from .production_dispatch_execution_models import DispatchExecution
 
 AUDIO_EXECUTION_OWNER_ID = "originforge.execution.audio.piper-tts@1"
+FFMPEG_AUDIO_EXECUTION_OWNER_ID = "originforge.execution.audio.ffmpeg-process@1"
+AUDIO_EXECUTION_OWNER_IDS = frozenset({AUDIO_EXECUTION_OWNER_ID, FFMPEG_AUDIO_EXECUTION_OWNER_ID})
 
 
 class AudioDispatchOutputBindingModelError(ValueError):
@@ -71,8 +73,8 @@ class AudioDispatchOutputBinding:
             (self.output_verification_id, IdKind.VERIFICATION, "output_verification_id"),
         ):
             _id(value, kind, label)
-        if self.execution_owner_id != AUDIO_EXECUTION_OWNER_ID:
-            raise AudioDispatchOutputBindingModelError("audio binding owner is not Piper")
+        if self.execution_owner_id not in AUDIO_EXECUTION_OWNER_IDS:
+            raise AudioDispatchOutputBindingModelError("audio binding owner is not trusted")
         if type(self.task_revision) is not int or self.task_revision < 0:
             raise AudioDispatchOutputBindingModelError("task_revision is invalid")
         for digest_value, label in (
@@ -102,8 +104,8 @@ class AudioDispatchOutputBinding:
 
     @classmethod
     def from_execution_result(cls, execution: DispatchExecution, result, *, created_at: str) -> AudioDispatchOutputBinding:
-        if execution.execution_owner_id != AUDIO_EXECUTION_OWNER_ID:
-            raise AudioDispatchOutputBindingModelError("execution is not owned by Piper")
+        if execution.execution_owner_id not in AUDIO_EXECUTION_OWNER_IDS:
+            raise AudioDispatchOutputBindingModelError("execution is not owned by a trusted audio owner")
         output = result.output
         return cls(
             execution_id=execution.execution_id, claim_id=execution.claim_id,

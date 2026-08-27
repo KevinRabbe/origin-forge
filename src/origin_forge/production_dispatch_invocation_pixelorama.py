@@ -183,6 +183,9 @@ def _dispatch_claim_once_three_owner(
     """Single-shot coordinator with reviewed Pixelorama and Blender fanout."""
     import origin_forge.production_dispatch_invocation as legacy
 
+    from .production_dispatch_invocation_ffmpeg_owner import (
+        dispatch_ffmpeg_claim_once_if_applicable,
+    )
     from .production_dispatch_invocation_image_owner import (
         dispatch_image_claim_once_if_applicable,
     )
@@ -203,6 +206,14 @@ def _dispatch_claim_once_three_owner(
     )
     if piper is not None:
         return piper
+
+    ffmpeg = dispatch_ffmpeg_claim_once_if_applicable(
+        runtime,
+        claim_id,
+        expected_claim_revision,
+    )
+    if ffmpeg is not None:
+        return ffmpeg
 
     runtime_observation = dispatch_runtime_claim_once_if_applicable(
         runtime,

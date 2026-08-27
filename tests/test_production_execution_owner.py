@@ -51,9 +51,10 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_builtin_owners_exactly_match_reviewed_adapters_and_binders(self) -> None:
         owners = builtin_execution_owner_descriptors()
-        self.assertEqual(len(owners), 8)
-        code_owner, simulation_owner, pixelorama_owner, blender_owner, image_owner, piper_owner, runtime_owner, playtest_owner = owners
+        self.assertEqual(len(owners), 9)
+        code_owner, simulation_owner, pixelorama_owner, blender_owner, image_owner, ffmpeg_owner, piper_owner, runtime_owner, playtest_owner = owners
         self.assertEqual(image_owner.owner_id, "originforge.execution.image.generate@1")
+        self.assertEqual(ffmpeg_owner.owner_id, "originforge.execution.audio.ffmpeg-process@1")
         self.assertEqual(piper_owner.owner_id, "originforge.execution.audio.piper-tts@1")
         self.assertEqual(runtime_owner.owner_id, "originforge.execution.runtime.observe@1")
         self.assertEqual(playtest_owner.owner_id, "originforge.execution.playtest.cooperative@1")
@@ -169,7 +170,7 @@ class ProductionExecutionOwnerTests(unittest.TestCase):
 
     def test_exact_relation_selects_owner_and_any_drift_fails_closed(self) -> None:
         registry = build_builtin_execution_owner_registry()
-        owner = registry.descriptors[0]
+        owner = next(value for value in registry.descriptors if value.owner_id == "originforge.execution.bounded-retry@1")
         selected = registry.owner_for(
             adapter_id=owner.adapter_id,
             adapter_fingerprint=owner.adapter_fingerprint,

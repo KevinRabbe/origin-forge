@@ -11,6 +11,9 @@ from .migrations import MIGRATIONS as BASE_MIGRATIONS
 from .production_audio_dispatch_output_binding_migration import (
     AUDIO_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
+from .production_audio_dispatch_output_binding_owner_migration import (
+    AUDIO_DISPATCH_OUTPUT_BINDING_OWNER_MIGRATION,
+)
 from .production_blender_adoption_migration import (
     BLENDER_PRODUCTION_ADOPTION_MIGRATION,
 )
@@ -64,6 +67,7 @@ MIGRATIONS = (
     RUNTIME_DISPATCH_OUTPUT_BINDING_MIGRATION,
     PLAYTEST_DISPATCH_OUTPUT_BINDING_MIGRATION,
     MIGRATION_HASH_MIGRATION,
+    AUDIO_DISPATCH_OUTPUT_BINDING_OWNER_MIGRATION,
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 

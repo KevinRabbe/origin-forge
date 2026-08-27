@@ -428,6 +428,13 @@ Replaceable local models for:
 
 - rFXGen for structured SFX
 - FFmpeg for deterministic processing
+
+Governed FFmpeg production dispatch uses a typed `audio_source` resolver for
+protected PCM16 evidence, an explicit `audio_profile`, and the shared audio
+Artifact/Verification/output-binding lifecycle. Schema v29 permits the
+FFmpeg execution owner alongside the historical Piper owner while preserving
+existing rows. Recovery revalidates durable evidence and never replays an
+uncertain STARTED execution.
 - replaceable local music model
 - replaceable local TTS
 

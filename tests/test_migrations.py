@@ -22,6 +22,11 @@ class MigrationTests(unittest.TestCase):
                     for row in conn.execute("PRAGMA table_info(schema_migrations)")
                 }
                 self.assertIn("migration_hash", columns)
+                binding_sql = conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'audio_dispatch_output_bindings'"
+                ).fetchone()[0]
+                self.assertIn("originforge.execution.audio.piper-tts@1", binding_sql)
+                self.assertIn("originforge.execution.audio.ffmpeg-process@1", binding_sql)
                 count = conn.execute(
                     "SELECT COUNT(*) FROM schema_migrations WHERE migration_hash IS NOT NULL"
                 ).fetchone()[0]

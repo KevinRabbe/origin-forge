@@ -54,6 +54,11 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             (phase32.adapter("originforge.image.generate"),),
         )
         image_dispatch = build_builtin_dispatch_catalog(image_phase32)
+        ffmpeg_phase32 = CapabilityCatalog.create(
+            (phase32.capability("media.audio.process"),),
+            (phase32.adapter("originforge.audio.ffmpeg"),),
+        )
+        ffmpeg_dispatch = build_builtin_dispatch_catalog(ffmpeg_phase32)
         piper_phase32 = CapabilityCatalog.create(
             (phase32.capability("media.audio.tts"),),
             (phase32.adapter("originforge.audio.piper"),),
@@ -84,10 +89,11 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
                 "originforge.code.bounded-retry",
                 "originforge.pixelorama.export",
                 "originforge.simulation.deterministic",
-            "originforge.image.generate",
-            "originforge.audio.piper",
-            "originforge.runtime.observe",
-            "originforge.playtest.cooperative",
+                "originforge.image.generate",
+                "originforge.audio.ffmpeg",
+                "originforge.audio.piper",
+                "originforge.runtime.observe",
+                "originforge.playtest.cooperative",
             },
         )
         reviewed_contracts = (
@@ -96,6 +102,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             *pixelorama_dispatch.contracts,
             *blender_dispatch.contracts,
             *image_dispatch.contracts,
+            *ffmpeg_dispatch.contracts,
             *piper_dispatch.contracts,
             *runtime_dispatch.contracts,
             *playtest_dispatch.contracts,
@@ -147,12 +154,9 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         piper = rows["originforge.audio.piper"]
         simulation = rows["originforge.simulation.deterministic"]
         pixelorama = rows["originforge.pixelorama.export"]
-        self.assertEqual(ffmpeg.status, BuiltinBindingReviewStatus.DEFERRED)
-        self.assertEqual(
-            ffmpeg.blocker,
-            "AUDIO_SOURCE_STRUCTURE_NOT_RESOLVED",
-        )
-        self.assertIn("PCM hash", ffmpeg.reason)
+        self.assertEqual(ffmpeg.status, BuiltinBindingReviewStatus.BINDABLE)
+        self.assertIsNone(ffmpeg.blocker)
+        self.assertIn("PCM16 WAV", ffmpeg.reason)
         image = rows["originforge.image.generate"]
         self.assertEqual(image.status, BuiltinBindingReviewStatus.BINDABLE)
         self.assertIsNone(image.blocker)
@@ -173,7 +177,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
             for value in rows
             if value.status is BuiltinBindingReviewStatus.DEFERRED
         ]
-        self.assertEqual(len(deferred), 2)
+        self.assertEqual(len(deferred), 1)
         self.assertTrue(all(value.blocker for value in deferred))
         self.assertEqual(
             len({value.blocker for value in deferred}),

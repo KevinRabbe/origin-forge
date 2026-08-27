@@ -405,6 +405,16 @@ def inspect_dispatch_binding_currentness_readonly(
             and resolved[0].source_object_type == "AUDIO_PROFILE"
             and resolved[0].resolution_class == "PROTECTED_AUDIO_PROFILE"
         )
+        ffmpeg_input = (
+            binding.selected_adapter_id == "originforge.audio.ffmpeg"
+            and binding.dispatch_contract_id == "audio.ffmpeg-process@1"
+            and binding.binder_id == "binder.audio.ffmpeg-process@1"
+            and len(resolved) == 2
+            and {value.original_ref.role for value in resolved}
+            == {"audio_source", "audio_profile"}
+            and any(value.source_object_type == "AUDIO_SOURCE" and value.resolution_class == "PROTECTED_PCM16_WAV" for value in resolved)
+            and any(value.source_object_type == "AUDIO_PROFILE" and value.resolution_class == "PROTECTED_AUDIO_PROFILE" for value in resolved)
+        )
         runtime_input = (
             binding.selected_adapter_id == "originforge.runtime.observe"
             and binding.dispatch_contract_id == "runtime.observe@1"
@@ -425,7 +435,7 @@ def inspect_dispatch_binding_currentness_readonly(
             and resolved[0].source_object_type == "PLAYTEST_SCENARIO"
             and resolved[0].resolution_class == "PROTECTED_PLAYTEST_SCENARIO"
         )
-        if not (pixelorama_input or blender_input or piper_input or runtime_input or playtest_input):
+        if not (pixelorama_input or blender_input or piper_input or ffmpeg_input or runtime_input or playtest_input):
             return result(
                 DispatchBindingCurrentnessStatus.STALE_INPUT,
                 "current read-only nonzero-ref eligibility is limited to exact reviewed production contracts",
