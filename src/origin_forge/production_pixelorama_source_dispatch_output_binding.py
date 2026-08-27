@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import json
+import hashlib
 
 from .ids import IdKind, validate_id
 from .lineage import OriginForgeLineage
@@ -19,6 +20,7 @@ from .production_pixelorama_source_dispatch_output_binding_models import (
 from .production_read_guard import ProductionReadGuardError, production_read_connection
 from .runtime import OriginForgeRuntime
 from .pixelorama_protocol import PixeloramaProtocolError, parse_bridge_request, parse_bridge_result
+from .production_work_order_models import canonical_bytes
 
 
 class PixeloramaSourceOutputBindingError(RuntimeError):
@@ -279,8 +281,33 @@ def materialize_pixelorama_source_result(
     try:
         request_path = lineage.local_artifact_path(binding.request_artifact_id)
         result_path = lineage.local_artifact_path(binding.result_artifact_id)
-        request_raw = json.loads(request_path.read_text(encoding="utf-8"))
-        result_raw = json.loads(result_path.read_text(encoding="utf-8"))
+        request_bytes = request_path.read_bytes()
+        result_bytes = result_path.read_bytes()
+        request_artifact = lineage.get_artifact(binding.request_artifact_id)
+        result_artifact = lineage.get_artifact(binding.result_artifact_id)
+        if (
+            request_artifact.get("type") != "PIXELORAMA_BRIDGE_REQUEST"
+            or request_artifact.get("parent_artifact_id") is not None
+            or request_artifact.get("created_by_run_id") != binding.run_id
+            or request_artifact.get("status") != "CAPTURED"
+            or request_artifact.get("content_hash")
+            != "sha256:" + hashlib.sha256(request_bytes).hexdigest()
+            or result_artifact.get("type") != "PIXELORAMA_BRIDGE_RESULT"
+            or result_artifact.get("parent_artifact_id") != binding.request_artifact_id
+            or result_artifact.get("created_by_run_id") != binding.run_id
+            or result_artifact.get("status") != "CAPTURED"
+            or result_artifact.get("content_hash")
+            != "sha256:" + hashlib.sha256(result_bytes).hexdigest()
+        ):
+            raise PixeloramaSourceOutputBindingError(
+                "durable Pixelorama source request/result Artifact lineage drifted"
+            )
+        request_raw = json.loads(request_bytes.decode("utf-8"))
+        result_raw = json.loads(result_bytes.decode("utf-8"))
+        if canonical_bytes(request_raw) != request_bytes or canonical_bytes(result_raw) != result_bytes:
+            raise PixeloramaSourceOutputBindingError(
+                "durable Pixelorama source request/result JSON is not canonical"
+            )
         request = parse_bridge_request(request_raw)
         bridge_result = parse_bridge_result(result_raw)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, ValueError, PixeloramaProtocolError) as exc:
@@ -307,6 +334,49 @@ def materialize_pixelorama_source_result(
         raise PixeloramaSourceOutputBindingError(
             "durable Pixelorama source outputs drifted from the binding"
         )
+    try:
+        run_verifications = runtime.list_verifications("RUN", binding.run_id)
+        if not any(
+            value["id"] == binding.run_verification_id
+            and value["status"] == "PASS"
+            for value in run_verifications
+        ):
+            raise PixeloramaSourceOutputBindingError(
+                "durable Pixelorama source run verification is missing or not PASS"
+            )
+        for output in binding.outputs:
+            artifact = lineage.get_artifact(output.artifact_id)
+            path = lineage.local_artifact_path(output.artifact_id)
+            data = path.read_bytes()
+            verifications = lineage.list_artifact_verifications(output.artifact_id)
+            if (
+                artifact.get("type")
+                != {
+                    BridgeOutputType.PIXELORAMA_PROJECT: "PIXELORAMA_PROJECT",
+                    BridgeOutputType.PNG: "RASTER_EXPORT_PNG",
+                    BridgeOutputType.SPRITESHEET: "SPRITESHEET_EXPORT",
+                }[output.output_type]
+                or artifact.get("parent_artifact_id") != binding.result_artifact_id
+                or artifact.get("created_by_run_id") != binding.run_id
+                or artifact.get("status") != "PRODUCED"
+                or artifact.get("content_hash")
+                != "sha256:" + hashlib.sha256(data).hexdigest()
+                or artifact.get("content_hash") != "sha256:" + output.content_hash
+                or len(data) != output.byte_count
+                or artifact.get("path_or_uri") != str(path)
+                or not any(
+                    value["id"] == output.verification_id
+                    and value["status"] == "PASS"
+                    for value in verifications
+                )
+            ):
+                raise PixeloramaSourceOutputBindingError(
+                    f"durable Pixelorama source output evidence drifted: {output.relative_path}"
+                )
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        raise PixeloramaSourceOutputBindingError(
+            "durable Pixelorama source output evidence is unavailable"
+        ) from exc
     operation = PixeloramaOperationResult(
         request=request,
         bridge_result=bridge_result,
