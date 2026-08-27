@@ -18,6 +18,10 @@ from origin_forge.pixelorama_models import (
     RasterLayerSpec,
     SpriteProjectSpec,
 )
+from origin_forge.production_actions import (
+    adopt_production_execution,
+    inspect_production_execution,
+)
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
 from origin_forge.production_capability_models import (
     CapabilityCatalog,
@@ -260,6 +264,19 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
         ):
             completed = dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
             self.assertEqual(completed.execution.status.value, "RETURNED")
+            inspected = inspect_production_execution(self.runtime, completed.execution.execution_id)
+            self.assertTrue(inspected["supported_actions"]["adopt"])
+            adopted = adopt_production_execution(
+                self.runtime, completed.execution.execution_id, "assets/player.pxo"
+            )
+            self.assertTrue((self.root / "assets" / "player.pxo").is_file())
+            self.assertEqual(adopted.source_artifact_id, next(
+                value.artifact_id
+                for value in read_pixelorama_source_dispatch_output_binding(
+                    self.runtime, completed.execution.execution_id
+                ).outputs
+                if value.output_type is BridgeOutputType.PIXELORAMA_PROJECT
+            ))
             binding = read_pixelorama_source_dispatch_output_binding(
                 self.runtime, completed.execution.execution_id
             )

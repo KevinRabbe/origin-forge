@@ -39,6 +39,9 @@ from .production_pixelorama_adoption_migration import (
 from .production_pixelorama_dispatch_output_binding_migration import (
     PIXELORAMA_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
+from .production_pixelorama_source_adoption_migration import (
+    PIXELORAMA_SOURCE_PRODUCTION_ADOPTION_MIGRATION,
+)
 from .production_pixelorama_source_dispatch_output_binding_migration import (
     PIXELORAMA_SOURCE_DISPATCH_OUTPUT_BINDING_MIGRATION,
 )
@@ -72,6 +75,7 @@ MIGRATIONS = (
     MIGRATION_HASH_MIGRATION,
     AUDIO_DISPATCH_OUTPUT_BINDING_OWNER_MIGRATION,
     PIXELORAMA_SOURCE_DISPATCH_OUTPUT_BINDING_MIGRATION,
+    PIXELORAMA_SOURCE_PRODUCTION_ADOPTION_MIGRATION,
 )
 SCHEMA_VERSION = MIGRATIONS[-1].version
 

@@ -23,6 +23,10 @@ _MEDIA_ADOPTERS = {
         "production_pixelorama_adoption",
         "GovernedPixeloramaProductionOutputAdopter",
     ),
+    "originforge.execution.pixelorama.source-create@1": (
+        "production_pixelorama_source_adoption",
+        "GovernedPixeloramaSourceOutputAdopter",
+    ),
 }
 
 
