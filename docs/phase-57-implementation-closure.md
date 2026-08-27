@@ -20,12 +20,14 @@ request hash. Publication is create-only and revalidated through the existing
 Phase-51 protected reader. Phase-51 admission requires the exact current
 Task/publication/request relation and rejects stale upstream lineage.
 
-Subsequent foundation work has advanced the composed schema to v28. Migration
-v28 records a `sha256:` hash for each migration after validating its version;
-historical rows with no hash are backfilled only when their versions and SQL
-identity are known. A stored hash mismatch fails closed before further upgrade
-work. This changes migration-integrity evidence only and does not rewrite
-domain IDs, receipts, or production evidence.
+Subsequent foundation work has advanced the composed candidate schema to v29.
+Migration v28 records a `sha256:` hash for each migration after validating its
+version; historical rows with no hash are backfilled only when their versions
+and SQL identity are known. Migration v29 preserves existing shared Piper
+audio-binding rows and adds the reviewed FFmpeg owner constraint without
+rewriting those rows. A stored hash mismatch fails closed before further
+upgrade work. These migrations change migration-integrity and owner-compatibility
+evidence only; they do not rewrite domain IDs, receipts, or production evidence.
 
 The module-only operator surface is:
 
