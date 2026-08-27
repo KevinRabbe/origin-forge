@@ -199,7 +199,20 @@ class ProductionWorkOrderPlannerTests(unittest.TestCase):
             max_payload_bytes=1024 * 1024,
             max_input_refs=1,
         )
-        bound_payload = {**payload, "sentinel": "not-valid-for-the-model"}
+        bound_payload = {
+            **payload,
+            "sprite_spec": {
+                **payload["sprite_spec"],
+                "animations": [
+                    {
+                        "name": "run",
+                        "first_frame": 0,
+                        "last_frame": 1,
+                        "loop_mode": "LOOP",
+                    }
+                ],
+            },
+        }
         with patch(
             "origin_forge.production_work_order_planner.build_pixelorama_source_work_order_payload_from_accepted_design",
             return_value=bound_payload,
@@ -208,7 +221,7 @@ class ProductionWorkOrderPlannerTests(unittest.TestCase):
 
         bind.assert_called_once()
         self.assertEqual(bind.call_args.args[1], "DESIGNACC-planner")
-        self.assertEqual(result.payload["sentinel"], "not-valid-for-the-model")
+        self.assertEqual(result.payload, bound_payload)
         self.assertNotEqual(result.content_hash, proposal.content_hash)
 
     def test_deterministic_worker_makes_one_taskless_call_and_constructs_only_work_order(self) -> None:
