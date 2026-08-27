@@ -175,6 +175,11 @@ def _budget(value: object) -> BridgeBudget:
         raise PixeloramaProtocolError("bridge budget validation failed") from exc
 
 
+def parse_bridge_budget(value: object) -> BridgeBudget:
+    """Parse one canonical bridge budget for a governed production request."""
+    return _budget(value)
+
+
 def _input_ref(value: object) -> BridgeInputRef:
     raw = _exact(
         value,
@@ -202,6 +207,11 @@ def _export_spec(value: object) -> ExportSpec:
         raise
     except (PixeloramaModelError, ValueError) as exc:
         raise PixeloramaProtocolError("export spec validation failed") from exc
+
+
+def parse_export_spec(value: object) -> ExportSpec:
+    """Parse one canonical export declaration for a governed production request."""
+    return _export_spec(value)
 
 
 def parse_bridge_request(value: object) -> PixeloramaBridgeRequest:
