@@ -7,6 +7,9 @@ Remote CI is in progress for this head; the branch remains a draft PR and the
 final Phase 57D release gate is therefore still open. The candidate also
 contains the later governed Pixelorama source/animation vertical and its
 read-only trace evidence; those additions do not alter Phase-57 authority.
+The source WorkOrder planner now binds accepted-design animation intents before
+WorkOrder freeze, and the fake-bridge vertical verifies dispatch, adoption,
+actor-bound acceptance, and no-replay recovery with that derived animation.
 
 Phase 57 now closes the semantic-request boundary from accepted design evidence
 to the existing protected Blender request registry. The implementation keeps
