@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from .lineage import OriginForgeLineage
+from .production_dispatch_execution_models import DispatchExecutionStatus
+from .production_dispatch_execution_read import read_dispatch_execution
 from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import ensure_production_runtime_readable
 from .production_trace import inspect_task_production_trace
@@ -112,6 +114,7 @@ def record_task_review_decision(
     *,
     rationale: str,
     expected_revision: int | None = None,
+    execution_id: str | None = None,
 ) -> str:
     """Record an explicit human review decision without changing Task state."""
     if action not in {"accept", "reject", "refine", "replace"}:
@@ -119,6 +122,15 @@ def record_task_review_decision(
     if not isinstance(rationale, str) or not rationale.strip():
         raise ValueError("review rationale must be non-empty")
     task = runtime.get_task(task_id)
+    execution = None
+    if execution_id is not None:
+        execution = read_dispatch_execution(runtime, execution_id)
+        if execution.project_id != runtime.project_id() or execution.task_id != task_id:
+            raise ValueError("review execution does not belong to the requested Task")
+        if execution.status is not DispatchExecutionStatus.RETURNED:
+            raise ValueError("review execution must be RETURNED")
+        if int(task["revision"]) != execution.task_revision + 1:
+            raise ValueError("review execution is stale for the current Task revision")
     if expected_revision is not None:
         if type(expected_revision) is not int or expected_revision < 0:
             raise ValueError("review expected_revision must be a non-negative integer")
@@ -133,10 +145,16 @@ def record_task_review_decision(
         verifications = runtime.list_verifications("TASK", task_id)
         if not any(item["status"] == "PASS" for item in verifications):
             raise ValueError("review accept requires PASS Task Verification evidence")
+    context = f"task_id={task_id}; task_revision={int(task['revision'])}"
+    if execution is not None:
+        context += (
+            f"; execution_id={execution.execution_id}"
+            f"; execution_owner={execution.execution_owner_id}"
+        )
     return OriginForgeLineage(runtime).create_decision(
         title=f"Task review: {action.upper()}",
         decision=action.upper(),
-        context=f"task_id={task_id}; task_revision={int(task['revision'])}",
+        context=context,
         rationale=rationale.strip(),
         goal_id=runtime.get_flow(task["flow_id"])["goal_id"],
         task_id=task_id,
@@ -149,6 +167,7 @@ def refine_task(
     *,
     rationale: str,
     expected_revision: int | None = None,
+    execution_id: str | None = None,
 ) -> TaskRefinementResult:
     """Record human refinement and create a new immutable child Task proposal."""
     task = runtime.get_task(task_id)
@@ -163,6 +182,7 @@ def refine_task(
         "refine",
         rationale=rationale,
         expected_revision=expected_revision,
+        execution_id=execution_id,
     )
     refined_task_id = runtime.create_task(
         task["flow_id"],
@@ -180,6 +200,7 @@ def replace_task(
     *,
     rationale: str,
     expected_revision: int | None = None,
+    execution_id: str | None = None,
 ) -> TaskReplacementResult:
     """Create a new replacement Task while preserving the rejected Task evidence."""
     task = runtime.get_task(task_id)
@@ -196,6 +217,7 @@ def replace_task(
         "replace",
         rationale=rationale,
         expected_revision=expected_revision,
+        execution_id=execution_id,
     )
     replacement_task_id = runtime.create_task(
         task["flow_id"],

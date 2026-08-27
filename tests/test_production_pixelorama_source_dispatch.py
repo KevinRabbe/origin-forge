@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from origin_forge.ids import IdKind, new_id
+from origin_forge.lineage import OriginForgeLineage
 from origin_forge.pixelorama_models import (
     AnimationSpec,
     BridgeBudget,
@@ -23,6 +24,9 @@ from origin_forge.production_actions import (
     accept_production_execution,
     adopt_production_execution,
     inspect_production_execution,
+    refine_production_execution,
+    reject_production_execution,
+    replace_production_execution,
 )
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
 from origin_forge.production_capability_models import (
@@ -64,7 +68,7 @@ from origin_forge.production_work_order_store import ProductionWorkOrderStore
 from origin_forge.production_work_orders import create_current_work_order
 from origin_forge.runtime import OriginForgeRuntime
 
-BRIDGE = r'''
+BRIDGE = r"""
 import binascii, hashlib, json, struct, sys, zlib
 from pathlib import Path
 
@@ -103,7 +107,7 @@ for export in request["export_specs"]:
 result = {"protocol_version": 1, "operation_id": request["operation_id"], "request_hash": request["content_hash"], "status": "SUCCEEDED", "pixelorama_version": "test", "bridge_version": "1", "bridge_fingerprint": "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "outputs": sorted(outputs, key=lambda value: value["relative_path"]), "diagnostics": [], "elapsed_ms": 1}
 result["content_hash"] = "sha256:" + hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 result_path.write_text(json.dumps(result, sort_keys=True, separators=(",", ":")), encoding="utf-8")
-'''
+"""
 
 
 class PixeloramaSourceDispatchTests(unittest.TestCase):
@@ -187,7 +191,9 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
         payload = {
             "operation": "CREATE_SPRITE_PROJECT",
             "sprite_spec": spec.to_dict(),
-            "export_specs": [ExportSpec(BridgeOutputType.PNG, "exports/player.png").to_dict()],
+            "export_specs": [
+                ExportSpec(BridgeOutputType.PNG, "exports/player.png").to_dict()
+            ],
             "budget": BridgeBudget(timeout_seconds=10).to_dict(),
         }
         work_order = create_current_work_order(
@@ -211,7 +217,10 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
             return_value=inspection,
         ):
             bundle = create_input_resolution_bundle(
-                work_orders, resolvers, work_order.work_order_id, work_audit.work_order_audit_id
+                work_orders,
+                resolvers,
+                work_order.work_order_id,
+                work_audit.work_order_audit_id,
             )
         with patch(
             "origin_forge.production_dispatch_resolvers.inspect_accepted_design",
@@ -234,7 +243,10 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
             return_value=inspection,
         ):
             self.claim = acquire_dispatch_claim(
-                self.runtime, binding.dispatch_binding_id, binding_audit.binding_audit_id, 1
+                self.runtime,
+                binding.dispatch_binding_id,
+                binding_audit.binding_audit_id,
+                1,
             )
         self.inspection = inspection
         self.bridge = self.root / "bridge.py"
@@ -243,7 +255,7 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
-    def test_source_dispatch_publishes_binding_and_recovers_without_replay(self) -> None:
+    def _dispatch_completed(self):
         bridge_hash = "sha256:" + hashlib.sha256(self.bridge.read_bytes()).hexdigest()
         env = {
             "ORIGIN_FORGE_PIXELORAMA_EXECUTABLE": sys.executable,
@@ -268,54 +280,99 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
                 return_value=planning,
             ),
         ):
-            completed = dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
-            self.assertEqual(completed.execution.status.value, "RETURNED")
-            inspected = inspect_production_execution(self.runtime, completed.execution.execution_id)
-            self.assertTrue(inspected["supported_actions"]["adopt"])
-            self.assertTrue(inspected["supported_actions"]["accept"])
-            adopted = adopt_production_execution(
-                self.runtime, completed.execution.execution_id, "assets/player.pxo"
+            return dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+
+    def test_production_review_decisions_bind_to_execution(self) -> None:
+        completed = self._dispatch_completed()
+        inspected = inspect_production_execution(
+            self.runtime, completed.execution.execution_id
+        )
+        self.assertTrue(inspected["supported_actions"]["reject"])
+        self.assertTrue(inspected["supported_actions"]["refine"])
+        self.assertTrue(inspected["supported_actions"]["replace"])
+        rejected_id = reject_production_execution(
+            self.runtime,
+            completed.execution.execution_id,
+            rationale="animation timing needs review",
+        )
+        rejected = OriginForgeLineage(self.runtime).get_decision(rejected_id)
+        self.assertIn(
+            f"execution_id={completed.execution.execution_id}", rejected["context"]
+        )
+        refined = refine_production_execution(
+            self.runtime,
+            completed.execution.execution_id,
+            rationale="add a second anticipation frame",
+        )
+        self.assertNotEqual(refined.refined_task_id, self.task_id)
+        replaced = replace_production_execution(
+            self.runtime,
+            completed.execution.execution_id,
+            rationale="use the reviewed animation source",
+        )
+        self.assertNotEqual(replaced.replacement_task_id, self.task_id)
+
+    def test_source_dispatch_publishes_binding_and_recovers_without_replay(
+        self,
+    ) -> None:
+        completed = self._dispatch_completed()
+        self.assertEqual(completed.execution.status.value, "RETURNED")
+        inspected = inspect_production_execution(
+            self.runtime, completed.execution.execution_id
+        )
+        self.assertTrue(inspected["supported_actions"]["adopt"])
+        self.assertTrue(inspected["supported_actions"]["accept"])
+        adopted = adopt_production_execution(
+            self.runtime, completed.execution.execution_id, "assets/player.pxo"
+        )
+        self.assertTrue((self.root / "assets" / "player.pxo").is_file())
+        with self.assertRaises(PixeloramaSourceTaskAcceptanceError):
+            accept_production_execution(self.runtime, completed.execution.execution_id)
+        self.assertEqual(self.runtime.get_task(self.task_id)["status"], "RUNNING")
+        accepted = accept_production_execution(
+            self.runtime, completed.execution.execution_id, actor_id="operator-test"
+        )
+        self.assertEqual(accepted.task_id, self.task_id)
+        self.assertEqual(self.runtime.get_task(self.task_id)["status"], "SUCCEEDED")
+        trace = inspect_production_execution(
+            self.runtime, completed.execution.execution_id
+        )["trace"]["dispatch"]
+        self.assertEqual(len(trace["pixelorama_source_adoptions"]), 1)
+        self.assertEqual(len(trace["pixelorama_source_acceptances"]), 1)
+        replayed = accept_production_execution(
+            self.runtime, completed.execution.execution_id, actor_id="operator-test"
+        )
+        self.assertEqual(replayed.task_verification_id, accepted.task_verification_id)
+        with self.assertRaises(PixeloramaSourceTaskAcceptanceError):
+            accept_production_execution(
+                self.runtime,
+                completed.execution.execution_id,
+                actor_id="different-operator",
             )
-            self.assertTrue((self.root / "assets" / "player.pxo").is_file())
-            with self.assertRaises(PixeloramaSourceTaskAcceptanceError):
-                accept_production_execution(
-                    self.runtime, completed.execution.execution_id
-                )
-            self.assertEqual(self.runtime.get_task(self.task_id)["status"], "RUNNING")
-            accepted = accept_production_execution(
-                self.runtime, completed.execution.execution_id, actor_id="operator-test"
-            )
-            self.assertEqual(accepted.task_id, self.task_id)
-            self.assertEqual(self.runtime.get_task(self.task_id)["status"], "SUCCEEDED")
-            trace = inspect_production_execution(
-                self.runtime, completed.execution.execution_id
-            )["trace"]["dispatch"]
-            self.assertEqual(len(trace["pixelorama_source_adoptions"]), 1)
-            self.assertEqual(len(trace["pixelorama_source_acceptances"]), 1)
-            replayed = accept_production_execution(
-                self.runtime, completed.execution.execution_id, actor_id="operator-test"
-            )
-            self.assertEqual(replayed.task_verification_id, accepted.task_verification_id)
-            with self.assertRaises(PixeloramaSourceTaskAcceptanceError):
-                accept_production_execution(
-                    self.runtime, completed.execution.execution_id, actor_id="different-operator"
-                )
-            self.assertEqual(adopted.source_artifact_id, next(
+        self.assertEqual(
+            adopted.source_artifact_id,
+            next(
                 value.artifact_id
                 for value in read_pixelorama_source_dispatch_output_binding(
                     self.runtime, completed.execution.execution_id
                 ).outputs
                 if value.output_type is BridgeOutputType.PIXELORAMA_PROJECT
-            ))
-            binding = read_pixelorama_source_dispatch_output_binding(
-                self.runtime, completed.execution.execution_id
-            )
-            self.assertEqual(len(binding.outputs), 2)
-            recovered = recover_dispatch_execution_once(
-                self.runtime, completed.execution.execution_id
-            )
-        self.assertEqual(recovered.execution.execution_id, completed.execution.execution_id)
-        self.assertEqual(recovered.pixelorama_source_result.run_id, completed.pixelorama_source_result.run_id)
+            ),
+        )
+        binding = read_pixelorama_source_dispatch_output_binding(
+            self.runtime, completed.execution.execution_id
+        )
+        self.assertEqual(len(binding.outputs), 2)
+        recovered = recover_dispatch_execution_once(
+            self.runtime, completed.execution.execution_id
+        )
+        self.assertEqual(
+            recovered.execution.execution_id, completed.execution.execution_id
+        )
+        self.assertEqual(
+            recovered.pixelorama_source_result.run_id,
+            completed.pixelorama_source_result.run_id,
+        )
 
 
 if __name__ == "__main__":
