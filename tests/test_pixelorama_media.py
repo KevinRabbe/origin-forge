@@ -6,6 +6,8 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from origin_forge.lineage import OriginForgeLineage
 from origin_forge.pixelorama_bridge import PixeloramaBridgeProfile
@@ -25,7 +27,10 @@ from origin_forge.pixelorama_models import (
     RasterLayerSpec,
     SpriteProjectSpec,
 )
-from origin_forge.pixelorama_source import create_pixelorama_source
+from origin_forge.pixelorama_source import (
+    create_pixelorama_source,
+    create_pixelorama_source_from_accepted_design,
+)
 from origin_forge.review import record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import FlowStatus, RunStatus, TaskStatus
@@ -239,6 +244,73 @@ class PixeloramaMediaTests(unittest.TestCase):
         self.assertEqual(len(project_outputs), 1)
         self.assertEqual(result.operation.bridge_result.status, BridgeResultStatus.SUCCEEDED)
         self.assertFalse(result.to_dict()["canonical_asset_adopted"])
+
+    def test_source_creation_from_accepted_design_records_exact_lineage(self) -> None:
+        request = self._request()
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-accepted",
+                content_hash="sha256:" + "a" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            design_input=SimpleNamespace(design_input_id="DESIGNIN-input"),
+            current=True,
+            stale_reason=None,
+        )
+        result = SimpleNamespace(run_id="RUN-pixelorama")
+        with (
+            patch(
+                "origin_forge.pixelorama_source.inspect_accepted_design",
+                return_value=expected,
+            ),
+            patch(
+                "origin_forge.pixelorama_source.PixeloramaMediaService.execute",
+                return_value=result,
+            ) as execute,
+        ):
+            actual = create_pixelorama_source_from_accepted_design(
+                self.runtime,
+                self.task,
+                "DESIGNACC-accepted",
+                self._profile(self._script("accepted-design-bridge.py")),
+                request.sprite_spec,
+                export_specs=request.export_specs,
+                budget=request.budget,
+            )
+        self.assertIs(actual, result)
+        lineage = execute.call_args.kwargs["accepted_design_lineage"]
+        self.assertEqual(
+            lineage,
+            {
+                "acceptance_id": "DESIGNACC-accepted",
+                "acceptance_hash": "sha256:" + "a" * 64,
+                "design_input_id": "DESIGNIN-input",
+            },
+        )
+
+    def test_source_creation_from_stale_accepted_design_fails_closed(self) -> None:
+        request = self._request()
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-stale",
+                content_hash="sha256:" + "b" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            design_input=SimpleNamespace(design_input_id="DESIGNIN-input"),
+            current=False,
+            stale_reason="goal revision drifted",
+        )
+        with patch(
+            "origin_forge.pixelorama_source.inspect_accepted_design",
+            return_value=expected,
+        ), self.assertRaisesRegex(RuntimeError, "accepted design is stale"):
+            create_pixelorama_source_from_accepted_design(
+                self.runtime,
+                self.task,
+                "DESIGNACC-stale",
+                self._profile(self._script("stale-design-bridge.py")),
+                request.sprite_spec,
+            )
 
     def test_created_project_requires_human_review_before_explicit_adoption(self) -> None:
         script = self._script("review-source-bridge.py")

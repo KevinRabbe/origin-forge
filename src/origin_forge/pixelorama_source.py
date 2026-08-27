@@ -15,6 +15,10 @@ from .pixelorama_models import (
     PixeloramaBridgeRequest,
     SpriteProjectSpec,
 )
+from .production_design_specification_currentness import (
+    AcceptedDesignError,
+    inspect_accepted_design,
+)
 from .production_evidence_read import ProductionEvidenceReadService
 from .records import create_artifact
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
@@ -47,6 +51,48 @@ def create_pixelorama_source(
         budget=budget,
     )
     return PixeloramaMediaService(runtime, profile).execute(task_id, request)
+
+
+def create_pixelorama_source_from_accepted_design(
+    runtime: OriginForgeRuntime,
+    task_id: str,
+    acceptance_id: str,
+    profile: PixeloramaBridgeProfile,
+    sprite_spec: SpriteProjectSpec,
+    *,
+    export_specs: tuple[ExportSpec, ...] = (),
+    budget: BridgeBudget | None = None,
+) -> PixeloramaMediaResult:
+    """Create 2D source only from an exact, currently accepted design.
+
+    The caller still supplies the explicit raster contract.  Accepted design
+    evidence is a currentness and provenance precondition, not a source of
+    implicit dimensions, exports, or semantic acceptance.
+    """
+    inspection = inspect_accepted_design(runtime, acceptance_id)
+    if not inspection.current:
+        raise AcceptedDesignError(
+            f"accepted design is stale: {inspection.stale_reason or 'unknown reason'}"
+        )
+    if inspection.acceptance.project_id != runtime.project_id():
+        raise AcceptedDesignError("accepted design belongs to another project")
+    if not isinstance(sprite_spec, SpriteProjectSpec):
+        raise TypeError("sprite_spec must be a SpriteProjectSpec")
+    request = PixeloramaBridgeRequest.create(
+        operation=BridgeOperation.CREATE_SPRITE_PROJECT,
+        sprite_spec=sprite_spec,
+        export_specs=export_specs,
+        budget=budget,
+    )
+    return PixeloramaMediaService(runtime, profile).execute(
+        task_id,
+        request,
+        accepted_design_lineage={
+            "acceptance_id": inspection.acceptance.acceptance_id,
+            "acceptance_hash": inspection.acceptance.content_hash,
+            "design_input_id": inspection.design_input.design_input_id,
+        },
+    )
 
 
 @dataclass(frozen=True)

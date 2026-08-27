@@ -11,7 +11,6 @@ from .lineage import OriginForgeLineage
 from .path_policy import portable_relative_path
 from .pixelorama_bridge import (
     PixeloramaBridgeAdapter,
-    PixeloramaBridgeError,
     PixeloramaBridgeProfile,
     PixeloramaOperationResult,
 )
@@ -174,11 +173,19 @@ class PixeloramaMediaService:
         request: PixeloramaBridgeRequest,
         *,
         staged_inputs: dict[str, Path] | None = None,
+        accepted_design_lineage: dict[str, str] | None = None,
     ) -> PixeloramaMediaResult:
         if not validate_id(task_id, IdKind.TASK):
             raise ValueError("task_id must be a TASK ID")
         if not isinstance(request, PixeloramaBridgeRequest):
             raise TypeError("request must be a PixeloramaBridgeRequest")
+        if accepted_design_lineage is not None:
+            required_lineage = {"acceptance_id", "acceptance_hash", "design_input_id"}
+            if set(accepted_design_lineage) != required_lineage or any(
+                not isinstance(value, str) or not value
+                for value in accepted_design_lineage.values()
+            ):
+                raise TypeError("accepted_design_lineage must contain exact non-empty strings")
         task = self.runtime.get_task(task_id)
         if task["status"] != TaskStatus.RUNNING.value:
             raise RuntimeInvariantError(
@@ -258,6 +265,11 @@ class PixeloramaMediaService:
                     "pixelorama_version": operation.bridge_result.pixelorama_version,
                     "production_task_verified": False,
                     "canonical_asset_adopted": False,
+                    **(
+                        {"accepted_design_lineage": dict(accepted_design_lineage)}
+                        if accepted_design_lineage is not None
+                        else {}
+                    ),
                 },
                 run_id=run_id,
             )
