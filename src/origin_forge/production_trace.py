@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .lineage import OriginForgeLineage
+from .production_dispatch_read import read_dispatch_binding
 from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import (
     ensure_production_runtime_readable,
@@ -67,10 +68,21 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
             "SELECT * FROM model3d_request_publications WHERE project_id = ? AND task_id = ? ORDER BY published_at, publication_id",
             (runtime.project_id(), task_id),
         )
+        referenced_workspace_ids = []
     validator_registry = build_builtin_dispatch_validator_registry()
     work_order_ids = tuple(
         dict.fromkeys(str(row["work_order_id"]) for row in executions)
     )
+    for row in executions:
+        try:
+            projection = read_dispatch_binding(
+                runtime, str(row["dispatch_binding_id"])
+            ).request_projection
+        except Exception:
+            continue
+        workspace_id = projection.get("workspace_id") if isinstance(projection, dict) else None
+        if isinstance(workspace_id, str) and workspace_id not in referenced_workspace_ids:
+            referenced_workspace_ids.append(workspace_id)
     work_orders = [
         read_work_order(runtime, work_order_id, validator_registry).to_dict()
         for work_order_id in work_order_ids
@@ -79,6 +91,12 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
         item for item in OriginForgeLineage(runtime).list_decisions() if item.get("task_id") == task_id
     ]
     workspaces = GitWorkspaceManager(runtime).list(task_id)
+    for workspace_id in referenced_workspace_ids:
+        if not any(row["id"] == workspace_id for row in workspaces):
+            try:
+                workspaces.append(GitWorkspaceManager(runtime).get(workspace_id))
+            except KeyError:
+                pass
     workspace_verifications = {
         str(workspace["id"]): runtime.list_verifications("WORKSPACE", str(workspace["id"]))
         for workspace in workspaces

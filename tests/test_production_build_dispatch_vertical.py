@@ -39,6 +39,7 @@ from origin_forge.production_dispatch_read import (
 )
 from origin_forge.production_dispatch_store import ProductionDispatchStore
 from origin_forge.production_task_activation import activate_dependency_ready_task
+from origin_forge.production_trace import inspect_task_production_trace
 from origin_forge.production_work_order_audit import audit_work_order_frozen
 from origin_forge.production_work_order_builtin import (
     build_builtin_dispatch_catalog,
@@ -278,6 +279,17 @@ test = []
         with self.assertRaises(ProductionDispatchInvocationRecoveryRequired):
             recover_build_dispatch_execution_once(self.runtime, execution_id)
         self.assertEqual(backend.calls, 1)
+
+    def test_production_trace_correlates_build_workspace_and_verification(self) -> None:
+        backend = _FakeBuildBackend()
+        with patch("origin_forge.production_execution_assembly.create_sandbox_backend", return_value=backend):
+            completed = dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+        trace = inspect_task_production_trace(self.runtime, self.task_id)
+        self.assertEqual(len(trace["dispatch"]["work_orders"]), 1)
+        self.assertEqual(trace["dispatch"]["executions"][0]["execution_id"], completed.execution.execution_id)
+        self.assertEqual(len(trace["workspace_verifications"]), 1)
+        verification_rows = next(iter(trace["workspace_verifications"].values()))
+        self.assertTrue(any(row["verification_type"].startswith("sandbox-build:") for row in verification_rows))
 
 
 if __name__ == "__main__":
