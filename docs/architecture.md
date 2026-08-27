@@ -574,5 +574,8 @@ Recovery independently validates the request/result JSON, bridge result,
 output paths, byte hashes, dimensions, and PASS Verifications. A durable
 binding can finish terminalization without invoking the bridge again; an
 interrupted STARTED execution without complete evidence fails closed. Source
-creation and animation production produce evidence only: they do not accept
-Tasks, adopt canonical assets, sign provenance, merge, or release.
+creation and animation production produce evidence only until explicit human
+review actions occur. Source output adoption is create-only and recorded by a
+schema-v31 receipt; Task acceptance requires an explicit actor-bound schema-v32
+receipt and exact currentness. Neither the bridge, model, adapter, or recovery
+path can accept, adopt, sign provenance, merge, or release.
