@@ -77,6 +77,18 @@ This creates a `PIXELORAMA_PROJECT` source Artifact and integrity Verification
 for a project-contained, non-symlink `.pxo` file. It does not perform semantic
 acceptance, export, adoption, or signing.
 
+The compatibility admin module also exposes explicit source revision
+inspection and replacement:
+
+```text
+python -m origin_forge.pixelorama_admin_cli source-inspect ART-...
+python -m origin_forge.pixelorama_admin_cli source-history ART-...
+python -m origin_forge.pixelorama_admin_cli source-replace ART-... assets/player-v2.pxo
+```
+
+`source-replace` is create-only: it links a new immutable source Artifact to
+the exact predecessor and never overwrites historical source evidence.
+
 This is read-only and combines the Task, Runs, Workspaces, Verifications, and
 Artifacts already recorded for that Task.
 
