@@ -14,6 +14,7 @@ from .production_dispatch_resolution_models import (
     ResolverClaim,
 )
 from .production_dispatch_resolvers import (
+    AcceptedDesignInputResolver,
     ArtifactInputResolver,
     DesignRuleInputResolver,
     DispatchInputResolutionError,
@@ -467,6 +468,7 @@ def phase_specific_resolver_review() -> tuple[PhaseSpecificResolverReview, ...]:
 
 def phase_specific_input_resolvers() -> tuple[WorkOrderInputResolver, ...]:
     return (
+        AcceptedDesignInputResolver(),
         AudioProfileInputResolver(),
         AudioSourceInputResolver(),
         Model3DRequestInputResolver(),
