@@ -11,6 +11,30 @@ from origin_forge.service import OriginForgeStore
 
 
 class MigrationTests(unittest.TestCase):
+    def test_latest_schema_records_and_validates_migration_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "project.db"
+            conn = sqlite3.connect(path)
+            try:
+                migrate(conn, "2026-01-01T00:00:00Z")
+                columns = {
+                    row[1]
+                    for row in conn.execute("PRAGMA table_info(schema_migrations)")
+                }
+                self.assertIn("migration_hash", columns)
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM schema_migrations WHERE migration_hash IS NOT NULL"
+                ).fetchone()[0]
+                self.assertEqual(count, SCHEMA_VERSION)
+                conn.execute(
+                    "UPDATE schema_migrations SET migration_hash = 'sha256:tampered' WHERE version = 1"
+                )
+                conn.commit()
+                with self.assertRaisesRegex(RuntimeError, "hash drifted"):
+                    migrate(conn, "2026-01-02T00:00:00Z")
+            finally:
+                conn.close()
+
     def test_upgrade_creates_non_overwriting_backup_before_migration(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "project.db"
@@ -446,7 +470,7 @@ class MigrationTests(unittest.TestCase):
                     (claim_id,),
                 ).fetchone()
 
-            self.assertEqual(version, 27)
+            self.assertEqual(version, SCHEMA_VERSION)
             self.assertEqual(after, before)
             self.assertEqual(consumed["status"], "CONSUMED")
             self.assertEqual(consumed["revision"], 1)
