@@ -233,6 +233,7 @@ class ProductionDispatchPhaseResolverTests(unittest.TestCase):
         self.assertEqual(
             tuple(value.resolver_id for value in first.descriptors),
             (
+                "resolver.core.accepted-design@1",
                 "resolver.core.artifact@1",
                 "resolver.core.design-rule@1",
                 "resolver.core.project-entity@1",

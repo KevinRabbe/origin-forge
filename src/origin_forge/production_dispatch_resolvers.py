@@ -5,6 +5,10 @@ from collections.abc import Sequence
 from typing import ClassVar, Protocol
 
 from .dream_evidence import canonical_verification_record
+from .production_design_specification_currentness import (
+    AcceptedDesignError,
+    inspect_accepted_design,
+)
 from .production_dispatch_resolution_models import (
     DispatchResolutionModelError,
     InputResolverDescriptor,
@@ -438,6 +442,91 @@ class DesignRuleInputResolver:
             resolver_fingerprint=self.descriptor.resolver_fingerprint,
             source_object_type="DESIGN_RULE",
             resolution_class="CANONICAL_DESIGN_RULE",
+            projection=projection,
+        )
+
+
+class AcceptedDesignInputResolver:
+    """Resolve one current, immutable accepted design for production planning."""
+
+    _CLAIM = ResolverClaim(
+        WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,
+        "DESIGNACC-",
+        "ACCEPTED_DESIGN",
+        "accepted_design",
+    )
+    _PROJECTION = {
+        "fields": (
+            "acceptance_id",
+            "acceptance_hash",
+            "design_input_id",
+            "design_input_hash",
+            "design_specification_id",
+            "design_specification_hash",
+            "goal_id",
+            "goal_revision",
+            "goal_content_hash",
+        ),
+        "currentness": "inspect_accepted_design.current == true",
+        "artifact_bytes": False,
+    }
+    _DESCRIPTOR = InputResolverDescriptor(
+        "resolver.core.accepted-design@1",
+        _resolver_fingerprint(
+            "origin-forge-dispatch-accepted-design-resolver@1",
+            _CLAIM,
+            _PROJECTION,
+        ),
+        (_CLAIM,),
+    )
+
+    @property
+    def descriptor(self) -> InputResolverDescriptor:
+        return self._DESCRIPTOR
+
+    def resolve(
+        self,
+        runtime: OriginForgeRuntime,
+        ref: WorkOrderInputRef,
+    ) -> ResolvedWorkOrderInput:
+        _require_ref(
+            ref,
+            WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,
+            "DESIGNACC-",
+        )
+        if ref.revision is not None:
+            raise DispatchInputResolutionError(
+                "accepted design refs are immutable and must not carry a revision"
+            )
+        try:
+            inspection = inspect_accepted_design(runtime, ref.ref_id)
+        except (AcceptedDesignError, KeyError, RuntimeError, TypeError, ValueError) as exc:
+            raise DispatchInputResolutionError(
+                "accepted design ref is not available in the current project"
+            ) from exc
+        if not inspection.current:
+            raise DispatchInputResolutionError(
+                f"accepted design ref is stale: {inspection.stale_reason or 'unknown reason'}"
+            )
+        projection = {
+            "acceptance_id": inspection.acceptance.acceptance_id,
+            "acceptance_hash": inspection.acceptance.content_hash,
+            "design_input_id": inspection.design_input.design_input_id,
+            "design_input_hash": inspection.design_input.content_hash,
+            "design_specification_id": inspection.specification.design_specification_id,
+            "design_specification_hash": inspection.specification.content_hash,
+            "goal_id": inspection.design_input.goal_id,
+            "goal_revision": inspection.design_input.goal_revision,
+            "goal_content_hash": inspection.design_input.goal_content_hash,
+        }
+        if content_hash(projection) != ref.content_hash:
+            raise DispatchInputResolutionError("accepted design projection hash drifted")
+        return ResolvedWorkOrderInput.create(
+            ref,
+            resolver_id=self.descriptor.resolver_id,
+            resolver_fingerprint=self.descriptor.resolver_fingerprint,
+            source_object_type="ACCEPTED_DESIGN",
+            resolution_class="CURRENT_ACCEPTED_DESIGN",
             projection=projection,
         )
 

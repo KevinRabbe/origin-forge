@@ -42,6 +42,12 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
 
     rows = (
         BuiltinBindingReview(
+            "originforge.build.integration",
+            BuiltinBindingReviewStatus.BINDABLE,
+            None,
+            "Phase 63 exposes build.integration@1 with an audited Workspace input and bounded sandbox verification; it never grants Task acceptance or release authority",
+        ),
+        BuiltinBindingReview(
             "originforge.code.bounded-retry",
             BuiltinBindingReviewStatus.BINDABLE,
             None,
@@ -105,6 +111,11 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
 
     phase32 = build_builtin_capability_catalog()
     code_dispatch_catalog = build_builtin_dispatch_catalog(phase32)
+    build_phase32 = CapabilityCatalog.create(
+        (phase32.capability("build.integration"),),
+        (phase32.adapter("originforge.build.integration"),),
+    )
+    build_dispatch_catalog = build_builtin_dispatch_catalog(build_phase32)
     simulation_phase32 = CapabilityCatalog.create(
         (phase32.capability("simulation.run"),),
         (phase32.adapter("originforge.simulation.deterministic"),),
@@ -159,6 +170,7 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
     }
     reviewed_contracts = (
         *code_dispatch_catalog.contracts,
+        *build_dispatch_catalog.contracts,
         *simulation_dispatch_catalog.contracts,
         *pixelorama_dispatch_catalog.contracts,
         *blender_dispatch_catalog.contracts,

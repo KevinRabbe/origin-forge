@@ -34,6 +34,11 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
     def test_bindable_set_exactly_matches_reviewed_dispatch_views_and_binder_registry(self) -> None:
         phase32 = build_builtin_capability_catalog()
         code_dispatch = build_builtin_dispatch_catalog(phase32)
+        build_phase32 = CapabilityCatalog.create(
+            (phase32.capability("build.integration"),),
+            (phase32.adapter("originforge.build.integration"),),
+        )
+        build_dispatch = build_builtin_dispatch_catalog(build_phase32)
         simulation_phase32 = CapabilityCatalog.create(
             (phase32.capability("simulation.run"),),
             (phase32.adapter("originforge.simulation.deterministic"),),
@@ -85,6 +90,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         self.assertEqual(
             bindable,
             {
+                "originforge.build.integration",
                 "originforge.blender.model3d",
                 "originforge.code.bounded-retry",
                 "originforge.pixelorama.export",
@@ -98,6 +104,7 @@ class ProductionDispatchBindingReviewTests(unittest.TestCase):
         )
         reviewed_contracts = (
             *code_dispatch.contracts,
+            *build_dispatch.contracts,
             *simulation_dispatch.contracts,
             *pixelorama_dispatch.contracts,
             *blender_dispatch.contracts,
