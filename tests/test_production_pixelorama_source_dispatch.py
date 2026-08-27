@@ -12,14 +12,17 @@ from unittest.mock import patch
 from origin_forge.ids import IdKind, new_id
 from origin_forge.pixelorama_models import (
     BridgeBudget,
+    BridgeOutputType,
     ExportSpec,
+    FrameSpec,
     RasterLayerSpec,
     SpriteProjectSpec,
-    FrameSpec,
-    BridgeOutputType,
 )
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
-from origin_forge.production_capability_models import CapabilityCatalog, CapabilityRoutingPolicy
+from origin_forge.production_capability_models import (
+    CapabilityCatalog,
+    CapabilityRoutingPolicy,
+)
 from origin_forge.production_capability_store import ProductionCapabilityStore
 from origin_forge.production_dispatch_binding import (
     audit_dispatch_binding_frozen,
@@ -29,18 +32,28 @@ from origin_forge.production_dispatch_binding import (
 )
 from origin_forge.production_dispatch_claims import acquire_dispatch_claim
 from origin_forge.production_dispatch_invocation import dispatch_claim_once
-from origin_forge.production_dispatch_phase_resolvers import build_source_dispatch_input_resolver_registry
+from origin_forge.production_dispatch_phase_resolvers import (
+    build_source_dispatch_input_resolver_registry,
+)
 from origin_forge.production_dispatch_recovery import recover_dispatch_execution_once
 from origin_forge.production_dispatch_store import ProductionDispatchStore
-from origin_forge.production_pixelorama_source_dispatch_output_binding import read_pixelorama_source_dispatch_output_binding
+from origin_forge.production_pixelorama_source_dispatch_output_binding import (
+    read_pixelorama_source_dispatch_output_binding,
+)
+from origin_forge.production_task_activation import activate_dependency_ready_task
 from origin_forge.production_work_order_audit import audit_work_order_frozen
-from origin_forge.production_work_order_builtin import build_builtin_dispatch_catalog, build_builtin_dispatch_validator_registry
-from origin_forge.production_work_order_models import WorkOrderInputRef, WorkOrderRefType, content_hash
+from origin_forge.production_work_order_builtin import (
+    build_builtin_dispatch_catalog,
+    build_builtin_dispatch_validator_registry,
+)
+from origin_forge.production_work_order_models import (
+    WorkOrderInputRef,
+    WorkOrderRefType,
+    content_hash,
+)
 from origin_forge.production_work_order_store import ProductionWorkOrderStore
 from origin_forge.production_work_orders import create_current_work_order
 from origin_forge.runtime import OriginForgeRuntime
-from origin_forge.production_task_activation import activate_dependency_ready_task
-
 
 BRIDGE = r'''
 import binascii, hashlib, json, struct, sys, zlib

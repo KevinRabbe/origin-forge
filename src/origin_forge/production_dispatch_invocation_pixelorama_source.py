@@ -5,7 +5,9 @@ from pathlib import Path
 from .ids import IdKind, validate_id
 from .pixelorama_media import PixeloramaMediaResult, PixeloramaMediaService
 from .production_capability_store import ProductionCapabilityStore
-from .production_dispatch_binding import build_pixelorama_source_dispatch_binder_registry
+from .production_dispatch_binding import (
+    build_pixelorama_source_dispatch_binder_registry,
+)
 from .production_dispatch_claim_models import DispatchClaimStatus
 from .production_dispatch_claim_read import read_dispatch_claim, read_input_resolution
 from .production_dispatch_execution import mark_dispatch_execution_returned
@@ -30,7 +32,6 @@ from .production_work_order_store import ProductionWorkOrderStore
 from .runtime import OriginForgeRuntime
 from .service import utc_now
 from .state import TaskStatus
-
 
 PIXELORAMA_SOURCE_EXECUTION_OWNER_ID = "originforge.execution.pixelorama.source-create@1"
 PIXELORAMA_SOURCE_REQUEST_TYPE_ID = "PixeloramaSourceService.create@production-v1"

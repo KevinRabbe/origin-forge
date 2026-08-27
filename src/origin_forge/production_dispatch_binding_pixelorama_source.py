@@ -20,7 +20,6 @@ from .production_work_order_pixelorama import (
 )
 from .production_work_orders import ProductionWorkOrder
 
-
 PIXELORAMA_SOURCE_BINDER_ID = "binder.pixelorama.source-create@1"
 _REQUEST_SCHEMA = {
     "request_type": PIXELORAMA_SOURCE_REQUEST_TYPE_ID,
