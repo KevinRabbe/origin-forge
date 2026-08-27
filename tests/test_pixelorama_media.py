@@ -32,6 +32,7 @@ from origin_forge.pixelorama_source import (
     create_pixelorama_source_from_accepted_design,
 )
 from origin_forge.production_design_specification_models import DesignAnimationIntent
+from origin_forge.production_design_specification_currentness import AcceptedDesignError
 from origin_forge.review import record_task_review_decision
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.state import FlowStatus, RunStatus, TaskStatus
@@ -353,6 +354,48 @@ class PixeloramaMediaTests(unittest.TestCase):
         self.assertEqual(bound_request.sprite_spec.animations[0].name, "idle")
         self.assertEqual(bound_request.sprite_spec.animations[0].first_frame, 1)
         self.assertEqual(bound_request.sprite_spec.animations[0].last_frame, 2)
+
+    def test_design_animation_range_cannot_exceed_supplied_frames(self) -> None:
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-overrun",
+                content_hash="sha256:" + "a" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            design_input=SimpleNamespace(design_input_id="DESIGNIN-input"),
+            specification=SimpleNamespace(
+                deliverables=(
+                    SimpleNamespace(
+                        animation_intents=(DesignAnimationIntent("idle", 2),),
+                    ),
+                ),
+            ),
+            current=True,
+            stale_reason=None,
+        )
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                return_value=SimpleNamespace(
+                    planning_input_id="PLAN-input",
+                    content_hash="sha256:" + "c" * 64,
+                ),
+            ),
+            patch("origin_forge.pixelorama_source.inspect_accepted_design", return_value=expected),
+            patch("origin_forge.pixelorama_source.PixeloramaMediaService.execute") as execute,
+            self.assertRaisesRegex(
+                AcceptedDesignError,
+                "exceeds supplied raster frames",
+            ),
+        ):
+            create_pixelorama_source_from_accepted_design(
+                self.runtime,
+                self.task,
+                "DESIGNACC-overrun",
+                self._profile(self._script("overrun-bridge.py")),
+                self._request().sprite_spec,
+            )
+        execute.assert_not_called()
 
     def test_source_creation_from_stale_accepted_design_fails_closed(self) -> None:
         request = self._request()
