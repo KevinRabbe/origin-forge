@@ -37,10 +37,12 @@ def _bind_design_animation_intents(
     inspection: AcceptedDesignInspection,
 ) -> SpriteProjectSpec:
     """Bind accepted design animation semantics to explicit raster source state."""
+    specification = getattr(inspection, "specification", None)
+    deliverables = getattr(specification, "deliverables", ())
     intents = tuple(
         intent
-        for deliverable in inspection.specification.deliverables
-        for intent in deliverable.animation_intents
+        for deliverable in deliverables
+        for intent in getattr(deliverable, "animation_intents", ())
     )
     if not intents:
         return sprite_spec
