@@ -17,6 +17,7 @@ from origin_forge.review import (
     inspect_task_review,
     record_task_review_decision,
     refine_task,
+    replace_task,
 )
 from origin_forge.runtime import OriginForgeRuntime
 from origin_forge.sandbox import SandboxGuarantees, SandboxJob, SandboxResult
@@ -96,6 +97,20 @@ class OrchestrationCliTests(unittest.TestCase):
             except Exception:
                 pass
         self.tempdir.cleanup()
+
+    def test_replace_creates_immutable_child_task(self) -> None:
+        result = replace_task(
+            self.runtime,
+            self.task,
+            rationale="replace the bounded implementation",
+            expected_revision=1,
+        )
+        replacement = self.runtime.get_task(result.replacement_task_id)
+        original = self.runtime.get_task(self.task)
+        self.assertEqual(replacement["parent_task_id"], self.task)
+        self.assertEqual(replacement["status"], TaskStatus.QUEUED.value)
+        self.assertEqual(original["revision"], 1)
+        self.assertTrue(result.decision_id.startswith("DEC-"))
 
     def _model(self) -> FakeModel:
         expected = RepositoryReader(self.root).hash_file("hello.py")

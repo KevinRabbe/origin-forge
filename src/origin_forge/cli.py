@@ -33,7 +33,12 @@ from .production_manager_advance_bounded import advance_production_manager_bound
 from .production_manager_advance_status import inspect_manager_advance_status_readonly
 from .production_trace import inspect_task_production_trace
 from .repository import RepositoryAccessError
-from .review import inspect_task_review, record_task_review_decision, refine_task
+from .review import (
+    inspect_task_review,
+    record_task_review_decision,
+    refine_task,
+    replace_task,
+)
 from .runtime import OriginForgeRuntime, RuntimeInvariantError
 from .sandbox import SandboxPolicyError, SandboxUnavailable
 from .sandbox_factory import create_sandbox_backend
@@ -389,14 +394,24 @@ def _main(argv: list[str] | None = None) -> int:
                 ).to_dict()
             )
             return 0
-        decision_id = record_task_review_decision(
-            runtime,
-            args.task_id,
-            args.review_command,
-            rationale=args.rationale,
-            expected_revision=args.revision,
-        )
-        _print({"decision_id": decision_id, "action": args.review_command})
+        if args.review_command == "replace":
+            _print(
+                replace_task(
+                    runtime,
+                    args.task_id,
+                    rationale=args.rationale,
+                    expected_revision=args.revision,
+                ).to_dict()
+            )
+        else:
+            decision_id = record_task_review_decision(
+                runtime,
+                args.task_id,
+                args.review_command,
+                rationale=args.rationale,
+                expected_revision=args.revision,
+            )
+            _print({"decision_id": decision_id, "action": args.review_command})
         return 0
     if args.command == "plan" and args.plan_command == "inspect":
         _print(inspect_goal_plan(runtime, args.goal_id))

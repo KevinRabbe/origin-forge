@@ -29,6 +29,19 @@ class TaskRefinementResult:
         }
 
 
+@dataclass(frozen=True)
+class TaskReplacementResult:
+    decision_id: str
+    replacement_task_id: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "decision_id": self.decision_id,
+            "replacement_task_id": self.replacement_task_id,
+            "authority": "human-review-replacement",
+        }
+
+
 def _has_current_accept(
     decisions: list[dict[str, Any]], task_id: str, revision: int
 ) -> bool:
@@ -159,3 +172,37 @@ def refine_task(
         priority=int(task["priority"]),
     )
     return TaskRefinementResult(decision_id, refined_task_id)
+
+
+def replace_task(
+    runtime: OriginForgeRuntime,
+    task_id: str,
+    *,
+    rationale: str,
+    expected_revision: int | None = None,
+) -> TaskReplacementResult:
+    """Create a new replacement Task while preserving the rejected Task evidence."""
+    task = runtime.get_task(task_id)
+    if expected_revision is not None:
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ValueError("review expected_revision must be a non-negative integer")
+        if int(task["revision"]) != expected_revision:
+            raise ValueError(
+                f"review task revision is stale: expected {expected_revision}; current {task['revision']}"
+            )
+    decision_id = record_task_review_decision(
+        runtime,
+        task_id,
+        "replace",
+        rationale=rationale,
+        expected_revision=expected_revision,
+    )
+    replacement_task_id = runtime.create_task(
+        task["flow_id"],
+        f"Replace {task['objective']}",
+        parent_task_id=task_id,
+        constraints=(f"replacement: {rationale.strip()}",),
+        priority=int(task["priority"]),
+        required_capabilities=tuple(task.get("required_capabilities", ())),
+    )
+    return TaskReplacementResult(decision_id, replacement_task_id)
