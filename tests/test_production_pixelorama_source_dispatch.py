@@ -12,7 +12,6 @@ from unittest.mock import patch
 from origin_forge.ids import IdKind, new_id
 from origin_forge.lineage import OriginForgeLineage
 from origin_forge.pixelorama_models import (
-    AnimationSpec,
     BridgeBudget,
     BridgeOutputType,
     ExportSpec,
@@ -20,6 +19,10 @@ from origin_forge.pixelorama_models import (
     RasterLayerSpec,
     SpriteProjectSpec,
 )
+from origin_forge.pixelorama_source import (
+    build_pixelorama_source_work_order_payload_from_accepted_design,
+)
+from origin_forge.production_design_specification_models import DesignAnimationIntent
 from origin_forge.production_actions import (
     accept_production_execution,
     adopt_production_execution,
@@ -159,6 +162,13 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
             specification=SimpleNamespace(
                 design_specification_id="DESIGNSPEC-source-test",
                 content_hash="sha256:" + "c" * 64,
+                deliverables=(
+                    SimpleNamespace(
+                        animation_intents=(
+                            DesignAnimationIntent("idle", 2, 120, "LOOP", 0),
+                        ),
+                    ),
+                ),
             ),
             current=True,
             stale_reason=None,
@@ -185,17 +195,34 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
             2,
             (RasterLayerSpec("base", "Base"),),
             (FrameSpec("idle-0"), FrameSpec("idle-1", duration_ms=120)),
-            animations=(AnimationSpec("idle", 0, 1),),
             output_basename="player",
         )
-        payload = {
-            "operation": "CREATE_SPRITE_PROJECT",
-            "sprite_spec": spec.to_dict(),
-            "export_specs": [
-                ExportSpec(BridgeOutputType.PNG, "exports/player.png").to_dict()
-            ],
-            "budget": BridgeBudget(timeout_seconds=10).to_dict(),
-        }
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                return_value=SimpleNamespace(
+                    planning_input_id="PLAN-source-test",
+                    content_hash="sha256:" + "d" * 64,
+                ),
+            ),
+            patch(
+                "origin_forge.pixelorama_source.inspect_accepted_design",
+                return_value=inspection,
+            ),
+        ):
+            payload = build_pixelorama_source_work_order_payload_from_accepted_design(
+                self.runtime,
+                self.acceptance_id,
+                spec,
+                export_specs=(
+                    ExportSpec(BridgeOutputType.PNG, "exports/player.png"),
+                ),
+                budget=BridgeBudget(timeout_seconds=10),
+            )
+        self.assertEqual(
+            payload["sprite_spec"]["animations"],
+            [{"name": "idle", "first_frame": 0, "last_frame": 1, "loop_mode": "LOOP"}],
+        )
         work_order = create_current_work_order(
             self.runtime,
             capabilities,
