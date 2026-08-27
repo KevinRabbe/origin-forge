@@ -28,6 +28,7 @@ from origin_forge.pixelorama_models import (
     SpriteProjectSpec,
 )
 from origin_forge.pixelorama_source import (
+    build_pixelorama_source_work_order_payload_from_accepted_design,
     create_pixelorama_source,
     create_pixelorama_source_from_accepted_design,
 )
@@ -396,6 +397,48 @@ class PixeloramaMediaTests(unittest.TestCase):
                 self._request().sprite_spec,
             )
         execute.assert_not_called()
+
+    def test_accepted_animation_intent_builds_canonical_work_order_payload(self) -> None:
+        expected = SimpleNamespace(
+            acceptance=SimpleNamespace(
+                acceptance_id="DESIGNACC-work-order",
+                content_hash="sha256:" + "a" * 64,
+                project_id=self.runtime.project_id(),
+            ),
+            specification=SimpleNamespace(
+                deliverables=(
+                    SimpleNamespace(
+                        animation_intents=(DesignAnimationIntent("run", 2, 80, "LOOP", 1),),
+                    ),
+                ),
+            ),
+            current=True,
+            stale_reason=None,
+        )
+        sprite_spec = SpriteProjectSpec(
+            2,
+            2,
+            (RasterLayerSpec("base", "Base"),),
+            (FrameSpec("run-0"), FrameSpec("run-1"), FrameSpec("run-2")),
+            output_basename="runner",
+        )
+        with (
+            patch(
+                "origin_forge.pixelorama_source.bridge_accepted_design_to_planning_input",
+                return_value=SimpleNamespace(),
+            ),
+            patch("origin_forge.pixelorama_source.inspect_accepted_design", return_value=expected),
+        ):
+            payload = build_pixelorama_source_work_order_payload_from_accepted_design(
+                self.runtime,
+                "DESIGNACC-work-order",
+                sprite_spec,
+            )
+        self.assertEqual(payload["operation"], "CREATE_SPRITE_PROJECT")
+        self.assertEqual(
+            payload["sprite_spec"]["animations"],
+            [{"name": "run", "first_frame": 1, "last_frame": 2, "loop_mode": "LOOP"}],
+        )
 
     def test_source_creation_from_stale_accepted_design_fails_closed(self) -> None:
         request = self._request()
