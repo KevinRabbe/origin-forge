@@ -272,10 +272,12 @@ class DesignAnimationIntent:
     frame_count: int
     frame_duration_ms: int = 100
     loop_mode: str = "LOOP"
+    first_frame: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "name", _text(self.name, "animation name", maximum=256))
         object.__setattr__(self, "frame_count", _exact_int(self.frame_count, "animation frame_count", 1, 1024))
+        object.__setattr__(self, "first_frame", _exact_int(self.first_frame, "animation first_frame", 0, 1023))
         object.__setattr__(
             self,
             "frame_duration_ms",
@@ -288,6 +290,7 @@ class DesignAnimationIntent:
         return {
             "name": self.name,
             "frame_count": self.frame_count,
+            "first_frame": self.first_frame,
             "frame_duration_ms": self.frame_duration_ms,
             "loop_mode": self.loop_mode,
         }

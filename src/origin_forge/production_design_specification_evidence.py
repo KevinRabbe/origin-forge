@@ -209,8 +209,10 @@ def _deliverable_from_dict(value: object) -> DesignDeliverable:
         if not isinstance(raw["animation_intents"], list):
             raise DesignSpecificationEvidenceError("stored animation_intents are invalid")
         for animation in raw["animation_intents"]:
-            if not isinstance(animation, dict) or set(animation) != {
+            if not isinstance(animation, dict) or not {
                 "name", "frame_count", "frame_duration_ms", "loop_mode"
+            } <= set(animation) or set(animation) - {
+                "name", "frame_count", "first_frame", "frame_duration_ms", "loop_mode"
             }:
                 raise DesignSpecificationEvidenceError("stored animation intent schema drifted")
             try:

@@ -102,6 +102,7 @@ class GovernedDesignSpecificationTests(unittest.TestCase):
         intent = DesignAnimationIntent(
             name="idle",
             frame_count=4,
+            first_frame=2,
             frame_duration_ms=120,
             loop_mode="LOOP",
         )

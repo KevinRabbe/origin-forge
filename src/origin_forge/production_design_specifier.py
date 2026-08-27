@@ -126,6 +126,7 @@ DESIGN_SPECIFICATION_SCHEMA: dict[str, object] = {
                             "properties": {
                                 "name": {"type": "string", "minLength": 1, "maxLength": 4096},
                                 "frame_count": {"type": "integer", "minimum": 1, "maximum": 1024},
+                                "first_frame": {"type": "integer", "minimum": 0, "maximum": 1023},
                                 "frame_duration_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
                                 "loop_mode": {"enum": ["ONCE", "LOOP", "PING_PONG"]},
                             },
@@ -343,8 +344,10 @@ def parse_design_specification(
             if not isinstance(raw["animation_intents"], list):
                 raise DesignSpecifierError("design deliverable animation_intents is invalid")
             for animation in raw["animation_intents"]:
-                if not isinstance(animation, dict) or set(animation) != {
+                if not isinstance(animation, dict) or not {
                     "name", "frame_count", "frame_duration_ms", "loop_mode"
+                } <= set(animation) or set(animation) - {
+                    "name", "frame_count", "first_frame", "frame_duration_ms", "loop_mode"
                 }:
                     raise DesignSpecifierError("design animation intent schema drifted")
                 try:

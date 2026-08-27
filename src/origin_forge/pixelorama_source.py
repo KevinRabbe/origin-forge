@@ -53,8 +53,8 @@ def _bind_design_animation_intents(
     animations = tuple(
         AnimationSpec(
             name=intent.name,
-            first_frame=0,
-            last_frame=intent.frame_count - 1,
+            first_frame=intent.first_frame,
+            last_frame=intent.first_frame + intent.frame_count - 1,
             loop_mode=AnimationLoopMode(intent.loop_mode),
         )
         for intent in intents

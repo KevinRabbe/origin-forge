@@ -300,6 +300,13 @@ class PixeloramaMediaTests(unittest.TestCase):
 
     def test_accepted_design_animation_intent_binds_to_source_request(self) -> None:
         request = self._request()
+        sprite_spec = SpriteProjectSpec(
+            2,
+            2,
+            request.sprite_spec.layers,
+            (FrameSpec("idle-0"), FrameSpec("idle-1"), FrameSpec("idle-2")),
+            output_basename=request.sprite_spec.output_basename,
+        )
         expected = SimpleNamespace(
             acceptance=SimpleNamespace(
                 acceptance_id="DESIGNACC-animation",
@@ -311,7 +318,7 @@ class PixeloramaMediaTests(unittest.TestCase):
                 deliverables=(
                     SimpleNamespace(
                         animation_intents=(
-                            DesignAnimationIntent("idle", 1, 120, "LOOP"),
+                            DesignAnimationIntent("idle", 2, 120, "LOOP", 1),
                         ),
                     ),
                 ),
@@ -338,13 +345,14 @@ class PixeloramaMediaTests(unittest.TestCase):
                 self.task,
                 "DESIGNACC-animation",
                 self._profile(self._script("animation-bridge.py")),
-                request.sprite_spec,
+                sprite_spec,
                 export_specs=request.export_specs,
                 budget=request.budget,
             )
         bound_request = execute.call_args.args[1]
         self.assertEqual(bound_request.sprite_spec.animations[0].name, "idle")
-        self.assertEqual(bound_request.sprite_spec.animations[0].last_frame, 0)
+        self.assertEqual(bound_request.sprite_spec.animations[0].first_frame, 1)
+        self.assertEqual(bound_request.sprite_spec.animations[0].last_frame, 2)
 
     def test_source_creation_from_stale_accepted_design_fails_closed(self) -> None:
         request = self._request()
