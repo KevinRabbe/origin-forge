@@ -13,7 +13,6 @@ from .production_work_order_validators import (
 BUILD_ADAPTER_ID = "originforge.build.integration"
 BUILD_CONTRACT_ID = "build.integration@1"
 BUILD_REQUEST_TYPE_ID = "BuildIntegrationService.execute@production-v1"
-BUILD_REQUEST_ROLE = "build_request"
 BUILD_VALIDATOR_ID = "validator.build.integration@1"
 BUILD_SCHEMA_ID = "schema.build.integration@1"
 

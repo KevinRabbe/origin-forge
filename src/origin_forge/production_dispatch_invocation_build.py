@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from .config import load_config
 from .ids import IdKind, validate_id
 from .production_dispatch_claim_models import DispatchClaimStatus
 from .production_dispatch_execution import mark_dispatch_execution_returned
@@ -156,6 +157,11 @@ def recover_build_dispatch_execution_once(runtime, execution_id: str):
             raise ValueError("build execution does not have one Task workspace")
         workspace_id = workspaces[0]["id"]
         rows = runtime.list_verifications("WORKSPACE", workspace_id)
+        required_commands = {
+            command.name
+            for command in load_config(runtime.project_root).approved_build_commands
+            if command.required
+        }
         results: list[CommandVerificationResult] = []
         for row in rows:
             if not str(row["verification_type"]).startswith("sandbox-build:"):
@@ -177,7 +183,7 @@ def recover_build_dispatch_execution_once(runtime, execution_id: str):
                     SandboxResult(**result_data),
                 )
             )
-        if not results:
+        if not results or {result.command_name for result in results} != required_commands:
             raise ValueError("complete build verification evidence is missing")
         materialized = WorkspaceVerificationResult(workspace_id, True, tuple(results))
         if execution.status is DispatchExecutionStatus.STARTED:
