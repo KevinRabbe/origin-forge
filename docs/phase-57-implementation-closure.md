@@ -2,7 +2,7 @@
 
 Status: **Phase 57A–57C implemented; Phase 57D evidence synchronization in progress**
 
-Latest candidate evidence head: `ca4e5dc6d6c440f54cc38a9e950e0c63dd6c19f0`.
+Latest candidate evidence head: `25a7cf9`.
 Remote CI is not yet present for this head; the branch remains a draft PR and
 the final Phase 57D release gate is therefore still open.
 
