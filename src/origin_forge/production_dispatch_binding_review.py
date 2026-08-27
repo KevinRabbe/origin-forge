@@ -84,6 +84,12 @@ def builtin_binding_review() -> tuple[BuiltinBindingReview, ...]:
             "Phase 62 resolves a role-specific protected PCM16 WAV source projection and promotes FFmpeg through the governed claim/execution/output-binding chain",
         ),
         BuiltinBindingReview(
+            "originforge.pixelorama.source",
+            BuiltinBindingReviewStatus.DEFERRED,
+            "NO_SOURCE_EXECUTION_OWNER",
+            "the typed source/animation WorkOrder is now defined, but its dedicated execution owner and durable output-binding recovery boundary are not complete",
+        ),
+        BuiltinBindingReview(
             "originforge.audio.piper",
             BuiltinBindingReviewStatus.BINDABLE,
             None,

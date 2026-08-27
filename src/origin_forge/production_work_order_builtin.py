@@ -39,6 +39,9 @@ from .production_work_order_models import (
 from .production_work_order_pixelorama import (
     PIXELORAMA_ADAPTER_ID,
     PIXELORAMA_CONTRACT_ID,
+    PIXELORAMA_SOURCE_ADAPTER_ID,
+    PIXELORAMA_SOURCE_CONTRACT_ID,
+    PixeloramaSourceCreationDispatchValidator,
     PixeloramaSpritesheetExportDispatchValidator,
 )
 from .production_work_order_playtest import (
@@ -125,6 +128,11 @@ def builtin_dispatch_review() -> tuple[BuiltinDispatchReview, ...]:
             BLENDER_ADAPTER_ID,
             BuiltinDispatchReviewStatus.SUPPORTED,
             "Blender GLB export accepts one exact protected MODEL3D_REQUEST ref and an inert payload while operation/workspace/path/profile/process authority remains downstream and infrastructure-owned",
+        ),
+        BuiltinDispatchReview(
+            PIXELORAMA_SOURCE_ADAPTER_ID,
+            BuiltinDispatchReviewStatus.SUPPORTED,
+            "Pixelorama source creation accepts one exact immutable accepted-design ref and a fully typed source/animation payload while editor/profile/process authority remains downstream and infrastructure-owned",
         ),
         BuiltinDispatchReview(
             IMAGE_ADAPTER_ID,
@@ -324,6 +332,7 @@ def builtin_dispatch_validators() -> tuple[DispatchPayloadValidator, ...]:
         CodeBoundedRetryDispatchValidator(),
         DeterministicSimulationDispatchValidator(),
         PixeloramaSpritesheetExportDispatchValidator(),
+        PixeloramaSourceCreationDispatchValidator(),
         BlenderExportGLBDispatchValidator(),
         ImageGenerationDispatchValidator(),
         FfmpegAudioDispatchValidator(),
@@ -401,6 +410,23 @@ def _blender_contract(adapter) -> DispatchContract:
         payload_schema_hash=validator.payload_schema_hash,
         allowed_input_ref_types=(WorkOrderRefType.MODEL3D_REQUEST,),
         max_payload_bytes=2,
+        max_input_refs=1,
+    )
+
+
+def _pixelorama_source_contract(adapter) -> DispatchContract:
+    validator = PixeloramaSourceCreationDispatchValidator()
+    return DispatchContract(
+        contract_id=PIXELORAMA_SOURCE_CONTRACT_ID,
+        contract_version="1",
+        adapter_id=adapter.adapter_id,
+        adapter_fingerprint=adapter.implementation_fingerprint,
+        validator_id=validator.validator_id,
+        validator_fingerprint=validator.validator_fingerprint,
+        payload_schema_id=validator.payload_schema_id,
+        payload_schema_hash=validator.payload_schema_hash,
+        allowed_input_ref_types=(WorkOrderRefType.DESIGN_SPECIFICATION_ACCEPTANCE,),
+        max_payload_bytes=1024 * 1024,
         max_input_refs=1,
     )
 
@@ -530,6 +556,7 @@ def build_builtin_dispatch_catalog(
         return DispatchContractCatalog.create(phase32_catalog, (_code_contract(code),))
     simulation = adapters.get(SIMULATION_ADAPTER_ID)
     pixelorama = adapters.get(PIXELORAMA_ADAPTER_ID)
+    pixelorama_source = adapters.get(PIXELORAMA_SOURCE_ADAPTER_ID)
     blender = adapters.get(BLENDER_ADAPTER_ID)
     image = adapters.get(IMAGE_ADAPTER_ID)
     ffmpeg = adapters.get(FFMPEG_ADAPTER_ID)
@@ -542,6 +569,7 @@ def build_builtin_dispatch_catalog(
             build,
             simulation,
             pixelorama,
+            pixelorama_source,
             blender,
             image,
             ffmpeg,
@@ -566,6 +594,11 @@ def build_builtin_dispatch_catalog(
         return DispatchContractCatalog.create(
             phase32_catalog,
             (_pixelorama_contract(pixelorama),),
+        )
+    if pixelorama_source is not None:
+        return DispatchContractCatalog.create(
+            phase32_catalog,
+            (_pixelorama_source_contract(pixelorama_source),),
         )
     if blender is not None:
         return DispatchContractCatalog.create(

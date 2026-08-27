@@ -24,6 +24,7 @@ class BuiltinProductionCapabilityTests(unittest.TestCase):
             "build.integration",
             "code.change",
             "media.2d.export",
+            "media.2d.source",
             "media.3d.blender",
             "image.generate",
             "image.inspect",

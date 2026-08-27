@@ -81,6 +81,12 @@ def builtin_production_capabilities() -> tuple[ProductionCapability, ...]:
             CapabilityDomain.MEDIA_2D,
         ),
         _capability(
+            "media.2d.source",
+            "2D source production",
+            "Create governed Pixelorama source and animation state from accepted design evidence.",
+            CapabilityDomain.MEDIA_2D,
+        ),
+        _capability(
             "media.3d.blender",
             "Blender 3D production",
             "Run the governed Blender backend behind the canonical 3D contract.",
@@ -163,6 +169,14 @@ def builtin_trusted_production_adapters() -> tuple[TrustedProductionAdapter, ...
             AdapterExecutionEffect.MEDIA_WORKSPACE_MUTATION,
             AdapterReplayClass.RUNTIME_BOUND,
             "pixelorama governed export boundary",
+        ),
+        _adapter(
+            "originforge.pixelorama.source",
+            "originforge.pixelorama",
+            ("media.2d.source",),
+            AdapterExecutionEffect.MEDIA_WORKSPACE_MUTATION,
+            AdapterReplayClass.RUNTIME_BOUND,
+            "pixelorama governed source creation boundary",
         ),
         _adapter(
             "originforge.blender.model3d",
