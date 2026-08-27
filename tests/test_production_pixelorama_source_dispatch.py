@@ -285,6 +285,11 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
             )
             self.assertEqual(accepted.task_id, self.task_id)
             self.assertEqual(self.runtime.get_task(self.task_id)["status"], "SUCCEEDED")
+            trace = inspect_production_execution(
+                self.runtime, completed.execution.execution_id
+            )["trace"]["dispatch"]
+            self.assertEqual(len(trace["pixelorama_source_adoptions"]), 1)
+            self.assertEqual(len(trace["pixelorama_source_acceptances"]), 1)
             replayed = accept_production_execution(
                 self.runtime, completed.execution.execution_id, actor_id="operator-test"
             )

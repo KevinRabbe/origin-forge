@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .lineage import OriginForgeLineage
-from .production_dispatch_read import read_dispatch_binding
+from .production_dispatch_read import ProductionDispatchReadError, read_dispatch_binding
 from .production_evidence_read import ProductionEvidenceReadService
 from .production_read_guard import (
     ensure_production_runtime_readable,
@@ -69,6 +69,16 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
             "SELECT * FROM model3d_request_publications WHERE project_id = ? AND task_id = ? ORDER BY published_at, publication_id",
             (runtime.project_id(), task_id),
         )
+        source_adoptions = _rows(
+            conn,
+            "SELECT * FROM pixelorama_source_production_adoptions WHERE execution_id IN (SELECT execution_id FROM dispatch_executions WHERE project_id = ? AND task_id = ?) ORDER BY created_at, execution_id",
+            (runtime.project_id(), task_id),
+        )
+        source_acceptances = _rows(
+            conn,
+            "SELECT * FROM pixelorama_source_task_acceptances WHERE execution_id IN (SELECT execution_id FROM dispatch_executions WHERE project_id = ? AND task_id = ?) ORDER BY accepted_at, execution_id",
+            (runtime.project_id(), task_id),
+        )
         referenced_workspace_ids = []
     validator_registry = build_builtin_dispatch_validator_registry()
     work_order_ids = tuple(
@@ -79,7 +89,7 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
             projection = read_dispatch_binding(
                 runtime, str(row["dispatch_binding_id"])
             ).request_projection
-        except Exception:
+        except ProductionDispatchReadError:
             continue
         workspace_id = projection.get("workspace_id") if isinstance(projection, dict) else None
         if isinstance(workspace_id, str) and workspace_id not in referenced_workspace_ids:
@@ -116,6 +126,8 @@ def inspect_task_production_trace(runtime: OriginForgeRuntime, task_id: str) -> 
             "output_bindings": output_bindings,
             "model3d_approvals": model3d_approvals,
             "model3d_publications": model3d_publications,
+            "pixelorama_source_adoptions": source_adoptions,
+            "pixelorama_source_acceptances": source_acceptances,
         },
         "artifacts": artifacts,
         "verifications": runtime.list_verifications("TASK", task_id),
