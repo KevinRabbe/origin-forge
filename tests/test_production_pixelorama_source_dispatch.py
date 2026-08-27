@@ -45,6 +45,9 @@ from origin_forge.production_dispatch_store import ProductionDispatchStore
 from origin_forge.production_pixelorama_source_dispatch_output_binding import (
     read_pixelorama_source_dispatch_output_binding,
 )
+from origin_forge.production_pixelorama_source_task_acceptance import (
+    PixeloramaSourceTaskAcceptanceError,
+)
 from origin_forge.production_task_activation import activate_dependency_ready_task
 from origin_forge.production_work_order_audit import audit_work_order_frozen
 from origin_forge.production_work_order_builtin import (
@@ -267,15 +270,21 @@ class PixeloramaSourceDispatchTests(unittest.TestCase):
             self.assertEqual(completed.execution.status.value, "RETURNED")
             inspected = inspect_production_execution(self.runtime, completed.execution.execution_id)
             self.assertTrue(inspected["supported_actions"]["adopt"])
-            self.assertFalse(inspected["supported_actions"]["accept"])
-            with self.assertRaises(RuntimeError):
-                accept_production_execution(
-                    self.runtime, completed.execution.execution_id, actor_id="operator-test"
-                )
+            self.assertTrue(inspected["supported_actions"]["accept"])
             adopted = adopt_production_execution(
                 self.runtime, completed.execution.execution_id, "assets/player.pxo"
             )
             self.assertTrue((self.root / "assets" / "player.pxo").is_file())
+            with self.assertRaises(PixeloramaSourceTaskAcceptanceError):
+                accept_production_execution(
+                    self.runtime, completed.execution.execution_id
+                )
+            self.assertEqual(self.runtime.get_task(self.task_id)["status"], "RUNNING")
+            accepted = accept_production_execution(
+                self.runtime, completed.execution.execution_id, actor_id="operator-test"
+            )
+            self.assertEqual(accepted.task_id, self.task_id)
+            self.assertEqual(self.runtime.get_task(self.task_id)["status"], "SUCCEEDED")
             self.assertEqual(adopted.source_artifact_id, next(
                 value.artifact_id
                 for value in read_pixelorama_source_dispatch_output_binding(

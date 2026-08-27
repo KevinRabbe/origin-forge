@@ -13,6 +13,10 @@ _MEDIA_ACCEPTORS = {
         "production_pixelorama_task_acceptor",
         "GovernedPixeloramaProductionTaskAcceptor",
     ),
+    "originforge.execution.pixelorama.source-create@1": (
+        "production_pixelorama_source_task_acceptance",
+        "GovernedPixeloramaSourceTaskAcceptor",
+    ),
 }
 _MEDIA_ADOPTERS = {
     "originforge.execution.blender.export-glb@1": (
