@@ -24,14 +24,15 @@ e7e1c5d feat: expose work orders in production trace
 The latest Phase-57B source/animation and adoption verification is present at:
 
 ```text
-c8088b1 style: clean source adoption migration
+2c710b4 test: use resolved interpreter for pixelorama bridge fixture
 ```
 
 The branch preserves the existing Phase-57B base and all prior durable
-schemas, IDs, receipts, authority values, and historical evidence. Schema v31
+schemas, IDs, receipts, authority values, and historical evidence. Schema v32
 is the current candidate head; migrations v29 and v30 preserve the existing
 audio bindings and add Pixelorama source dispatch, while migration v31 adds the
-source-adoption receipt without rewriting historical rows.
+source-adoption receipt and migration v32 adds actor-bound source Task
+acceptance without rewriting historical rows.
 
 ## Implemented boundary
 
