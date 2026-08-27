@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import cast
 
 from .adapters.comfyui import ComfyUiAdapter
@@ -9,6 +10,7 @@ from .image_vision_service import (
     ImageGenerationServiceResult,
 )
 from .lineage import OriginForgeLineage
+from .pixelorama_png import inspect_rgba8_png
 from .production_dispatch_binding_image import ImageGenerationInputBinder
 from .production_dispatch_claim_models import DispatchClaimStatus
 from .production_dispatch_claim_read import read_dispatch_claim
@@ -27,6 +29,7 @@ from .production_image_dispatch_output_binding import (
     publish_image_dispatch_output_binding,
     read_image_dispatch_output_binding,
 )
+from .runtime import OriginForgeRuntime
 from .service import utc_now
 from .state import TaskStatus
 
@@ -168,6 +171,43 @@ def _materialize_image_result(binding):
     )
 
 
+def _require_image_binding_evidence(runtime: OriginForgeRuntime, binding) -> None:
+    """Revalidate every generated PNG before recovery terminalization."""
+    lineage = OriginForgeLineage(runtime)
+    result_artifact = lineage.get_artifact(binding.result_artifact_id)
+    if (
+        result_artifact.get("created_by_run_id") != binding.run_id
+        or result_artifact.get("parent_artifact_id") != binding.request_artifact_id
+        or result_artifact.get("status") != "CAPTURED"
+    ):
+        raise ProductionDispatchInvocationError("image result Artifact lineage drifted")
+    for output in binding.outputs:
+        artifact = lineage.get_artifact(output.artifact_id)
+        path = lineage.local_artifact_path(output.artifact_id)
+        data = path.read_bytes()
+        inspection = inspect_rgba8_png(data)
+        verification_ids = {
+            value["id"]
+            for value in lineage.list_artifact_verifications(output.artifact_id)
+        }
+        if (
+            artifact.get("parent_artifact_id") != binding.result_artifact_id
+            or artifact.get("created_by_run_id") != binding.run_id
+            or artifact.get("status") != "PRODUCED"
+            or artifact.get("content_hash")
+            != "sha256:" + hashlib.sha256(data).hexdigest()
+            or artifact.get("content_hash") != "sha256:" + output.content_hash
+            or inspection.pixel_hash.removeprefix("sha256:") != output.pixel_hash
+            or inspection.width != output.width
+            or inspection.height != output.height
+            or len(data) != output.byte_count
+            or output.verification_id not in verification_ids
+        ):
+            raise ProductionDispatchInvocationError(
+                f"image output evidence drifted: {output.relative_path}"
+            )
+
+
 def _require_started_image_authority(runtime, execution) -> None:
     durable = read_dispatch_execution(runtime, execution.execution_id)
     claim = read_dispatch_claim(runtime, execution.claim_id)
@@ -199,6 +239,8 @@ def recover_image_dispatch_execution_once(runtime, execution_id: str) -> Complet
         raise ProductionDispatchInvocationError("execution is not owned by image generation")
     try:
         binding = read_image_dispatch_output_binding(runtime, execution_id)
+        if isinstance(runtime, OriginForgeRuntime):
+            _require_image_binding_evidence(runtime, binding)
         result = _materialize_image_result(binding)
     except Exception as exc:
         raise ProductionDispatchInvocationRecoveryRequired(

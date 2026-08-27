@@ -15,6 +15,7 @@ from origin_forge.image_vision_models import (
     canonical_bytes,
 )
 from origin_forge.image_vision_service import ImageGenerationServiceResult
+from origin_forge.lineage import OriginForgeLineage
 from origin_forge.pixelorama_models import PixelPlane
 from origin_forge.pixelorama_png import encode_rgba8_png, inspect_rgba8_png
 from origin_forge.production_capability_builtin import build_builtin_capability_catalog
@@ -30,7 +31,10 @@ from origin_forge.production_dispatch_binding import (
     create_input_resolution_bundle,
 )
 from origin_forge.production_dispatch_claims import acquire_dispatch_claim
-from origin_forge.production_dispatch_invocation import dispatch_claim_once
+from origin_forge.production_dispatch_invocation import (
+    ProductionDispatchInvocationRecoveryRequired,
+    dispatch_claim_once,
+)
 from origin_forge.production_dispatch_invocation_image_owner import (
     recover_image_dispatch_execution_once,
 )
@@ -175,7 +179,9 @@ class ImageDispatchVerticalTests(unittest.TestCase):
         self.assertIsInstance(completed.image_result, ImageGenerationServiceResult)
         self.assertEqual(_FakeComfyUiAdapter.calls, 1)
         self.assertEqual(completed.execution.status.value, "RETURNED")
-        binding = read_image_dispatch_output_binding(self.runtime, completed.execution.execution_id)
+        binding = read_image_dispatch_output_binding(
+            self.runtime, completed.execution.execution_id
+        )
         self.assertEqual(binding.execution_owner_id, IMAGE_EXECUTION_OWNER_ID)
         self.assertEqual(len(binding.outputs), 1)
         self.assertEqual(binding.outputs[0].relative_path, "exports/robot.png")
@@ -183,6 +189,25 @@ class ImageDispatchVerticalTests(unittest.TestCase):
             self.runtime, completed.execution.execution_id
         )
         self.assertEqual(recovered.image_result, completed.image_result)
+        self.assertEqual(_FakeComfyUiAdapter.calls, 1)
+
+    def test_recovery_rejects_tampered_png_without_reinvoking_comfy(self) -> None:
+        with patch(
+            "origin_forge.production_dispatch_invocation_image_owner.ComfyUiAdapter",
+            _FakeComfyUiAdapter,
+        ):
+            completed = dispatch_claim_once(self.runtime, self.claim.claim_id, 0)
+        binding = read_image_dispatch_output_binding(
+            self.runtime, completed.execution.execution_id
+        )
+        output_path = OriginForgeLineage(self.runtime).local_artifact_path(
+            binding.outputs[0].artifact_id
+        )
+        output_path.write_bytes(encode_rgba8_png(PixelPlane(1, 1, bytes((0, 0, 255, 255)))))
+        with self.assertRaises(ProductionDispatchInvocationRecoveryRequired):
+            recover_image_dispatch_execution_once(
+                self.runtime, completed.execution.execution_id
+            )
         self.assertEqual(_FakeComfyUiAdapter.calls, 1)
 
 
