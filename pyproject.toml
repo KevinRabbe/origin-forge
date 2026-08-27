@@ -32,5 +32,9 @@ files = [
     "src/origin_forge/db.py",
     "src/origin_forge/cli.py",
     "src/origin_forge/service.py",
+    "src/origin_forge/review.py",
+    "src/origin_forge/production_actions.py",
+    "src/origin_forge/production_trace.py",
+    "src/origin_forge/production_interface_snapshot.py",
 ]
 ignore_missing_imports = true
