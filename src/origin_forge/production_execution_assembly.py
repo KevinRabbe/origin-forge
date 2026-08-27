@@ -18,6 +18,7 @@ from .model_runtime_registry import (
 from .model_scheduler import ModelRole, ModelSelectionPolicy
 from .model_scheduler_factory import ConfiguredModelScheduling, create_model_scheduling
 from .orchestration_policy import BoundedRetryPolicy
+from .pixelorama_bridge import PixeloramaBridgeProfile
 from .pixelorama_cli_export import PixeloramaCliProfile
 from .production_blender_profile import (
     ProductionBlenderProfileError,
@@ -50,7 +51,9 @@ from .production_piper_profile import (
 )
 from .production_pixelorama_profile import (
     ProductionPixeloramaProfileError,
+    load_infrastructure_pixelorama_bridge_profile,
     load_infrastructure_pixelorama_cli_profile,
+    pixelorama_bridge_profile_dependency_hash,
     pixelorama_cli_profile_dependency_hash,
 )
 from .production_playtest_profile import (
@@ -223,13 +226,13 @@ class PixeloramaSpritesheetExportExecutionPayload:
 
 @dataclass(frozen=True)
 class PixeloramaSourceCreationExecutionPayload:
-    profile: PixeloramaCliProfile
+    profile: PixeloramaBridgeProfile
     profile_dependency_hash: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.profile, PixeloramaCliProfile):
-            raise TypeError("profile must be a PixeloramaCliProfile")
-        expected = pixelorama_cli_profile_dependency_hash(self.profile)
+        if not isinstance(self.profile, PixeloramaBridgeProfile):
+            raise TypeError("profile must be a PixeloramaBridgeProfile")
+        expected = pixelorama_bridge_profile_dependency_hash(self.profile)
         if self.profile_dependency_hash != expected:
             raise ProductionExecutionAssemblyError(
                 "Pixelorama source profile dependency hash is not current"
@@ -815,12 +818,12 @@ def _assemble_pixelorama_source_dependencies(
             "Pixelorama source owner must not require model, sandbox, or Git workspace authority"
         )
     try:
-        profile = load_infrastructure_pixelorama_cli_profile(runtime.project_root)
+        profile = load_infrastructure_pixelorama_bridge_profile(runtime.project_root)
     except ProductionPixeloramaProfileError as exc:
         raise ProductionExecutionAssemblyError(
             "trusted Pixelorama CLI profile is unavailable"
         ) from exc
-    profile_hash = pixelorama_cli_profile_dependency_hash(profile)
+    profile_hash = pixelorama_bridge_profile_dependency_hash(profile)
     plan = ProductionExecutionDependencyPlan(
         **_common_plan_fields(claim, binding, owner, owner_registry),
         config_version=0,
