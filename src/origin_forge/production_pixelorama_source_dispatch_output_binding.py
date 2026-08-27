@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-import sqlite3
-import json
 import hashlib
+import json
+import sqlite3
 
 from .ids import IdKind, validate_id
 from .lineage import OriginForgeLineage
 from .pixelorama_bridge import PixeloramaOperationResult
 from .pixelorama_media import PixeloramaMediaResult
 from .pixelorama_models import BridgeOutputType
+from .pixelorama_protocol import (
+    PixeloramaProtocolError,
+    parse_bridge_request,
+    parse_bridge_result,
+)
 from .production_dispatch_execution_models import DispatchExecution
 from .production_pixelorama_source_dispatch_output_binding_models import (
     PIXELORAMA_SOURCE_DISPATCH_OUTPUT_BINDING_SCHEMA_VERSION,
@@ -18,9 +23,8 @@ from .production_pixelorama_source_dispatch_output_binding_models import (
     PixeloramaSourceOutputBindingModelError,
 )
 from .production_read_guard import ProductionReadGuardError, production_read_connection
-from .runtime import OriginForgeRuntime
-from .pixelorama_protocol import PixeloramaProtocolError, parse_bridge_request, parse_bridge_result
 from .production_work_order_models import canonical_bytes
+from .runtime import OriginForgeRuntime
 
 
 class PixeloramaSourceOutputBindingError(RuntimeError):
@@ -304,7 +308,13 @@ def materialize_pixelorama_source_result(
             )
         request_raw = json.loads(request_bytes.decode("utf-8"))
         result_raw = json.loads(result_bytes.decode("utf-8"))
-        if canonical_bytes(request_raw) != request_bytes or canonical_bytes(result_raw) != result_bytes:
+        if request_bytes not in {
+            canonical_bytes(request_raw),
+            canonical_bytes(request_raw) + b"\n",
+        } or result_bytes not in {
+            canonical_bytes(result_raw),
+            canonical_bytes(result_raw) + b"\n",
+        }:
             raise PixeloramaSourceOutputBindingError(
                 "durable Pixelorama source request/result JSON is not canonical"
             )
@@ -347,6 +357,12 @@ def materialize_pixelorama_source_result(
         for output in binding.outputs:
             artifact = lineage.get_artifact(output.artifact_id)
             path = lineage.local_artifact_path(output.artifact_id)
+            expected_path = (
+                runtime.state_dir
+                / "media-workspaces"
+                / request.workspace_id
+                / output.relative_path
+            )
             data = path.read_bytes()
             verifications = lineage.list_artifact_verifications(output.artifact_id)
             if (
@@ -363,7 +379,7 @@ def materialize_pixelorama_source_result(
                 != "sha256:" + hashlib.sha256(data).hexdigest()
                 or artifact.get("content_hash") != "sha256:" + output.content_hash
                 or len(data) != output.byte_count
-                or artifact.get("path_or_uri") != str(path)
+                or path.resolve() != expected_path.resolve()
                 or not any(
                     value["id"] == output.verification_id
                     and value["status"] == "PASS"

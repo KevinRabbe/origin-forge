@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from .ids import IdKind, validate_id
 from .pixelorama_models import BridgeOperation
@@ -47,7 +47,7 @@ class PixeloramaSpritesheetExportDispatchValidator:
     """
 
     _IMPLEMENTATION_ID = "origin-forge-pixelorama-spritesheet-export-validator@1"
-    _SCHEMA = {
+    _SCHEMA: ClassVar[dict[str, object]] = {
         "schema_id": PIXELORAMA_SCHEMA_ID,
         "type": "OBJECT",
         "fields": [],
@@ -149,7 +149,7 @@ class PixeloramaSourceCreationDispatchValidator:
     """Validate a complete source/animation request without invoking Pixelorama."""
 
     _IMPLEMENTATION_ID = "origin-forge-pixelorama-source-create-validator@1"
-    _SCHEMA = {
+    _SCHEMA: ClassVar[dict[str, object]] = {
         "schema_id": PIXELORAMA_SOURCE_SCHEMA_ID,
         "type": "OBJECT",
         "fields": ["operation", "sprite_spec", "export_specs", "budget"],
@@ -240,4 +240,4 @@ class PixeloramaSourceCreationDispatchValidator:
             raise DispatchValidatorError(
                 "Pixelorama source payload failed deterministic validation"
             ) from exc
-        return {}
+        return dict(payload)

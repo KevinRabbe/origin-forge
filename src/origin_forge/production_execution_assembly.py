@@ -419,6 +419,11 @@ class ProductionExecutionDependencies:
                 raise ProductionExecutionAssemblyError(
                     "Pixelorama owner requires trusted CLI profile payload"
                 )
+        elif self.owner.owner_id == _PIXELORAMA_SOURCE_OWNER_ID:
+            if not isinstance(self.payload, PixeloramaSourceCreationExecutionPayload):
+                raise ProductionExecutionAssemblyError(
+                    "Pixelorama source owner requires trusted bridge profile payload"
+                )
         elif self.owner.owner_id == _BLENDER_OWNER_ID:
             if not isinstance(self.payload, BlenderExportGLBExecutionPayload):
                 raise ProductionExecutionAssemblyError(

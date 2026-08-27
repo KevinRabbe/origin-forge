@@ -15,8 +15,8 @@ from .production_work_order_models import WorkOrderRefType, content_hash
 from .production_work_order_pixelorama import (
     PIXELORAMA_SOURCE_ADAPTER_ID,
     PIXELORAMA_SOURCE_CONTRACT_ID,
-    PIXELORAMA_SOURCE_REQUEST_TYPE_ID,
     PIXELORAMA_SOURCE_INPUT_ROLE,
+    PIXELORAMA_SOURCE_REQUEST_TYPE_ID,
 )
 from .production_work_orders import ProductionWorkOrder
 
@@ -120,9 +120,13 @@ class PixeloramaSourceCreationInputBinder:
         if content_hash(projection) != ref.content_hash:
             raise DispatchBindingError("Pixelorama source accepted-design projection hash drifted")
         try:
-            return decode_pixelorama_source_request(
+            decode_pixelorama_source_request(
                 work_order.task_id, work_order.payload, projection
             )
+            # Bindings persist the canonical WorkOrder request projection.  The
+            # accepted-design projection remains a separately resolved input and
+            # is reattached by the invocation decoder at execution time.
+            return dict(work_order.payload)
         except PixeloramaSourceRequestError as exc:
             raise DispatchBindingError(
                 "Pixelorama source request projection failed deterministic validation"

@@ -4,20 +4,18 @@ from pathlib import Path
 
 from .ids import IdKind, validate_id
 from .pixelorama_media import PixeloramaMediaResult, PixeloramaMediaService
+from .production_capability_store import ProductionCapabilityStore
+from .production_dispatch_binding import build_pixelorama_source_dispatch_binder_registry
 from .production_dispatch_claim_models import DispatchClaimStatus
 from .production_dispatch_claim_read import read_dispatch_claim, read_input_resolution
 from .production_dispatch_execution import mark_dispatch_execution_returned
 from .production_dispatch_execution_models import DispatchExecutionStatus
+from .production_dispatch_execution_read import read_dispatch_execution
 from .production_dispatch_invocation import (
     CompletedDispatchInvocation,
     ProductionDispatchInvocationError,
     ProductionDispatchInvocationRecoveryRequired,
 )
-from .production_dispatch_binding import (
-    build_pixelorama_source_dispatch_binder_registry,
-)
-from .production_capability_store import ProductionCapabilityStore
-from .production_dispatch_execution_read import read_dispatch_execution
 from .production_execution_assembly import PixeloramaSourceCreationExecutionPayload
 from .production_pixelorama_source_dispatch_output_binding import (
     PixeloramaSourceOutputBindingError,
@@ -26,9 +24,9 @@ from .production_pixelorama_source_dispatch_output_binding import (
     publish_pixelorama_source_dispatch_output_binding,
     read_pixelorama_source_dispatch_output_binding,
 )
-from .production_pixelorama_source_request import PixeloramaSourceInvocationRequest
-from .production_work_order_store import ProductionWorkOrderStore
+from .production_pixelorama_source_request import decode_pixelorama_source_request
 from .production_work_order_builtin import build_builtin_dispatch_validator_registry
+from .production_work_order_store import ProductionWorkOrderStore
 from .runtime import OriginForgeRuntime
 from .service import utc_now
 from .state import TaskStatus
@@ -56,11 +54,21 @@ def _read_source_request(runtime, claim_id, expected_claim_revision):
         build_builtin_dispatch_validator_registry(),
     ).load_work_order(claim.work_order_id)
     binder = build_pixelorama_source_dispatch_binder_registry().binder_for(bundle)
-    request = binder.bind(work_order, bundle)
-    if not isinstance(request, PixeloramaSourceInvocationRequest):
+    projection = binder.bind(work_order, bundle)
+    if not isinstance(projection, dict):
         raise ProductionDispatchInvocationError(
-            "Pixelorama source binder returned the wrong request type"
+            "Pixelorama source binder returned the wrong projection type"
         )
+    try:
+        request = decode_pixelorama_source_request(
+            work_order.task_id,
+            projection,
+            bundle.resolved_inputs[0].projection,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ProductionDispatchInvocationError(
+            "Pixelorama source binder projection could not be decoded"
+        ) from exc
     return claim, binding, request
 
 
