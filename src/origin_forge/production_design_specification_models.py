@@ -265,12 +265,42 @@ class DesignRequirement:
 
 
 @dataclass(frozen=True)
+class DesignAnimationIntent:
+    """Bounded semantic animation input authored by the accepted design."""
+
+    name: str
+    frame_count: int
+    frame_duration_ms: int = 100
+    loop_mode: str = "LOOP"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "name", _text(self.name, "animation name", maximum=256))
+        object.__setattr__(self, "frame_count", _exact_int(self.frame_count, "animation frame_count", 1, 1024))
+        object.__setattr__(
+            self,
+            "frame_duration_ms",
+            _exact_int(self.frame_duration_ms, "animation frame_duration_ms", 1, 60_000),
+        )
+        if self.loop_mode not in {"ONCE", "LOOP", "PING_PONG"}:
+            raise DesignSpecificationModelError("animation loop_mode is invalid")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "frame_count": self.frame_count,
+            "frame_duration_ms": self.frame_duration_ms,
+            "loop_mode": self.loop_mode,
+        }
+
+
+@dataclass(frozen=True)
 class DesignDeliverable:
     key: str
     objective: str
     acceptance_criteria: tuple[str, ...]
     constraints: tuple[str, ...] = ()
     required_capabilities: tuple[str, ...] = ()
+    animation_intents: tuple[DesignAnimationIntent, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "key", _local_key(self.key, "deliverable key"))
@@ -302,15 +332,27 @@ class DesignDeliverable:
         if len(capabilities) != len(set(capabilities)):
             raise DesignSpecificationModelError("required_capabilities contain duplicates")
         object.__setattr__(self, "required_capabilities", tuple(sorted(capabilities)))
+        animations = tuple(self.animation_intents)
+        if len(animations) > 256 or not all(
+            isinstance(value, DesignAnimationIntent) for value in animations
+        ):
+            raise DesignSpecificationModelError("animation_intents are outside bounds")
+        names = [value.name for value in animations]
+        if len(names) != len(set(names)):
+            raise DesignSpecificationModelError("animation_intents contain duplicate names")
+        object.__setattr__(self, "animation_intents", tuple(sorted(animations, key=lambda value: value.name)))
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "key": self.key,
             "objective": self.objective,
             "acceptance_criteria": list(self.acceptance_criteria),
             "constraints": list(self.constraints),
             "required_capabilities": list(self.required_capabilities),
         }
+        if self.animation_intents:
+            result["animation_intents"] = [value.to_dict() for value in self.animation_intents]
+        return result
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ from .production_design_specification_evidence import (
 )
 from .production_design_specification_models import (
     DesignDeliverable,
+    DesignAnimationIntent,
     DesignRequirement,
     DesignSpecification,
     DesignSpecificationInput,
@@ -108,6 +109,26 @@ DESIGN_SPECIFICATION_SCHEMA: dict[str, object] = {
                         "items": {
                             "type": "string",
                             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+/@-]{0,127}$",
+                        },
+                    },
+                    "animation_intents": {
+                        "type": "array",
+                        "maxItems": 256,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": [
+                                "name",
+                                "frame_count",
+                                "frame_duration_ms",
+                                "loop_mode",
+                            ],
+                            "properties": {
+                                "name": {"type": "string", "minLength": 1, "maxLength": 4096},
+                                "frame_count": {"type": "integer", "minimum": 1, "maximum": 1024},
+                                "frame_duration_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
+                                "loop_mode": {"enum": ["ONCE", "LOOP", "PING_PONG"]},
+                            },
                         },
                     },
                 },
@@ -304,20 +325,32 @@ def parse_design_specification(
 
     deliverables: list[DesignDeliverable] = []
     for item in top["deliverables"]:
-        raw = _exact_keys(
-            item,
-            {
+        required_keys = {
                 "key",
                 "objective",
                 "acceptance_criteria",
                 "constraints",
                 "required_capabilities",
-            },
-            "design deliverable",
-        )
+            }
+        if not isinstance(item, dict) or not required_keys <= set(item) or set(item) - required_keys - {"animation_intents"}:
+            raise DesignSpecifierError("design deliverable schema drifted")
+        raw = item
         for field in ("acceptance_criteria", "constraints", "required_capabilities"):
             if not isinstance(raw[field], list):
                 raise DesignSpecifierError(f"design deliverable {field} is invalid")
+        animation_intents = []
+        if "animation_intents" in raw:
+            if not isinstance(raw["animation_intents"], list):
+                raise DesignSpecifierError("design deliverable animation_intents is invalid")
+            for animation in raw["animation_intents"]:
+                if not isinstance(animation, dict) or set(animation) != {
+                    "name", "frame_count", "frame_duration_ms", "loop_mode"
+                }:
+                    raise DesignSpecifierError("design animation intent schema drifted")
+                try:
+                    animation_intents.append(DesignAnimationIntent(**animation))
+                except (DesignSpecificationModelError, TypeError, ValueError) as exc:
+                    raise DesignSpecifierError("design animation intent failed validation") from exc
         try:
             deliverables.append(
                 DesignDeliverable(
@@ -326,6 +359,7 @@ def parse_design_specification(
                     acceptance_criteria=tuple(raw["acceptance_criteria"]),
                     constraints=tuple(raw["constraints"]),
                     required_capabilities=tuple(raw["required_capabilities"]),
+                    animation_intents=tuple(animation_intents),
                 )
             )
         except (DesignSpecificationModelError, TypeError, ValueError) as exc:

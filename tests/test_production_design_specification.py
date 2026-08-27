@@ -16,6 +16,8 @@ from origin_forge.production_design_specification_evidence import (
     DesignSpecificationEvidenceStore,
 )
 from origin_forge.production_design_specification_models import (
+    DesignAnimationIntent,
+    DesignDeliverable,
     DesignSpecificationAuditStatus,
     audit_design_specification,
 )
@@ -95,6 +97,30 @@ class GovernedDesignSpecificationTests(unittest.TestCase):
             routing_policy_id=self.policy.routing_policy_id,
             model=self.model,
         )
+
+    def test_design_deliverable_can_carry_bounded_animation_intent(self) -> None:
+        intent = DesignAnimationIntent(
+            name="idle",
+            frame_count=4,
+            frame_duration_ms=120,
+            loop_mode="LOOP",
+        )
+        deliverable = DesignDeliverable(
+            key="sprite",
+            objective="Author the player sprite animation.",
+            acceptance_criteria=("The idle animation has four frames.",),
+            required_capabilities=("media.2d.source",),
+            animation_intents=(intent,),
+        )
+        self.assertEqual(deliverable.to_dict()["animation_intents"], [intent.to_dict()])
+        legacy = DesignDeliverable(
+            key="legacy",
+            objective="Keep an existing deliverable stable.",
+            acceptance_criteria=("Its canonical bytes remain stable.",),
+        )
+        self.assertNotIn("animation_intents", legacy.to_dict())
+        with self.assertRaisesRegex(ValueError, "loop_mode"):
+            DesignAnimationIntent("idle", 1, loop_mode="RANDOM")
 
     def test_schema_v21_reserves_immutable_design_evidence_family(self) -> None:
         self.assertGreaterEqual(SCHEMA_VERSION, 27)

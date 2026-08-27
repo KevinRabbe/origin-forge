@@ -13,6 +13,7 @@ from .production_capability_store import (
 )
 from .production_design_specification_models import (
     DesignDeliverable,
+    DesignAnimationIntent,
     DesignRequirement,
     DesignSpecification,
     DesignSpecificationAudit,
@@ -188,22 +189,34 @@ def _requirement_from_dict(value: object) -> DesignRequirement:
 
 
 def _deliverable_from_dict(value: object) -> DesignDeliverable:
-    raw = _exact_keys(
-        value,
-        {
+    required_keys = {
             "key",
             "objective",
             "acceptance_criteria",
             "constraints",
             "required_capabilities",
-        },
-        "DesignDeliverable",
-    )
+        }
+    if not isinstance(value, dict) or not required_keys <= set(value) or set(value) - required_keys - {"animation_intents"}:
+        raise DesignSpecificationEvidenceError("DesignDeliverable schema drifted")
+    raw = value
     for field in ("acceptance_criteria", "constraints", "required_capabilities"):
         if not isinstance(raw[field], list):
             raise DesignSpecificationEvidenceError(
                 f"stored DesignDeliverable {field} is invalid"
             )
+    animation_intents = []
+    if "animation_intents" in raw:
+        if not isinstance(raw["animation_intents"], list):
+            raise DesignSpecificationEvidenceError("stored animation_intents are invalid")
+        for animation in raw["animation_intents"]:
+            if not isinstance(animation, dict) or set(animation) != {
+                "name", "frame_count", "frame_duration_ms", "loop_mode"
+            }:
+                raise DesignSpecificationEvidenceError("stored animation intent schema drifted")
+            try:
+                animation_intents.append(DesignAnimationIntent(**animation))
+            except (DesignSpecificationModelError, TypeError, ValueError) as exc:
+                raise DesignSpecificationEvidenceError("stored animation intent failed validation") from exc
     try:
         return DesignDeliverable(
             key=raw["key"],
@@ -211,6 +224,7 @@ def _deliverable_from_dict(value: object) -> DesignDeliverable:
             acceptance_criteria=tuple(raw["acceptance_criteria"]),
             constraints=tuple(raw["constraints"]),
             required_capabilities=tuple(raw["required_capabilities"]),
+            animation_intents=tuple(animation_intents),
         )
     except (DesignSpecificationModelError, TypeError, ValueError) as exc:
         raise DesignSpecificationEvidenceError(
